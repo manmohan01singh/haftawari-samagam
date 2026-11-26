@@ -10,6 +10,7 @@ import { removeSavedVideo } from '../../features/library/libraryService';
 import { formatDateLine } from '../../features/library/format';
 import type { SavedItem } from '../../features/library/types';
 import type { LibraryRootStackParamList } from '../../features/library/screenTypes';
+import { goBackOrTab } from '../../navigation/safeBack';
 import { ScreenLoading, ScreenMessage } from '../../features/library/components/ScreenMessage';
 import { SwipeableRow } from '../../features/library/components/SwipeableRow';
 import { VideoListRow } from '../../features/library/components/VideoListRow';
@@ -70,7 +71,7 @@ export function SavedScreen({ navigation }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.topBar}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={10} accessibilityLabel="Back" accessibilityRole="button">
+        <Pressable onPress={() => goBackOrTab(navigation, 'Library')} hitSlop={10} accessibilityLabel="Back" accessibilityRole="button">
           <MaterialIcons name="arrow-back" size={24} color={lightColors.text} />
         </Pressable>
         <Text style={styles.topBarTitle}>Saved</Text>
@@ -88,6 +89,8 @@ export function SavedScreen({ navigation }: Props) {
         <ScreenMessage
           title="Sign in to see your saved recordings"
           message="Saved recordings are kept with your account, so only you can see them."
+          actionLabel="Sign in"
+          onAction={() => navigation.navigate('SignIn')}
         />
       ) : saved.loading && saved.data.length === 0 ? (
         <ScreenLoading label="Loading your saved recordings…" />
@@ -105,6 +108,8 @@ export function SavedScreen({ navigation }: Props) {
             <ScreenMessage
               title="No saved recordings yet"
               message="Tap the bookmark on any samagam to keep it here."
+              actionLabel="Browse samagams"
+              onAction={() => navigation.navigate('MainTabs', { screen: 'Home' })}
             />
           }
           removeClippedSubviews

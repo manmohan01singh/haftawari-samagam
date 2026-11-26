@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { goBackOrTab } from '../../navigation/safeBack';
 import { useAuth } from '../../features/auth';
 import { lightColors, radii, spacing, typography } from '../../theme';
 import type { RootStackParamList } from '../../navigation/types';
@@ -16,11 +17,28 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Account'>;
  */
 export function AccountScreen({ navigation }: Props) {
   const { user, profile, isAdmin, loading, signOut } = useAuth();
+  const [signOutError, setSignOutError] = useState<string | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
+
+  const handleSignOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    setSignOutError(null);
+    try {
+      await signOut();
+      goBackOrTab(navigation, 'Library');
+    } catch (e) {
+      // Before this, a failed sign-out was an unhandled rejection and
+      // the tap appeared to do nothing at all.
+      setSignOutError(e instanceof Error ? e.message : 'Could not sign out. Please try again.');
+      setSigningOut(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
       <View style={styles.topBar}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={10} accessibilityLabel="Back">
+        <Pressable onPress={() => goBackOrTab(navigation, 'Library')} hitSlop={10} accessibilityLabel="Back">
           <MaterialIcons name="arrow-back" size={24} color={lightColors.text} />
         </Pressable>
         <Text style={styles.topBarTitle}>Account</Text>
@@ -70,14 +88,14 @@ export function AccountScreen({ navigation }: Props) {
               </Pressable>
             ) : null}
 
+            {signOutError ? <Text style={styles.signOutError}>{signOutError}</Text> : null}
             <Pressable
               style={styles.signOutButton}
-              onPress={() => {
-                void signOut().then(() => navigation.goBack());
-              }}
+              onPress={() => void handleSignOut()}
+              disabled={signingOut}
               accessibilityRole="button"
             >
-              <Text style={styles.signOutText}>Sign out</Text>
+              <Text style={styles.signOutText}>{signingOut ? 'Signing out…' : 'Sign out'}</Text>
             </Pressable>
           </>
         ) : (
@@ -159,6 +177,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.xxl,
   },
   signOutText: { fontSize: 15, fontWeight: '600', color: lightColors.text },
+  signOutError: { fontSize: 13, color: lightColors.accent, textAlign: 'center', marginTop: spacing.xl },
   primaryButton: {
     backgroundColor: lightColors.subscribeBackground,
     borderRadius: radii.pill,

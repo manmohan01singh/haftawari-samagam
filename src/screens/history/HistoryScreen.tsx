@@ -10,6 +10,7 @@ import { clearHistory, removeHistoryEntry } from '../../features/library/library
 import { formatDateLine } from '../../features/library/format';
 import type { HistoryItem } from '../../features/library/types';
 import type { LibraryRootStackParamList } from '../../features/library/screenTypes';
+import { goBackOrTab } from '../../navigation/safeBack';
 import { ConfirmModal } from '../../features/library/components/ConfirmModal';
 import { ScreenLoading, ScreenMessage } from '../../features/library/components/ScreenMessage';
 import { SwipeableRow } from '../../features/library/components/SwipeableRow';
@@ -93,7 +94,7 @@ export function HistoryScreen({ navigation }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.topBar}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={10} accessibilityLabel="Back" accessibilityRole="button">
+        <Pressable onPress={() => goBackOrTab(navigation, 'Library')} hitSlop={10} accessibilityLabel="Back" accessibilityRole="button">
           <MaterialIcons name="arrow-back" size={24} color={lightColors.text} />
         </Pressable>
         <Text style={styles.topBarTitle}>History</Text>
@@ -122,6 +123,8 @@ export function HistoryScreen({ navigation }: Props) {
         <ScreenMessage
           title="Sign in to see your history"
           message="Watch history is kept with your account, so only you can see it."
+          actionLabel="Sign in"
+          onAction={() => navigation.navigate('SignIn')}
         />
       ) : history.loading && history.data.length === 0 ? (
         <ScreenLoading label="Loading your history…" />
@@ -139,6 +142,8 @@ export function HistoryScreen({ navigation }: Props) {
             <ScreenMessage
               title="No history yet"
               message="Recordings you watch while signed in will appear here."
+              actionLabel="Browse samagams"
+              onAction={() => navigation.navigate('MainTabs', { screen: 'Home' })}
             />
           }
           removeClippedSubviews

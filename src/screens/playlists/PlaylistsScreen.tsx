@@ -9,6 +9,7 @@ import { useCurrentUser, usePlaylistSummaries } from '../../features/library/hoo
 import { createPlaylist } from '../../features/library/libraryService';
 import type { PlaylistSummary } from '../../features/library/types';
 import type { LibraryRootStackParamList } from '../../features/library/screenTypes';
+import { goBackOrTab } from '../../navigation/safeBack';
 import { CreatePlaylistSheet } from '../../features/library/components/CreatePlaylistSheet';
 import { PlaylistRow } from '../../features/library/components/PlaylistRow';
 import { ScreenLoading, ScreenMessage } from '../../features/library/components/ScreenMessage';
@@ -41,10 +42,14 @@ export function PlaylistsScreen({ navigation }: Props) {
   const handleCreate = useCallback(
     async (title: string, isPublic: boolean) => {
       if (!user) throw new Error('Sign in to create a playlist.');
-      await createPlaylist(user.id, title, isPublic);
+      const playlist = await createPlaylist(user.id, title, isPublic);
       summaries.reload();
+      // Open the playlist the user just made (YouTube does the same);
+      // before this, the sheet closed and the user was left hunting
+      // for their new playlist in a list that had not refreshed yet.
+      navigation.navigate('Playlist', { playlistId: playlist.id });
     },
-    [summaries, user],
+    [navigation, summaries, user],
   );
 
   const renderItem = useCallback(
@@ -57,7 +62,7 @@ export function PlaylistsScreen({ navigation }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.topBar}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={10} accessibilityLabel="Back" accessibilityRole="button">
+        <Pressable onPress={() => goBackOrTab(navigation, 'Library')} hitSlop={10} accessibilityLabel="Back" accessibilityRole="button">
           <MaterialIcons name="arrow-back" size={24} color={lightColors.text} />
         </Pressable>
         <Text style={styles.topBarTitle}>Playlists</Text>
@@ -99,8 +104,8 @@ export function PlaylistsScreen({ navigation }: Props) {
                   ? 'Create your first playlist to group samagams together.'
                   : 'There are no public playlists yet. Sign in to create your own.'
               }
-              actionLabel={user ? 'Create a playlist' : undefined}
-              onAction={user ? () => setCreateOpen(true) : undefined}
+              actionLabel={user ? 'Create a playlist' : 'Sign in'}
+              onAction={user ? () => setCreateOpen(true) : () => navigation.navigate('SignIn')}
             />
           }
           removeClippedSubviews

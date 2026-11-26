@@ -2,12 +2,15 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Pressable,
   RefreshControl,
   SectionList,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
+import { goBackOrTab } from '../../navigation/safeBack';
 import { EmptyState } from '../../components/common/EmptyState';
 import { SessionCard } from '../../features/sessions/components/SessionCard';
 import { useServerClock } from '../../features/sessions/hooks/useServerClock';
@@ -134,33 +137,69 @@ export function SessionsListScreen({ navigation }: Props) {
       .map((status) => ({ status, title: SECTION_TITLES[status], data: grouped[status] }));
   }, [items, nowMs]);
 
+  // Every state of this screen renders under the same top bar. Before
+  // this fix the screen had NO header and NO back button in any state:
+  // users who arrived from Home (or a shared URL) had no on-screen way
+  // out, and the error state told them to "pull down to retry" on a
+  // non-scrollable surface with no retry control — a dead end.
+  const topBar = (
+    <View style={styles.topBar}>
+      <Pressable
+        onPress={() => goBackOrTab(navigation, 'Home')}
+        hitSlop={10}
+        accessibilityLabel="Back"
+        accessibilityRole="button"
+      >
+        <MaterialIcons name="arrow-back" size={24} color={lightColors.text} />
+      </Pressable>
+      <Text style={styles.topBarTitle}>Samagam Sessions</Text>
+      <View style={styles.topBarSpacer} />
+    </View>
+  );
+
   if (!isSupabaseConfigured) {
     return (
-      <EmptyState
-        title="Samagams are not available yet"
-        message="The backend is not configured in this build, so no sessions can be shown."
-      />
+      <View style={styles.screen}>
+        {topBar}
+        <EmptyState
+          title="Samagams are not available yet"
+          message="The backend is not configured in this build, so no sessions can be shown."
+        />
+      </View>
     );
   }
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator color={lightColors.text} />
+      <View style={styles.screen}>
+        {topBar}
+        <View style={styles.center}>
+          <ActivityIndicator color={lightColors.text} />
+        </View>
       </View>
     );
   }
 
   if (error) {
     return (
-      <EmptyState
-        title="Could not load Samagams"
-        message={`${error} Pull down to retry.`}
-      />
+      <View style={styles.screen}>
+        {topBar}
+        <EmptyState
+          title="Could not load Samagams"
+          message={error}
+          actionLabel="Try again"
+          onAction={() => {
+            setLoading(true);
+            void load();
+          }}
+        />
+      </View>
     );
   }
 
   return (
+    <View style={styles.screen}>
+      {topBar}
     <SectionList
       sections={sections}
       keyExtractor={(item) => item.session.id}
@@ -203,10 +242,22 @@ export function SessionsListScreen({ navigation }: Props) {
       }
       stickySectionHeadersEnabled={false}
     />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: lightColors.background },
+  topBar: {
+    height: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    backgroundColor: lightColors.background,
+  },
+  topBarTitle: { fontSize: 17, fontWeight: '600', color: lightColors.text },
+  topBarSpacer: { width: 24 },
   list: { flex: 1, backgroundColor: lightColors.background },
   content: { paddingTop: spacing.lg, paddingBottom: spacing.xxl },
   emptyContainer: { flexGrow: 1 },

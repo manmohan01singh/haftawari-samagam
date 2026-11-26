@@ -201,8 +201,40 @@ export function LibraryScreen({ navigation }: Props) {
             <Text style={styles.signInText}>
               Your history, saved samagams and playlists are kept with your account.
             </Text>
+            {/* This block used to be text-only: a signed-out user landed
+                here and had NO way to sign in from this screen. */}
+            <View style={styles.profileButtonsAlt}>
+              <Pressable
+                style={[styles.pillButton, styles.pillDark]}
+                onPress={() => navigation.navigate('SignIn')}
+                accessibilityRole="button"
+              >
+                <Text style={[styles.pillText, styles.pillTextDark]}>Sign in</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.pillButton, styles.pillLight]}
+                onPress={() => navigation.navigate('SignUp')}
+                accessibilityRole="button"
+              >
+                <Text style={[styles.pillText, styles.pillTextLight]}>Create account</Text>
+              </Pressable>
+            </View>
           </View>
         )}
+
+        {/* Load failures used to be silently shown as empty sections
+            ("No playlists yet" when the fetch had actually failed).
+            Surface one honest banner with a retry instead. */}
+        {user && (history.error || saved.error || summaries.error) ? (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorBannerText}>
+              Some of your library could not be loaded. Check your connection and try again.
+            </Text>
+            <Pressable onPress={onRefresh} accessibilityRole="button" hitSlop={8}>
+              <Text style={styles.errorBannerAction}>Retry</Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         {/* History shelf */}
         <Pressable
@@ -227,7 +259,9 @@ export function LibraryScreen({ navigation }: Props) {
             {user
               ? history.loading
                 ? 'Loading…'
-                : 'Recordings you watch will appear here.'
+                : history.error
+                  ? 'History could not be loaded — use Retry above.'
+                  : 'Recordings you watch will appear here.'
               : 'Sign in to build your history.'}
           </Text>
         )}
@@ -250,6 +284,21 @@ export function LibraryScreen({ navigation }: Props) {
           </Pressable>
         </ScrollView>
 
+        {/* Samagam Sessions were only reachable from a Home banner;
+            the You/Library tab is the other natural home for them. */}
+        <Pressable
+          style={styles.sessionsRow}
+          onPress={() => navigation.navigate('Sessions')}
+          accessibilityRole="button"
+        >
+          <MaterialIcons name="groups" size={24} color={lightColors.text} />
+          <View style={styles.sessionsLines}>
+            <Text style={styles.sessionsTitle}>Samagam Sessions</Text>
+            <Text style={styles.sessionsMeta}>Scheduled group playbacks — upcoming, now playing, completed</Text>
+          </View>
+          <MaterialIcons name="chevron-right" size={22} color={lightColors.textSecondary} />
+        </Pressable>
+
         {/* Playlists — stacked rows */}
         <View style={styles.rowsBlock}>
           {playlistPreview.map((summary) => (
@@ -259,9 +308,11 @@ export function LibraryScreen({ navigation }: Props) {
             <Text style={styles.rowsEmpty}>
               {summaries.loading
                 ? 'Loading…'
-                : user
-                  ? 'No playlists yet.'
-                  : 'No public playlists yet.'}
+                : summaries.error
+                  ? 'Playlists could not be loaded — use Retry above.'
+                  : user
+                    ? 'No playlists yet.'
+                    : 'No public playlists yet.'}
             </Text>
           ) : null}
           {user ? (
@@ -300,7 +351,9 @@ export function LibraryScreen({ navigation }: Props) {
               {user
                 ? saved.loading
                   ? 'Loading…'
-                  : 'Samagams you save will appear here.'
+                  : saved.error
+                    ? 'Saved recordings could not be loaded — use Retry above.'
+                    : 'Samagams you save will appear here.'
                 : 'Sign in to save samagams here.'}
             </Text>
           ) : null}
@@ -377,6 +430,20 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
   },
   adminLinkText: { fontSize: 15, fontWeight: '500', color: lightColors.text },
+  profileButtonsAlt: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.lg,
+    backgroundColor: lightColors.surfaceVariant,
+    borderRadius: radii.card,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  errorBannerText: { flex: 1, fontSize: 13, color: lightColors.textSecondary },
+  errorBannerAction: { fontSize: 14, fontWeight: '700', color: lightColors.text },
   signInBlock: { paddingHorizontal: spacing.lg, paddingTop: spacing.md },
   signInTitle: { fontSize: 20, fontWeight: '600', color: lightColors.text },
   signInText: { fontSize: 14, color: lightColors.textSecondary, marginTop: spacing.xs },
@@ -417,6 +484,16 @@ const styles = StyleSheet.create({
     color: lightColors.text,
     marginTop: spacing.sm,
   },
+  sessionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.xl,
+  },
+  sessionsLines: { flex: 1 },
+  sessionsTitle: { fontSize: 16, fontWeight: '600', color: lightColors.text },
+  sessionsMeta: { fontSize: 13, color: lightColors.textSecondary, marginTop: 2 },
   chipsContent: { paddingHorizontal: spacing.lg, gap: spacing.sm, paddingTop: spacing.md },
   chip: {
     backgroundColor: lightColors.surfaceVariant,

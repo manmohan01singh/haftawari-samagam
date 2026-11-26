@@ -4,6 +4,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -11,6 +12,7 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { goBackOrTab } from '../../navigation/safeBack';
 import { branding } from '../../config/branding';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { lightColors, radii, spacing, typography } from '../../theme';
@@ -29,7 +31,13 @@ export function SignInScreen({ navigation }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const submit = async () => {
-    if (!supabase) return;
+    if (!supabase || busy) return;
+    // Clear, immediate feedback for the common typo instead of a
+    // round-trip to Supabase for a raw server error.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError('Please enter a valid email address.');
+      return;
+    }
     setBusy(true);
     setError(null);
     const { error: signInError } = await supabase.auth.signInWithPassword({
@@ -41,7 +49,10 @@ export function SignInScreen({ navigation }: Props) {
       setError(signInError.message);
       return;
     }
-    navigation.goBack();
+    // goBack() alone was a dead end when SignIn was the entry screen
+    // (shared/refreshed URL): the user signed in and stayed on the
+    // form. Fall back to the Library tab, where sign-in matters most.
+    goBackOrTab(navigation, 'Library');
   };
 
   return (
@@ -49,8 +60,9 @@ export function SignInScreen({ navigation }: Props) {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
+      <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
       <View style={styles.topRow}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={10} accessibilityLabel="Back">
+        <Pressable onPress={() => goBackOrTab(navigation, 'Library')} hitSlop={10} accessibilityLabel="Back">
           <MaterialIcons name="arrow-back" size={24} color={lightColors.text} />
         </Pressable>
       </View>
@@ -83,6 +95,8 @@ export function SignInScreen({ navigation }: Props) {
             secureTextEntry
             value={password}
             onChangeText={setPassword}
+            returnKeyType="go"
+            onSubmitEditing={submit}
           />
           {error ? <Text style={styles.error}>{error}</Text> : null}
           <Pressable
@@ -104,6 +118,7 @@ export function SignInScreen({ navigation }: Props) {
           </Pressable>
         </>
       )}
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }

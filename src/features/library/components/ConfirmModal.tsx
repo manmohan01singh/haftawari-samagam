@@ -29,8 +29,11 @@ export function ConfirmModal({
   onCancel,
 }: ConfirmModalProps) {
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
-      <Pressable style={styles.backdrop} onPress={onCancel}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={busy ? undefined : onCancel}>
+      {/* While an action is busy the backdrop must not dismiss the
+          dialog: tapping outside used to close it mid-clear, leaving
+          the destructive action running with no visible feedback. */}
+      <Pressable style={styles.backdrop} onPress={busy ? undefined : onCancel}>
         <Pressable style={styles.card} onPress={() => undefined}>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.message}>{message}</Text>

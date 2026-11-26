@@ -195,6 +195,29 @@ export function subscribeToParticipants(
   return channel;
 }
 
+/**
+ * The signed-in user's own roster state for one session ('joined' /
+ * 'left'), or null when they have no participant row. The watch screen
+ * uses this to open in the correct Join/Joined state — before this it
+ * always opened as "Join Samagam", even for a user who had already
+ * joined, and tapping Join then upserted blindly.
+ */
+export async function getMyParticipantState(
+  sessionId: string,
+  userId: string,
+): Promise<'joined' | 'left' | null> {
+  const supabase = requireSupabase();
+  const { data, error } = await supabase
+    .from('session_participants')
+    .select('state')
+    .eq('session_id', sessionId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  const state = (data as { state?: string } | null)?.state;
+  return state === 'joined' || state === 'left' ? state : null;
+}
+
 /** Record that the signed-in user joined a session (participants table). */
 export async function joinSession(sessionId: string, userId: string): Promise<void> {
   const supabase = requireSupabase();
