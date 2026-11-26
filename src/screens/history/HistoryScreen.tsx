@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
-import { FlatList, Image, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -7,7 +8,8 @@ import { isSupabaseConfigured } from '../../lib/supabase';
 import { lightColors, spacing } from '../../theme';
 import { useCurrentUser, useHistory } from '../../features/library/hooks';
 import { clearHistory, removeHistoryEntry } from '../../features/library/libraryService';
-import { formatDateLine } from '../../features/library/format';
+import { formatClock, formatDateLine } from '../../features/library/format';
+import { OFFICIAL_CHANNEL } from '../../features/search/config';
 import {
   clearLocalHistory,
   removeLocalHistoryEntry,
@@ -52,18 +54,34 @@ export function HistoryScreen({ navigation }: Props) {
     }, [reloadLocal]),
   );
 
+  const [localError, setLocalError] = useState<string | null>(null);
+
   const removeLocal = useCallback(
     async (entry: LocalHistoryEntry) => {
-      local.setEntries(local.entries.filter((e) => e.youtubeVideoId !== entry.youtubeVideoId));
-      await removeLocalHistoryEntry(entry.youtubeVideoId).catch(() => undefined);
+      // Optimistic remove WITH rollback: local storage writes can fail
+      // (storage blocked/full) — previously the failure was swallowed
+      // and the row vanished until the next reload brought it back.
+      const previous = local.entries;
+      setLocalError(null);
+      local.setEntries(previous.filter((e) => e.youtubeVideoId !== entry.youtubeVideoId));
+      const persisted = await removeLocalHistoryEntry(entry.youtubeVideoId).catch(() => false);
+      if (!persisted) {
+        local.setEntries(previous);
+        setLocalError('Could not remove that entry from this device. Please try again.');
+      }
     },
     [local],
   );
 
   const clearLocal = useCallback(async () => {
-    await clearLocalHistory().catch(() => undefined);
-    local.setEntries([]);
+    const persisted = await clearLocalHistory().catch(() => false);
     setConfirmClearLocal(false);
+    if (persisted) {
+      local.setEntries([]);
+      setLocalError(null);
+    } else {
+      setLocalError('Could not clear the history on this device. Please try again.');
+    }
   }, [local]);
   const [confirmClear, setConfirmClear] = useState(false);
   const [clearing, setClearing] = useState(false);
@@ -111,6 +129,7 @@ export function HistoryScreen({ navigation }: Props) {
       <SwipeableRow onRemove={() => removeOne(item)} removeLabel="Remove">
         <VideoListRow
           video={item.video}
+          channelLine={OFFICIAL_CHANNEL.title}
           metaLine={`Watched ${formatDateLine(item.entry.watched_at)}`}
           resumePositionSeconds={item.entry.last_position_seconds}
           onPress={(video) => navigation.navigate('Watch', { videoRowId: video.id })}
@@ -177,54 +196,77 @@ export function HistoryScreen({ navigation }: Props) {
           data={local.entries}
           keyExtractor={(e) => e.youtubeVideoId}
           contentContainerStyle={styles.listPad}
+          refreshControl={<RefreshControl refreshing={local.refreshing} onRefresh={local.refresh} />}
           ListHeaderComponent={
-            <View style={styles.localBanner}>
-              <Text style={styles.localBannerText}>
-                {"You're signed out, so this history is kept only on this device. Sign in to keep history with your account."}
-              </Text>
-              <Pressable onPress={() => navigation.navigate('SignIn')} hitSlop={8} accessibilityRole="button">
-                <Text style={styles.localBannerAction}>Sign in</Text>
-              </Pressable>
+            <View>
+              <View style={styles.localBanner}>
+                <Text style={styles.localBannerText}>
+                  {"You're signed out, so this history is kept only on this device. Sign in to keep history with your account."}
+                </Text>
+                <Pressable onPress={() => navigation.navigate('SignIn')} hitSlop={8} accessibilityRole="button">
+                  <Text style={styles.localBannerAction}>Sign in</Text>
+                </Pressable>
+              </View>
+              {localError ? <Text style={styles.errorLine}>{localError}</Text> : null}
             </View>
           }
           renderItem={({ item }) => (
-            <Pressable
-              style={styles.localRow}
-              onPress={() =>
-                navigation.navigate(
-                  'Watch',
-                  item.videoRowId
-                    ? { videoRowId: item.videoRowId }
-                    : { youtubeVideoId: item.youtubeVideoId },
-                )
-              }
-              accessibilityRole="button"
-              accessibilityLabel={item.title}
-            >
-              {item.thumbnailUrl ? (
-                <Image source={{ uri: item.thumbnailUrl }} style={styles.localThumb} resizeMode="cover" />
-              ) : (
-                <View style={[styles.localThumb, styles.thumbEmpty]} />
-              )}
-              <View style={styles.localLines}>
-                <Text style={styles.localTitle} numberOfLines={2}>
-                  {item.title}
-                </Text>
-                <Text style={styles.localMeta} numberOfLines={1}>
-                  Watched {formatDateLine(item.watchedAt)} · On this device
-                </Text>
-              </View>
+            <SwipeableRow onRemove={() => void removeLocal(item)} removeLabel="Remove">
               <Pressable
-                onPress={() => void removeLocal(item)}
-                hitSlop={8}
+                style={styles.localRow}
+                onPress={() =>
+                  navigation.navigate(
+                    'Watch',
+                    item.videoRowId
+                      ? { videoRowId: item.videoRowId }
+                      : { youtubeVideoId: item.youtubeVideoId },
+                  )
+                }
                 accessibilityRole="button"
-                accessibilityLabel="Remove from device history"
-                style={styles.localRemove}
+                accessibilityLabel={item.title}
               >
-                <MaterialIcons name="close" size={20} color={lightColors.textSecondary} />
+                <View style={styles.localThumbWrap}>
+                  {item.thumbnailUrl ? (
+                    <Image
+                      source={{ uri: item.thumbnailUrl }}
+                      style={styles.localThumb}
+                      contentFit="cover"
+                      cachePolicy="memory-disk"
+                      recyclingKey={item.youtubeVideoId}
+                    />
+                  ) : (
+                    <View style={[styles.localThumb, styles.thumbEmpty]} />
+                  )}
+                  {item.durationSeconds != null ? (
+                    <View style={styles.durationBadge} pointerEvents="none">
+                      <Text style={styles.durationText}>{formatClock(item.durationSeconds)}</Text>
+                    </View>
+                  ) : null}
+                </View>
+                <View style={styles.localLines}>
+                  <Text style={styles.localTitle} numberOfLines={2}>
+                    {item.title}
+                  </Text>
+                  <Text style={styles.localMeta} numberOfLines={1}>
+                    {OFFICIAL_CHANNEL.title}
+                  </Text>
+                  <Text style={styles.localMeta} numberOfLines={1}>
+                    Watched {formatDateLine(item.watchedAt)} · On this device
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={() => void removeLocal(item)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Remove from device history"
+                  style={styles.localRemove}
+                >
+                  <MaterialIcons name="close" size={20} color={lightColors.textSecondary} />
+                </Pressable>
               </Pressable>
-            </Pressable>
+            </SwipeableRow>
           )}
+          {...ROW_LIST_PERF}
         />
       ) : !user ? (
         <ScreenMessage
@@ -248,7 +290,11 @@ export function HistoryScreen({ navigation }: Props) {
           keyExtractor={keyExtractor}
           contentContainerStyle={styles.listPad}
           refreshControl={<RefreshControl refreshing={history.refreshing} onRefresh={history.refresh} />}
-          ListHeaderComponent={actionError ? <Text style={styles.errorLine}>{actionError}</Text> : undefined}
+          ListHeaderComponent={
+            actionError || history.error ? (
+              <Text style={styles.errorLine}>{actionError ?? history.error}</Text>
+            ) : undefined
+          }
           ListEmptyComponent={
             <ScreenMessage
               title="No history yet"
@@ -309,7 +355,18 @@ const styles = StyleSheet.create({
   localBannerText: { flex: 1, fontSize: 13, lineHeight: 18, color: lightColors.textSecondary },
   localBannerAction: { fontSize: 14, fontWeight: '700', color: lightColors.text },
   localRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, paddingVertical: spacing.sm },
-  localThumb: { width: '40%', maxWidth: 168, aspectRatio: 16 / 9, borderRadius: 12, backgroundColor: lightColors.playerBackground },
+  localThumbWrap: { width: '40%', maxWidth: 168, position: 'relative' },
+  localThumb: { width: '100%', aspectRatio: 16 / 9, borderRadius: 12, backgroundColor: lightColors.playerBackground },
+  durationBadge: {
+    position: 'absolute',
+    right: 6,
+    bottom: 6,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  durationText: { color: '#FFFFFF', fontSize: 11, fontWeight: '600' },
   thumbEmpty: { backgroundColor: lightColors.surfaceVariant },
   localLines: { flex: 1, paddingTop: 2 },
   localTitle: { fontSize: 15, lineHeight: 20, fontWeight: '600', color: lightColors.text },

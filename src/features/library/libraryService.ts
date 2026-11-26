@@ -173,6 +173,17 @@ export async function createPlaylist(
   return data as Playlist;
 }
 
+/**
+ * Delete a playlist the user owns (RLS: creator-or-admin write policy;
+ * playlist_items rows cascade with the playlist). Used by the
+ * playlist row's ⋮ menu — without it that menu had no real action.
+ */
+export async function deletePlaylist(playlistId: string): Promise<void> {
+  const client = requireSupabase();
+  const { error } = await client.from('playlists').delete().eq('id', playlistId);
+  if (error) throw new Error(error.message);
+}
+
 export async function fetchPlaylistDetail(playlistId: string): Promise<PlaylistDetail | null> {
   const client = requireSupabase();
   const { data: playlist, error } = await client

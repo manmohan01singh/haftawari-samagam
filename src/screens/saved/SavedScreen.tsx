@@ -8,6 +8,7 @@ import { lightColors, spacing } from '../../theme';
 import { useCurrentUser, useSavedItems } from '../../features/library/hooks';
 import { removeSavedVideo } from '../../features/library/libraryService';
 import { formatDateLine } from '../../features/library/format';
+import { OFFICIAL_CHANNEL } from '../../features/search/config';
 import type { SavedItem } from '../../features/library/types';
 import type { LibraryRootStackParamList } from '../../features/library/screenTypes';
 import { ScreenMessage } from '../../features/library/components/ScreenMessage';
@@ -58,6 +59,7 @@ export function SavedScreen({ navigation }: Props) {
       <SwipeableRow onRemove={() => unsave(item)} removeLabel="Unsave">
         <VideoListRow
           video={item.video}
+          channelLine={OFFICIAL_CHANNEL.title}
           metaLine={`Saved ${formatDateLine(item.entry.saved_at)}`}
           onPress={(video) => navigation.navigate('Watch', { videoRowId: video.id })}
           actionIcon="bookmark"
@@ -114,7 +116,11 @@ export function SavedScreen({ navigation }: Props) {
           keyExtractor={keyExtractor}
           contentContainerStyle={styles.listPad}
           refreshControl={<RefreshControl refreshing={saved.refreshing} onRefresh={saved.refresh} />}
-          ListHeaderComponent={actionError ? <Text style={styles.errorLine}>{actionError}</Text> : undefined}
+          ListHeaderComponent={
+            actionError || saved.error ? (
+              <Text style={styles.errorLine}>{actionError ?? saved.error}</Text>
+            ) : undefined
+          }
           ListEmptyComponent={
             <ScreenMessage
               title="No saved recordings yet"

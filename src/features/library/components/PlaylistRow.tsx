@@ -9,6 +9,12 @@ import { downgradeYouTubeThumbnailUrl } from '../../../components/video/cardData
 interface PlaylistRowProps {
   summary: PlaylistSummary;
   onPress: (summary: PlaylistSummary) => void;
+  /**
+   * ⋮ menu handler. When omitted the ⋮ is NOT rendered — a decorative
+   * dots icon that does nothing is a dead button (it shipped that way
+   * and read as broken on tap).
+   */
+  onMenu?: (summary: PlaylistSummary) => void;
 }
 
 /**
@@ -18,7 +24,7 @@ interface PlaylistRowProps {
  * the first item's real YouTube thumbnail; an empty playlist shows a
  * plain surface with a playlist glyph — never a fabricated image.
  */
-export const PlaylistRow = memo(function PlaylistRow({ summary, onPress }: PlaylistRowProps) {
+export const PlaylistRow = memo(function PlaylistRow({ summary, onPress, onMenu }: PlaylistRowProps) {
   const { playlist, itemCount, coverThumbnailUrl, isOwn } = summary;
   const metaParts = [
     playlist.is_public ? 'Public' : 'Private',
@@ -61,7 +67,17 @@ export const PlaylistRow = memo(function PlaylistRow({ summary, onPress }: Playl
           {metaParts.join(' · ')}
         </Text>
       </View>
-      <MaterialIcons name="more-vert" size={20} color={lightColors.textSecondary} />
+      {onMenu ? (
+        <Pressable
+          onPress={() => onMenu(summary)}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel={`More actions for ${playlist.title}`}
+          style={styles.menuButton}
+        >
+          <MaterialIcons name="more-vert" size={20} color={lightColors.textSecondary} />
+        </Pressable>
+      ) : null}
     </Pressable>
   );
 });
@@ -114,6 +130,7 @@ const styles = StyleSheet.create({
   },
   countText: { color: '#FFFFFF', fontSize: 11, fontWeight: '600' },
   lines: { flex: 1 },
+  menuButton: { padding: 4 },
   title: { fontSize: 17, fontWeight: '500', color: lightColors.text },
   meta: { fontSize: 13, color: lightColors.textSecondary, marginTop: 3 },
 });
