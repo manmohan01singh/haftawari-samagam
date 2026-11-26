@@ -1,8 +1,21 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { requireSupabase } from '../../lib/supabase';
-import type { SamagamSession } from '../../types/database';
+import type { Profile, SamagamSession, Video } from '../../types/database';
 import { deriveOffsetSeconds, deriveStatus } from './stateMachine';
 import type { SessionPlaybackPosition } from './types';
+
+/** A session row joined with the recording it plays. */
+export interface SessionWithVideo {
+  session: SamagamSession;
+  video: Video | null;
+}
+
+type SessionRowWithVideo = SamagamSession & { video: Video | null };
+
+function toSessionWithVideo(row: SessionRowWithVideo): SessionWithVideo {
+  const { video, ...session } = row;
+  return { session: session as SamagamSession, video: video ?? null };
+}
 
 /**
  * Synchronized Samagam session service.
@@ -82,6 +95,104 @@ export async function getPlaybackPosition(
       nowMs,
     }),
   };
+}
+
+/** All sessions with their recording joined (list screen source). */
+export async function listSessionsWithVideos(): Promise<SessionWithVideo[]> {
+  const supabase = requireSupabase();
+  const { data, error } = await supabase
+    .from('sessions')
+    .select('*, video:videos(*)')
+    .order('scheduled_start_at', { ascending: true });
+  if (error) throw error;
+  return ((data ?? []) as SessionRowWithVideo[]).map(toSessionWithVideo);
+}
+
+/** One session with its recording joined (watch screen source). */
+export async function getSessionWithVideo(
+  sessionId: string,
+): Promise<SessionWithVideo | null> {
+  const supabase = requireSupabase();
+  const { data, error } = await supabase
+    .from('sessions')
+    .select('*, video:videos(*)')
+    .eq('id', sessionId)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? toSessionWithVideo(data as SessionRowWithVideo) : null;
+}
+
+/**
+ * REAL roster count: rows in session_participants currently marked
+ * 'joined'. This is a database count of actual join records — never a
+ * stored, editable counter on the session row.
+ */
+export async function getJoinedParticipantCount(sessionId: string): Promise<number> {
+  const supabase = requireSupabase();
+  const { count, error } = await supabase
+    .from('session_participants')
+    .select('*', { count: 'exact', head: true })
+    .eq('session_id', sessionId)
+    .eq('state', 'joined');
+  if (error) throw error;
+  return count ?? 0;
+}
+
+/** The signed-in user + their profile, or null when signed out. */
+export async function getCurrentSessionUser(): Promise<{
+  userId: string;
+  displayName: string | null;
+} | null> {
+  const supabase = requireSupabase();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .maybeSingle();
+  return {
+    userId: user.id,
+    displayName: (profile as Profile | null)?.display_name ?? null,
+  };
+}
+
+/** Subscribe to ANY session schedule change (list screen refresh). */
+export function subscribeToSessionList(onChange: () => void): RealtimeChannel {
+  const supabase = requireSupabase();
+  const channel = supabase
+    .channel('sessions:list')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'sessions' },
+      () => onChange(),
+    )
+    .subscribe();
+  return channel;
+}
+
+/** Subscribe to roster changes for one session (real join/leave rows). */
+export function subscribeToParticipants(
+  sessionId: string,
+  onChange: () => void,
+): RealtimeChannel {
+  const supabase = requireSupabase();
+  const channel = supabase
+    .channel(`session-participants:${sessionId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'session_participants',
+        filter: `session_id=eq.${sessionId}`,
+      },
+      () => onChange(),
+    )
+    .subscribe();
+  return channel;
 }
 
 /** Record that the signed-in user joined a session (participants table). */
