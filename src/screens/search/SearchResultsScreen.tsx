@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -14,7 +14,7 @@ import {
   type CardVideoData,
 } from '../../components/video/cardData';
 import { useAuth } from '../../features/auth';
-import { useOfficialChannel } from '../../features/channel';
+import { useChannelFollow, useOfficialChannel } from '../../features/channel';
 import { Toast, useToast } from '../../components/common/Toast';
 import { shareContent, shareFeedback } from '../../lib/share';
 import { OFFICIAL_CHANNEL_ID } from '../../lib/youtube';
@@ -30,7 +30,7 @@ import {
   fetchChannelUploads,
   type YouTubeVideoMetadata,
 } from '../../lib/youtube';
-import { lightColors, radii, spacing, typography } from '../../theme';
+import { lightColors, nativeApp, radii, spacing, typography } from '../../theme';
 import { goBackOrTab } from '../../navigation/safeBack';
 import type { RootStackParamList } from '../../navigation/types';
 import { FEED_LIST_PERF, H_LIST_PERF } from '../../lib/listPerf';
@@ -70,6 +70,9 @@ function searchResultCardData(v: VideoResult, channelAvatarUrl: string | null): 
 export function SearchResultsScreen({ route, navigation }: Props) {
   const { query } = route.params;
   const channel = useOfficialChannel();
+  const { width: windowWidth } = useWindowDimensions();
+  // Ref-3 carousel: card ≈78% of the screen width, next card peeking.
+  const carouselCardWidth = Math.round(windowWidth * nativeApp.shelfCard.carouselCardWidthRatio);
   const { user, profile } = useAuth();
   const controllerRef = useRef<ReturnType<typeof createSearchController> | null>(null);
   if (controllerRef.current === null) {
@@ -168,6 +171,11 @@ export function SearchResultsScreen({ route, navigation }: Props) {
 
   const channelResult = data?.channel ?? null;
   const channelMatches = channelResult != null;
+  // Device-local follow for the channel card's bell pill — the SAME
+  // AsyncStorage store the Channel screen uses (useChannelFollow), so
+  // both surfaces agree. It is not a YouTube subscription and changes
+  // no counts.
+  const { following, toggleFollow } = useChannelFollow(channelResult?.channelId ?? OFFICIAL_CHANNEL_ID);
   const youtubeSkipped = data?.youtubeSkipped ?? false;
   const didYouMean = data?.didYouMean ?? null;
 
@@ -272,7 +280,12 @@ export function SearchResultsScreen({ route, navigation }: Props) {
         </Text>
       ) : null}
       {channelResult ? (
-        <>
+        /* Ref-3: the whole channel block — identity row, both pills,
+           "Latest videos" + carousel — sits on the pale blue-grey
+           tinted surface; regular results continue below on white.
+           The tint bleeds to the screen edges (negative margins cancel
+           the list's horizontal padding). */
+        <View style={styles.tintBlock}>
           <View style={styles.channelBlock}>
             {channelResult.avatarUrl ? (
               <Image source={{ uri: channelResult.avatarUrl }} style={styles.channelAvatar} contentFit="cover" cachePolicy="memory-disk" />
@@ -282,9 +295,17 @@ export function SearchResultsScreen({ route, navigation }: Props) {
               </View>
             )}
             <View style={styles.channelLines}>
-              <Text style={styles.channelName} numberOfLines={2}>
-                {channelResult.title}
-              </Text>
+              <View style={styles.channelNameRow}>
+                <Text style={styles.channelName} numberOfLines={2}>
+                  {channelResult.title}
+                </Text>
+                {/* The engine's channel result is the official channel
+                    singleton (a verified music channel per the API
+                    record), so the badge belongs to this record only. */}
+                {channelResult.channelId === OFFICIAL_CHANNEL_ID ? (
+                  <MaterialIcons name="verified" size={16} color={lightColors.textSecondary} style={styles.verifiedBadge} />
+                ) : null}
+              </View>
               {channelResult.handle ? <Text style={styles.channelHandle}>{channelResult.handle}</Text> : null}
               <Text style={styles.channelMeta} numberOfLines={1}>
                 {channelResult.subscriberCount != null ? `${formatCount(channelResult.subscriberCount)} subscribers` : ''}
@@ -293,48 +314,69 @@ export function SearchResultsScreen({ route, navigation }: Props) {
               </Text>
             </View>
           </View>
-          {/* Only "View Channel": there is no subscription backend for
-              this card, so no Subscribed/Subscribe state is faked. */}
-          <Pressable
-            style={styles.viewChannelPill}
-            onPress={() => navigation.navigate('Channel', { channelId: channelResult.channelId })}
-            accessibilityRole="button"
-          >
-            <Text style={styles.viewChannelText}>View Channel</Text>
-          </Pressable>
-        </>
-      ) : null}
-      {latest.length > 0 && channelResult ? (
-        <View>
-          <Text style={styles.latestHeading}>Latest videos</Text>
-          <FlatList
-            horizontal
-            data={latest}
-            keyExtractor={(m) => m.youtubeVideoId}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.carouselContent}
-            {...H_LIST_PERF}
-            renderItem={({ item }) => {
-              const cardData: CardVideoData = apiCardData(item, channel?.avatarUrl ?? null);
-              return (
-                <View style={styles.carouselCard}>
-                  <ShelfCard
-                    data={cardData}
-                    showAvatar={item.liveBroadcastContent === 'live'}
-                    menuActions={[
-                      {
-                        key: 'share',
-                        label: 'Share',
-                        icon: 'share',
-                        onPress: () => shareVideo(item.title, item.youtubeVideoId),
-                      },
-                    ]}
-                    onPress={() => navigation.navigate('Watch', { youtubeVideoId: item.youtubeVideoId })}
-                  />
-                </View>
-              );
-            }}
-          />
+          {/* Two pills, ≈48% each (ref-3). LEFT: bell pill driven by
+              the honest device-local follow store shared with the
+              Channel screen — "Subscribe" → "Following"; it is NOT a
+              YouTube subscription and changes no counts. RIGHT:
+              outlined "View Channel" (real navigation). */}
+          <View style={styles.buttonRow}>
+            <Pressable
+              style={styles.followPill}
+              onPress={toggleFollow}
+              accessibilityRole="button"
+              accessibilityState={{ selected: following }}
+              accessibilityLabel={following ? 'Following this channel on this device' : 'Follow this channel on this device'}
+            >
+              <MaterialIcons
+                name={following ? 'notifications' : 'notifications-none'}
+                size={20}
+                color={lightColors.text}
+              />
+              <Text style={styles.followPillText}>{following ? 'Following' : 'Subscribe'}</Text>
+              {following ? <MaterialIcons name="expand-more" size={18} color={lightColors.text} /> : null}
+            </Pressable>
+            <Pressable
+              style={styles.viewChannelPill}
+              onPress={() => navigation.navigate('Channel', { channelId: channelResult.channelId })}
+              accessibilityRole="button"
+            >
+              <Text style={styles.viewChannelText}>View Channel</Text>
+            </Pressable>
+          </View>
+          <Text style={styles.followNote}>Follow is saved on this device only</Text>
+          {latest.length > 0 ? (
+            <View>
+              <Text style={styles.latestHeading}>Latest videos</Text>
+              <FlatList
+                horizontal
+                data={latest}
+                keyExtractor={(m) => m.youtubeVideoId}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.carouselContent}
+                {...H_LIST_PERF}
+                renderItem={({ item }) => {
+                  const cardData: CardVideoData = apiCardData(item, channel?.avatarUrl ?? null);
+                  return (
+                    <View style={{ width: carouselCardWidth }}>
+                      <ShelfCard
+                        data={cardData}
+                        showAvatar
+                        menuActions={[
+                          {
+                            key: 'share',
+                            label: 'Share',
+                            icon: 'share',
+                            onPress: () => shareVideo(item.title, item.youtubeVideoId),
+                          },
+                        ]}
+                        onPress={() => navigation.navigate('Watch', { youtubeVideoId: item.youtubeVideoId })}
+                      />
+                    </View>
+                  );
+                }}
+              />
+            </View>
+          ) : null}
         </View>
       ) : null}
       {allItems.length > 0 ? (
@@ -484,8 +526,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.sm,
+    minHeight: nativeApp.searchChannel.headerHeight, // 56
+    paddingVertical: spacing.xs,
   },
   field: {
     flex: 1,
@@ -494,7 +536,7 @@ const styles = StyleSheet.create({
     backgroundColor: lightColors.surfaceVariant,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
-    height: 44,
+    height: nativeApp.searchChannel.pillHeight, // 48
   },
 
   searchingRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 16 },
@@ -522,8 +564,23 @@ const styles = StyleSheet.create({
   didYouMeanStrong: { color: lightColors.text, fontWeight: '600', textDecorationLine: 'underline' },
   pendingNote: { ...typography.metadata, color: lightColors.textSecondary, marginTop: spacing.sm },
   skippedNote: { ...typography.metadata, color: lightColors.textSecondary, marginTop: spacing.sm },
-  channelBlock: { flexDirection: 'row', gap: spacing.lg, marginTop: spacing.sm },
-  channelAvatar: { width: 88, height: 88, borderRadius: 44 },
+  tintBlock: {
+    backgroundColor: lightColors.searchTint,
+    // Bleed to the screen edges: cancel the list's horizontal padding.
+    marginHorizontal: -spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
+    marginTop: spacing.sm,
+  },
+  channelBlock: { flexDirection: 'row', gap: spacing.lg },
+  channelAvatar: {
+    width: nativeApp.searchChannel.avatarSize,
+    height: nativeApp.searchChannel.avatarSize,
+    borderRadius: nativeApp.searchChannel.avatarSize / 2,
+  },
+  channelNameRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  verifiedBadge: { marginLeft: spacing.xs, marginTop: 5, flexShrink: 0 },
   avatarFallback: {
     backgroundColor: lightColors.surfaceVariant,
     alignItems: 'center',
@@ -531,23 +588,44 @@ const styles = StyleSheet.create({
   },
   avatarInitial: { fontSize: 30, fontWeight: '600', color: lightColors.textSecondary },
   channelLines: { flex: 1, justifyContent: 'center' },
-  channelName: { fontSize: 20, lineHeight: 25, fontWeight: '700', color: lightColors.text },
+  channelName: {
+    fontSize: nativeApp.searchChannel.nameFontSize,
+    lineHeight: 25,
+    fontWeight: '700',
+    color: lightColors.text,
+    flexShrink: 1,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: nativeApp.searchChannel.buttonGap,
+    marginTop: spacing.lg,
+  },
+  followPill: {
+    flex: 1,
+    height: nativeApp.searchChannel.buttonHeight, // 44
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: lightColors.surfaceVariant,
+    borderRadius: radii.pill,
+  },
+  followPillText: { fontSize: 15, fontWeight: '600', color: lightColors.text },
+  followNote: { fontSize: 11, color: lightColors.textSecondary, marginTop: 6 },
   channelHandle: { fontSize: 14, color: lightColors.textSecondary, marginTop: 3 },
   channelMeta: { fontSize: 14, color: lightColors.textSecondary, marginTop: 2 },
   viewChannelPill: {
-    marginTop: spacing.lg,
+    flex: 1,
+    height: nativeApp.searchChannel.buttonHeight, // 44
     borderWidth: 1,
-    borderColor: lightColors.border,
+    borderColor: '#9E9E9E', // ref-3: clearly visible outline on the tint
     borderRadius: radii.pill,
-    paddingVertical: 11,
-    minHeight: 44,
     justifyContent: 'center',
     alignItems: 'center',
   },
   viewChannelText: { fontSize: 15, fontWeight: '600', color: lightColors.text },
   latestHeading: { ...typography.sectionTitle, color: lightColors.text, marginTop: spacing.xl, marginBottom: spacing.md },
   carouselContent: { gap: spacing.lg },
-  carouselCard: { width: 300 },
   resultsHeading: { ...typography.sectionTitle, color: lightColors.text, marginTop: spacing.xl, marginBottom: spacing.md },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
   chip: {

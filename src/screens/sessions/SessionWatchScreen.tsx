@@ -684,5 +684,8 @@ const styles = StyleSheet.create({
   chatCardWrap: { marginTop: spacing.lg },
   chatBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
   chatBackdropTap: { flex: 1 },
-  chatSheetHost: { height: '88%' },
+  // Height is owned by SessionChat itself (72% default, 92% expanded,
+  // round-2 ref-5) so the player stays visible above the sheet; the
+  // host just anchors it to the bottom of the backdrop.
+  chatSheetHost: { justifyContent: 'flex-end' },
 });
