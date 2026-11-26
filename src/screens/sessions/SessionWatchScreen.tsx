@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   AppState,
   Image,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { EmptyState } from '../../components/common/EmptyState';
+import { ChatPreviewCard, SessionChat } from '../../features/chat/components';
 import { joinPresence, leavePresence } from '../../features/presence/presenceService';
 import { SessionStatusBadge } from '../../features/sessions/components/SessionStatusBadge';
 import {
@@ -47,9 +49,9 @@ import {
   spacing,
   typography,
 } from '../../theme';
-import type { SessionsRouteParamList } from './SessionsListScreen';
+import type { RootStackParamList } from '../../navigation/types';
 
-type Props = NativeStackScreenProps<SessionsRouteParamList, 'SessionWatch'>;
+type Props = NativeStackScreenProps<RootStackParamList, 'SessionWatch'>;
 
 /** Drift (seconds) tolerated before the player is re-seeked to the session position. */
 const DRIFT_TOLERANCE_SECONDS = 5;
@@ -81,6 +83,7 @@ export function SessionWatchScreen({ route }: Props) {
   const [joinedCount, setJoinedCount] = useState<number | null>(null);
   const [presenceCount, setPresenceCount] = useState<number | null>(null);
   const [playerReady, setPlayerReady] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
 
   const embedRef = useRef<YouTubeEmbedHandle>(null);
   const playerTimeRef = useRef<number | null>(null);
@@ -412,7 +415,44 @@ export function SessionWatchScreen({ route }: Props) {
             <Text style={styles.descriptionText}>{video.description}</Text>
           </View>
         ) : null}
+
+        {/* Live chat (chat stream): preview card on the sheet; tapping
+            it opens the full SessionChat bottom sheet. The count is the
+            REAL presence count when known, else the joined roster
+            count — never invented. SessionChat self-resolves the
+            current user (incl. admin role) from Supabase Auth. */}
+        <View style={styles.chatCardWrap}>
+          <ChatPreviewCard
+            sessionId={sessionId}
+            participantCount={presenceCount ?? joinedCount ?? undefined}
+            onPress={() => setChatOpen(true)}
+          />
+        </View>
       </ScrollView>
+
+      <Modal
+        visible={chatOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setChatOpen(false)}
+      >
+        <View style={styles.chatBackdrop}>
+          <Pressable
+            style={styles.chatBackdropTap}
+            onPress={() => setChatOpen(false)}
+            accessibilityLabel="Close chat"
+          />
+          <View style={styles.chatSheetHost}>
+            <SessionChat
+              sessionId={sessionId}
+              participantCount={presenceCount ?? joinedCount ?? undefined}
+              hasJoined={joined}
+              onJoinPress={() => void onToggleJoin()}
+              onClose={() => setChatOpen(false)}
+            />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -497,4 +537,8 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
   },
   descriptionText: { ...typography.body, color: lightColors.text },
+  chatCardWrap: { marginTop: spacing.lg },
+  chatBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
+  chatBackdropTap: { flex: 1 },
+  chatSheetHost: { height: '88%' },
 });
