@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Image, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -8,8 +8,16 @@ import { lightColors, spacing } from '../../theme';
 import { useCurrentUser, useHistory } from '../../features/library/hooks';
 import { clearHistory, removeHistoryEntry } from '../../features/library/libraryService';
 import { formatDateLine } from '../../features/library/format';
+import {
+  clearLocalHistory,
+  removeLocalHistoryEntry,
+  useLocalHistory,
+  type LocalHistoryEntry,
+} from '../../features/library/localHistory';
 import type { HistoryItem } from '../../features/library/types';
 import type { LibraryRootStackParamList } from '../../features/library/screenTypes';
+import { goBackOrTab } from '../../navigation/safeBack';
+import { StackTabBar } from '../../components/layout/StackTabBar';
 import { ConfirmModal } from '../../features/library/components/ConfirmModal';
 import { ScreenMessage } from '../../features/library/components/ScreenMessage';
 import { SkeletonCard } from '../../components/video/SkeletonCard';
@@ -32,6 +40,31 @@ type Props = NativeStackScreenProps<LibraryRootStackParamList, 'History'>;
 export function HistoryScreen({ navigation }: Props) {
   const { user, loading: authLoading } = useCurrentUser();
   const history = useHistory(user?.id ?? null);
+  // Device-local history (signed-out users, QA 78): recordings opened
+  // while signed out are kept on this device and shown here, clearly
+  // labelled, instead of pretending nothing was watched.
+  const local = useLocalHistory();
+  const [confirmClearLocal, setConfirmClearLocal] = useState(false);
+  const reloadLocal = local.reload;
+  useFocusEffect(
+    useCallback(() => {
+      reloadLocal();
+    }, [reloadLocal]),
+  );
+
+  const removeLocal = useCallback(
+    async (entry: LocalHistoryEntry) => {
+      local.setEntries(local.entries.filter((e) => e.youtubeVideoId !== entry.youtubeVideoId));
+      await removeLocalHistoryEntry(entry.youtubeVideoId).catch(() => undefined);
+    },
+    [local],
+  );
+
+  const clearLocal = useCallback(async () => {
+    await clearLocalHistory().catch(() => undefined);
+    local.setEntries([]);
+    setConfirmClearLocal(false);
+  }, [local]);
   const [confirmClear, setConfirmClear] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -95,11 +128,20 @@ export function HistoryScreen({ navigation }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.topBar}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={10} accessibilityLabel="Back" accessibilityRole="button">
+        <Pressable onPress={() => goBackOrTab(navigation, 'Library')} hitSlop={10} accessibilityLabel="Back" accessibilityRole="button">
           <MaterialIcons name="arrow-back" size={24} color={lightColors.text} />
         </Pressable>
         <Text style={styles.topBarTitle}>History</Text>
-        {user && history.data.length > 0 ? (
+        {!user && local.entries.length > 0 ? (
+          <Pressable
+            onPress={() => setConfirmClearLocal(true)}
+            hitSlop={10}
+            accessibilityLabel="Clear device history"
+            accessibilityRole="button"
+          >
+            <MaterialIcons name="delete-outline" size={24} color={lightColors.text} />
+          </Pressable>
+        ) : user && history.data.length > 0 ? (
           <Pressable
             onPress={() => setConfirmClear(true)}
             hitSlop={10}
@@ -124,10 +166,72 @@ export function HistoryScreen({ navigation }: Props) {
           <SkeletonCard variant="row" />
           <SkeletonCard variant="row" />
         </View>
+      ) : !user && local.loading ? (
+        <View style={styles.listPad}>
+          <SkeletonCard variant="row" />
+          <SkeletonCard variant="row" />
+          <SkeletonCard variant="row" />
+        </View>
+      ) : !user && local.entries.length > 0 ? (
+        <FlatList
+          data={local.entries}
+          keyExtractor={(e) => e.youtubeVideoId}
+          contentContainerStyle={styles.listPad}
+          ListHeaderComponent={
+            <View style={styles.localBanner}>
+              <Text style={styles.localBannerText}>
+                {"You're signed out, so this history is kept only on this device. Sign in to keep history with your account."}
+              </Text>
+              <Pressable onPress={() => navigation.navigate('SignIn')} hitSlop={8} accessibilityRole="button">
+                <Text style={styles.localBannerAction}>Sign in</Text>
+              </Pressable>
+            </View>
+          }
+          renderItem={({ item }) => (
+            <Pressable
+              style={styles.localRow}
+              onPress={() =>
+                navigation.navigate(
+                  'Watch',
+                  item.videoRowId
+                    ? { videoRowId: item.videoRowId }
+                    : { youtubeVideoId: item.youtubeVideoId },
+                )
+              }
+              accessibilityRole="button"
+              accessibilityLabel={item.title}
+            >
+              {item.thumbnailUrl ? (
+                <Image source={{ uri: item.thumbnailUrl }} style={styles.localThumb} resizeMode="cover" />
+              ) : (
+                <View style={[styles.localThumb, styles.thumbEmpty]} />
+              )}
+              <View style={styles.localLines}>
+                <Text style={styles.localTitle} numberOfLines={2}>
+                  {item.title}
+                </Text>
+                <Text style={styles.localMeta} numberOfLines={1}>
+                  Watched {formatDateLine(item.watchedAt)} · On this device
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => void removeLocal(item)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Remove from device history"
+                style={styles.localRemove}
+              >
+                <MaterialIcons name="close" size={20} color={lightColors.textSecondary} />
+              </Pressable>
+            </Pressable>
+          )}
+        />
       ) : !user ? (
         <ScreenMessage
           title="Sign in to see your history"
-          message="Watch history is kept with your account, so only you can see it."
+          message="Watch history is kept with your account, so only you can see it. Recordings you watch while signed out are kept on this device and will show here."
+          actionLabel="Sign in"
+          onAction={() => navigation.navigate('SignIn')}
         />
       ) : history.loading && history.data.length === 0 ? (
         <View style={styles.listPad}>
@@ -149,12 +253,23 @@ export function HistoryScreen({ navigation }: Props) {
             <ScreenMessage
               title="No history yet"
               message="Recordings you watch while signed in will appear here."
+              actionLabel="Browse samagams"
+              onAction={() => navigation.navigate('MainTabs', { screen: 'Home' })}
             />
           }
           {...ROW_LIST_PERF}
         />
       )}
 
+      <StackTabBar navigation={navigation} activeTab="Library" />
+      <ConfirmModal
+        visible={confirmClearLocal}
+        title="Clear device history?"
+        message="This removes the watch history kept on this device. This cannot be undone."
+        confirmLabel="Clear all"
+        onConfirm={() => void clearLocal()}
+        onCancel={() => setConfirmClearLocal(false)}
+      />
       <ConfirmModal
         visible={confirmClear}
         title="Clear watch history?"
@@ -181,4 +296,23 @@ const styles = StyleSheet.create({
   topBarSpacer: { width: 24 },
   listPad: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, flexGrow: 1 },
   errorLine: { color: lightColors.accent, fontSize: 13, paddingBottom: spacing.sm },
+  localBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: lightColors.surfaceVariant,
+    borderRadius: 12,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    marginBottom: spacing.md,
+  },
+  localBannerText: { flex: 1, fontSize: 13, lineHeight: 18, color: lightColors.textSecondary },
+  localBannerAction: { fontSize: 14, fontWeight: '700', color: lightColors.text },
+  localRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, paddingVertical: spacing.sm },
+  localThumb: { width: '40%', maxWidth: 168, aspectRatio: 16 / 9, borderRadius: 12, backgroundColor: lightColors.playerBackground },
+  thumbEmpty: { backgroundColor: lightColors.surfaceVariant },
+  localLines: { flex: 1, paddingTop: 2 },
+  localTitle: { fontSize: 15, lineHeight: 20, fontWeight: '600', color: lightColors.text },
+  localMeta: { fontSize: 13, color: lightColors.textSecondary, marginTop: 3 },
+  localRemove: { padding: spacing.xs, marginTop: 2 },
 });

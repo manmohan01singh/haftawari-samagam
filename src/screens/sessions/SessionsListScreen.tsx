@@ -2,12 +2,16 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Pressable,
   RefreshControl,
   SectionList,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
+import { goBackOrTab } from '../../navigation/safeBack';
+import { StackTabBar } from '../../components/layout/StackTabBar';
 import { EmptyState } from '../../components/common/EmptyState';
 import { SessionCard } from '../../features/sessions/components/SessionCard';
 import { SkeletonCard } from '../../components/video/SkeletonCard';
@@ -171,12 +175,36 @@ export function SessionsListScreen({ navigation }: Props) {
     [],
   );
 
+  // Every state of this screen renders under the same top bar. Before
+  // this fix the screen had NO header and NO back button in any state:
+  // users who arrived from Home (or a shared URL) had no on-screen way
+  // out, and the error state told them to "pull down to retry" on a
+  // non-scrollable surface with no retry control — a dead end.
+  const topBar = (
+    <View style={styles.topBar}>
+      <Pressable
+        onPress={() => goBackOrTab(navigation, 'Home')}
+        hitSlop={10}
+        accessibilityLabel="Back"
+        accessibilityRole="button"
+      >
+        <MaterialIcons name="arrow-back" size={24} color={lightColors.text} />
+      </Pressable>
+      <Text style={styles.topBarTitle}>Samagam Sessions</Text>
+      <View style={styles.topBarSpacer} />
+    </View>
+  );
+
   if (!isSupabaseConfigured) {
     return (
-      <EmptyState
-        title="Samagams are not available yet"
-        message="The backend is not configured in this build, so no sessions can be shown."
-      />
+      <View style={styles.screen}>
+        {topBar}
+        <EmptyState
+          title="Samagams are not available yet"
+          message="The backend is not configured in this build, so no sessions can be shown."
+        />
+        <StackTabBar navigation={navigation} activeTab="Home" />
+      </View>
     );
   }
 
@@ -184,28 +212,43 @@ export function SessionsListScreen({ navigation }: Props) {
     // Skeleton cards in the real list geometry (QA issue 16) — the
     // previous state was a lone spinner on an empty page.
     return (
-      <View style={styles.loadingPad}>
-        <View style={styles.loadingRow}>
-          <ActivityIndicator color={lightColors.text} />
-          <Text style={styles.loadingLabel}>Loading Samagams…</Text>
+      <View style={styles.screen}>
+        {topBar}
+        <View style={styles.loadingPad}>
+          <View style={styles.loadingRow}>
+            <ActivityIndicator color={lightColors.text} />
+            <Text style={styles.loadingLabel}>Loading Samagams…</Text>
+          </View>
+          <SkeletonCard variant="shelf" />
+          <SkeletonCard variant="shelf" />
+          <SkeletonCard variant="shelf" />
         </View>
-        <SkeletonCard variant="shelf" />
-        <SkeletonCard variant="shelf" />
-        <SkeletonCard variant="shelf" />
+        <StackTabBar navigation={navigation} activeTab="Home" />
       </View>
     );
   }
 
   if (error) {
     return (
-      <EmptyState
-        title="Could not load Samagams"
-        message={`${error} Pull down to retry.`}
-      />
+      <View style={styles.screen}>
+        {topBar}
+        <EmptyState
+          title="Could not load Samagams"
+          message={error}
+          actionLabel="Try again"
+          onAction={() => {
+            setLoading(true);
+            void load();
+          }}
+        />
+        <StackTabBar navigation={navigation} activeTab="Home" />
+      </View>
     );
   }
 
   return (
+    <View style={styles.screen}>
+      {topBar}
     <SectionList
       sections={sections}
       keyExtractor={(item) => item.session.id}
@@ -230,15 +273,30 @@ export function SessionsListScreen({ navigation }: Props) {
       ListEmptyComponent={
         <EmptyState
           title="No Samagams scheduled"
-          message="When a Samagam is scheduled it will appear here as UPCOMING."
+          message="Samagam Sessions are scheduled group playbacks of recordings — everyone watches together, starting at the same position. When one is scheduled it will appear here as UPCOMING, then NOW PLAYING while it runs. Until then, you can watch any recording from the home feed."
+          actionLabel="Browse recordings"
+          onAction={() => navigation.navigate('MainTabs', { screen: 'Home' })}
         />
       }
       stickySectionHeadersEnabled={false}
     />
+      <StackTabBar navigation={navigation} activeTab="Home" />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: lightColors.background },
+  topBar: {
+    height: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    backgroundColor: lightColors.background,
+  },
+  topBarTitle: { fontSize: 17, fontWeight: '600', color: lightColors.text },
+  topBarSpacer: { width: 24 },
   list: { flex: 1, backgroundColor: lightColors.background },
   content: { paddingTop: spacing.lg, paddingBottom: spacing.xxl },
   emptyContainer: { flexGrow: 1 },

@@ -12,7 +12,9 @@ import {
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { EmptyState } from '../../components/common/EmptyState';
+import { goBackOrTab } from '../../navigation/safeBack';
 import { ChatPreviewCard, SessionChat } from '../../features/chat/components';
 import { joinPresence, leavePresence } from '../../features/presence/presenceService';
 import { SessionStatusBadge } from '../../features/sessions/components/SessionStatusBadge';
@@ -30,6 +32,7 @@ import { serverClock } from '../../features/sessions/serverClock';
 import {
   getCurrentSessionUser,
   getJoinedParticipantCount,
+  getMyParticipantState,
   getSessionWithVideo,
   joinSession,
   leaveSession,
@@ -69,7 +72,7 @@ const DRIFT_TOLERANCE_SECONDS = 5;
  * "LIVE": it is a scheduled group playback of a recording, not a newly
  * originated live broadcast.
  */
-export function SessionWatchScreen({ route }: Props) {
+export function SessionWatchScreen({ route, navigation }: Props) {
   const { sessionId } = route.params;
   // 5s tick (not the 1s default): this screen's labels are
   // minute-granularity and drift correction reads serverClock
@@ -83,6 +86,7 @@ export function SessionWatchScreen({ route }: Props) {
   const [user, setUser] = useState<{ userId: string; displayName: string | null } | null>(null);
   const [joined, setJoined] = useState(false);
   const [joinBusy, setJoinBusy] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
   const [joinedCount, setJoinedCount] = useState<number | null>(null);
   const [presenceCount, setPresenceCount] = useState<number | null>(null);
   const [playerReady, setPlayerReady] = useState(false);
@@ -143,6 +147,11 @@ export function SessionWatchScreen({ route }: Props) {
         setItem(loaded);
         setUser(me);
         if (!loaded) setError('This Samagam could not be found.');
+        if (me) {
+          // Open in the user's REAL roster state, not always "not joined".
+          const myState = await getMyParticipantState(sessionId, me.userId).catch(() => null);
+          if (!cancelled && myState) setJoined(myState === 'joined');
+        }
         void refreshJoinedCount();
       } catch (e) {
         if (!cancelled) {
@@ -244,6 +253,7 @@ export function SessionWatchScreen({ route }: Props) {
   const onToggleJoin = useCallback(async () => {
     if (!user || joinBusy) return;
     setJoinBusy(true);
+    setJoinError(null);
     try {
       if (joined) {
         await leaveSession(sessionId, user.userId);
@@ -253,8 +263,17 @@ export function SessionWatchScreen({ route }: Props) {
         setJoined(true);
       }
       void refreshJoinedCount();
-    } catch {
-      // Join/leave failure leaves the previous state in place.
+    } catch (e) {
+      // Failure keeps the previous state — and now SAYS so. Before this
+      // the error was swallowed and the button silently did nothing,
+      // which read as "the app is stuck".
+      setJoinError(
+        e instanceof Error
+          ? e.message
+          : joined
+            ? 'Could not leave this Samagam. Please try again.'
+            : 'Could not join this Samagam. Please try again.',
+      );
     } finally {
       setJoinBusy(false);
     }
@@ -275,23 +294,57 @@ export function SessionWatchScreen({ route }: Props) {
     };
   }, [sessionId]);
 
+  // Loading / error / unavailable states get the same back bar as the
+  // loaded screen — before this they were bare full-screen messages
+  // with no on-screen way out.
+  const backBar = (
+    <View style={styles.backBar}>
+      <Pressable
+        onPress={() => goBackOrTab(navigation, 'Home')}
+        hitSlop={10}
+        accessibilityLabel="Back"
+        accessibilityRole="button"
+      >
+        <MaterialIcons name="arrow-back" size={24} color={lightColors.text} />
+      </Pressable>
+      <Text style={styles.backBarTitle}>Samagam Session</Text>
+      <View style={styles.backBarSpacer} />
+    </View>
+  );
+
   if (!isSupabaseConfigured) {
     return (
-      <EmptyState
-        title="Samagams are not available yet"
-        message="The backend is not configured in this build, so this session cannot be shown."
-      />
+      <View style={styles.stateScreen}>
+        {backBar}
+        <EmptyState
+          title="Samagams are not available yet"
+          message="The backend is not configured in this build, so this session cannot be shown."
+        />
+      </View>
     );
   }
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator color={lightColors.text} />
+      <View style={styles.stateScreen}>
+        {backBar}
+        <View style={styles.center}>
+          <ActivityIndicator color={lightColors.text} />
+        </View>
       </View>
     );
   }
   if (error || !session) {
-    return <EmptyState title="Samagam unavailable" message={error ?? undefined} />;
+    return (
+      <View style={styles.stateScreen}>
+        {backBar}
+        <EmptyState
+          title="Samagam unavailable"
+          message={error ?? undefined}
+          actionLabel="Back to Sessions"
+          onAction={() => navigation.navigate('Sessions')}
+        />
+      </View>
+    );
   }
 
   const title = session.title ?? video?.title ?? 'Samagam';
@@ -316,6 +369,18 @@ export function SessionWatchScreen({ route }: Props) {
     <View style={styles.root}>
       {/* Player area (pinned at top, per reference) */}
       <View style={styles.playerArea}>
+        {/* Back affordance over the player. This screen previously had
+            NO back control at all — on the PWA the only way out was the
+            browser's own back button. */}
+        <Pressable
+          onPress={() => goBackOrTab(navigation, 'Home')}
+          style={styles.backOverlay}
+          hitSlop={8}
+          accessibilityLabel="Back"
+          accessibilityRole="button"
+        >
+          <MaterialIcons name="arrow-back" size={22} color="#FFFFFF" />
+        </Pressable>
         {showEmbed ? (
           <YouTubeEmbed
             key={`${video.youtube_video_id}-${isPlaying ? 'playing' : 'replay'}`}
@@ -384,27 +449,39 @@ export function SessionWatchScreen({ route }: Props) {
           </Pressable>
         ) : null}
 
-        {/* Join / Leave — real session_participants rows */}
-        <View style={styles.actionRow}>
-          {user ? (
-            <Pressable
-              onPress={() => void onToggleJoin()}
-              disabled={joinBusy || status === 'cancelled' || isCompleted}
-              style={({ pressed }) => [
-                joined ? styles.joinedPill : styles.joinPill,
-                (pressed || joinBusy) && styles.pressed,
-                (status === 'cancelled' || isCompleted) && styles.disabled,
-              ]}
-              accessibilityRole="button"
-            >
-              <Text style={joined ? styles.joinedPillText : styles.joinPillText}>
-                {joined ? 'Joined — tap to leave' : 'Join Samagam'}
-              </Text>
-            </Pressable>
-          ) : (
-            <Text style={styles.signInNote}>Sign in to join this Samagam.</Text>
-          )}
-        </View>
+        {/* Join / Leave — real session_participants rows. The pill is
+            only offered while joining is meaningful (upcoming / now
+            playing): a completed or cancelled session used to show a
+            permanently disabled "Join Samagam" button. Signed-out
+            users get a working Sign in button, not just a note. */}
+        {status === 'cancelled' || isCompleted ? null : (
+          <View style={styles.actionRow}>
+            {user ? (
+              <Pressable
+                onPress={() => void onToggleJoin()}
+                disabled={joinBusy}
+                style={({ pressed }) => [
+                  joined ? styles.joinedPill : styles.joinPill,
+                  (pressed || joinBusy) && styles.pressed,
+                ]}
+                accessibilityRole="button"
+              >
+                <Text style={joined ? styles.joinedPillText : styles.joinPillText}>
+                  {joinBusy ? 'Working…' : joined ? 'Joined — tap to leave' : 'Join Samagam'}
+                </Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                onPress={() => navigation.navigate('SignIn')}
+                style={styles.joinPill}
+                accessibilityRole="button"
+              >
+                <Text style={styles.joinPillText}>Sign in to join</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
+        {joinError ? <Text style={styles.joinError}>{joinError}</Text> : null}
 
         {status === 'upcoming' ? (
           <Text style={styles.note}>
@@ -536,6 +613,30 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.5 },
   pressed: { opacity: 0.8 },
   signInNote: { ...typography.body, color: lightColors.textSecondary },
+  stateScreen: { flex: 1, backgroundColor: lightColors.background },
+  backBar: {
+    height: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    backgroundColor: lightColors.background,
+  },
+  backBarTitle: { fontSize: 17, fontWeight: '600', color: lightColors.text },
+  backBarSpacer: { width: 24 },
+  backOverlay: {
+    position: 'absolute',
+    top: spacing.sm,
+    left: spacing.sm,
+    zIndex: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  joinError: { fontSize: 13, color: lightColors.accent, marginTop: spacing.sm },
   note: {
     ...typography.body,
     color: lightColors.textSecondary,

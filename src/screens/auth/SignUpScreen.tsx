@@ -4,6 +4,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -11,6 +12,7 @@ import {
 } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { goBackOrTab } from '../../navigation/safeBack';
 import { branding } from '../../config/branding';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { lightColors, radii, spacing, typography } from '../../theme';
@@ -36,7 +38,15 @@ export function SignUpScreen({ navigation }: Props) {
   const [needsConfirmation, setNeedsConfirmation] = useState(false);
 
   const submit = async () => {
-    if (!supabase) return;
+    if (!supabase || busy) return;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters.');
+      return;
+    }
     setBusy(true);
     setError(null);
     const { data, error: signUpError } = await supabase.auth.signUp({
@@ -50,7 +60,7 @@ export function SignUpScreen({ navigation }: Props) {
       return;
     }
     if (data.session) {
-      navigation.goBack();
+      goBackOrTab(navigation, 'Library');
     } else {
       setNeedsConfirmation(true);
     }
@@ -61,8 +71,9 @@ export function SignUpScreen({ navigation }: Props) {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
+      <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
       <View style={styles.topRow}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={10} accessibilityLabel="Back">
+        <Pressable onPress={() => goBackOrTab(navigation, 'Library')} hitSlop={10} accessibilityLabel="Back">
           <MaterialIcons name="arrow-back" size={24} color={lightColors.text} />
         </Pressable>
       </View>
@@ -112,7 +123,10 @@ export function SignUpScreen({ navigation }: Props) {
             secureTextEntry
             value={password}
             onChangeText={setPassword}
+            returnKeyType="go"
+            onSubmitEditing={submit}
           />
+          <Text style={styles.hint}>Use at least 6 characters.</Text>
           {error ? <Text style={styles.error}>{error}</Text> : null}
           <Pressable
             style={[styles.primaryButton, (busy || !email || !password) && styles.buttonDisabled]}
@@ -133,6 +147,7 @@ export function SignUpScreen({ navigation }: Props) {
           </Pressable>
         </>
       )}
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -161,6 +176,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   error: { ...typography.body, color: lightColors.accent, marginBottom: spacing.md },
+  hint: { fontSize: 13, color: lightColors.textSecondary, marginTop: -spacing.xs, marginBottom: spacing.md },
   confirmText: { ...typography.body, color: lightColors.text, marginBottom: spacing.lg },
   primaryButton: {
     backgroundColor: lightColors.subscribeBackground,

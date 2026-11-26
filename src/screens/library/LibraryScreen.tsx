@@ -13,6 +13,7 @@ import {
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Image } from 'expo-image';
 import type { CompositeScreenProps } from '@react-navigation/native';
+import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { isSupabaseConfigured } from '../../lib/supabase';
@@ -32,6 +33,7 @@ import type { LibraryRootStackParamList } from '../../features/library/screenTyp
 import { CreatePlaylistSheet } from '../../features/library/components/CreatePlaylistSheet';
 import { ScreenLoading } from '../../features/library/components/ScreenMessage';
 import { listThumbnailUrl } from '../../components/video/cardData';
+import { useLocalHistory } from '../../features/library/localHistory';
 import { PlaylistRow } from '../../features/library/components/PlaylistRow';
 import { VideoListRow } from '../../features/library/components/VideoListRow';
 import { H_LIST_PERF } from '../../lib/listPerf';
@@ -56,18 +58,31 @@ const HISTORY_CARD_WIDTH = Math.round(Dimensions.get('window').width * 0.36);
  */
 export function LibraryScreen({ navigation }: Props) {
   const { user, loading: authLoading } = useCurrentUser();
+  const scrollRef = React.useRef<React.ElementRef<typeof ScrollView>>(null);
+  useScrollToTop(scrollRef);
   const { profile } = useProfile(user?.id ?? null);
   const history = useHistory(user?.id ?? null);
   const saved = useSavedItems(user?.id ?? null);
   const summaries = usePlaylistSummaries(user?.id ?? null);
+  // Device-local history for signed-out users (QA 78): the History
+  // shelf below shows real on-device entries instead of a bare
+  // "sign in" line when the user has watched while signed out.
+  const local = useLocalHistory();
   const [createOpen, setCreateOpen] = useState(false);
+  const reloadLocal = local.reload;
+  useFocusEffect(
+    useCallback(() => {
+      reloadLocal();
+    }, [reloadLocal]),
+  );
 
   const refreshing = history.refreshing || saved.refreshing || summaries.refreshing;
   const onRefresh = useCallback(() => {
     history.refresh();
     saved.refresh();
     summaries.refresh();
-  }, [history, saved, summaries]);
+    local.reload();
+  }, [history, saved, summaries, local]);
 
   const openVideo = useCallback(
     (videoId: string) => navigation.navigate('Watch', { videoRowId: videoId }),
@@ -141,7 +156,7 @@ export function LibraryScreen({ navigation }: Props) {
           onPress={() => navigation.navigate('Account')}
           accessibilityRole="button"
         >
-          <Text style={styles.accountsText}>Accounts</Text>
+          <Text style={styles.accountsText}>Account</Text>
           <MaterialIcons name="keyboard-arrow-down" size={20} color={lightColors.text} />
         </Pressable>
         <View style={styles.headerActions}>
@@ -155,6 +170,7 @@ export function LibraryScreen({ navigation }: Props) {
       </View>
 
       <ScrollView
+        ref={scrollRef}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         contentContainerStyle={styles.scrollContent}
       >
@@ -195,6 +211,15 @@ export function LibraryScreen({ navigation }: Props) {
                 <Text style={[styles.pillText, styles.pillTextLight]}>Saved</Text>
               </Pressable>
             </View>
+            <Pressable
+              style={styles.channelRow}
+              onPress={() => navigation.navigate('Channel', {})}
+              accessibilityRole="button"
+            >
+              <MaterialIcons name="play-circle-outline" size={22} color={lightColors.text} />
+              <Text style={styles.channelRowText}>Official channel</Text>
+              <MaterialIcons name="chevron-right" size={20} color={lightColors.textSecondary} />
+            </Pressable>
             {profile?.role === 'admin' ? (
               <Pressable
                 style={styles.adminLink}
@@ -208,12 +233,47 @@ export function LibraryScreen({ navigation }: Props) {
           </>
         ) : (
           <View style={styles.signInBlock}>
+            <View style={styles.signInAvatar}>
+              <MaterialIcons name="person" size={40} color={lightColors.textSecondary} />
+            </View>
             <Text style={styles.signInTitle}>Sign in to see your library</Text>
             <Text style={styles.signInText}>
               Your history, saved samagams and playlists are kept with your account.
             </Text>
+            {/* This block used to be text-only: a signed-out user landed
+                here and had NO way to sign in from this screen. */}
+            <View style={styles.profileButtonsAlt}>
+              <Pressable
+                style={[styles.pillButton, styles.pillDark]}
+                onPress={() => navigation.navigate('SignIn')}
+                accessibilityRole="button"
+              >
+                <Text style={[styles.pillText, styles.pillTextDark]}>Sign in</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.pillButton, styles.pillLight]}
+                onPress={() => navigation.navigate('SignUp')}
+                accessibilityRole="button"
+              >
+                <Text style={[styles.pillText, styles.pillTextLight]}>Create account</Text>
+              </Pressable>
+            </View>
           </View>
         )}
+
+        {/* Load failures used to be silently shown as empty sections
+            ("No playlists yet" when the fetch had actually failed).
+            Surface one honest banner with a retry instead. */}
+        {user && (history.error || saved.error || summaries.error) ? (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorBannerText}>
+              Some of your library could not be loaded. Check your connection and try again.
+            </Text>
+            <Pressable onPress={onRefresh} accessibilityRole="button" hitSlop={8}>
+              <Text style={styles.errorBannerAction}>Retry</Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         {/* History shelf */}
         <Pressable
@@ -239,9 +299,51 @@ export function LibraryScreen({ navigation }: Props) {
             <ActivityIndicator size="small" color={lightColors.textSecondary} />
             <Text style={styles.sectionLoadingText}>Loading…</Text>
           </View>
+        ) : !user && local.entries.length > 0 ? (
+          <>
+            <FlatList
+              horizontal
+              data={local.entries.slice(0, 10)}
+              keyExtractor={(item) => item.youtubeVideoId}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.historyContent}
+              {...H_LIST_PERF}
+              renderItem={({ item }) => (
+                <Pressable
+                  style={styles.historyCard}
+                  onPress={() =>
+                    navigation.navigate(
+                      'Watch',
+                      item.videoRowId
+                        ? { videoRowId: item.videoRowId }
+                        : { youtubeVideoId: item.youtubeVideoId },
+                    )
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel={item.title}
+                >
+                  <View style={styles.historyThumbWrap}>
+                    {item.thumbnailUrl ? (
+                      <Image source={{ uri: item.thumbnailUrl }} style={styles.historyThumb} resizeMode="cover" />
+                    ) : (
+                      <View style={[styles.historyThumb, styles.thumbEmpty]} />
+                    )}
+                  </View>
+                  <Text style={styles.historyTitle} numberOfLines={2}>
+                    {item.title}
+                  </Text>
+                </Pressable>
+              )}
+            />
+            <Text style={styles.emptyLine}>Watched on this device while signed out.</Text>
+          </>
         ) : (
           <Text style={styles.emptyLine}>
-            {user ? 'Recordings you watch will appear here.' : 'Sign in to build your history.'}
+            {user
+              ? history.error
+                ? 'History could not be loaded — use Retry above.'
+                : 'Recordings you watch will appear here.'
+              : 'Sign in to build your history.'}
           </Text>
         )}
 
@@ -253,15 +355,33 @@ export function LibraryScreen({ navigation }: Props) {
           contentContainerStyle={styles.chipsContent}
         >
           <Pressable style={styles.chip} onPress={() => navigation.navigate('History')} accessibilityRole="button">
+            <MaterialIcons name="history" size={16} color={lightColors.text} />
             <Text style={styles.chipText}>Recent</Text>
           </Pressable>
           <Pressable style={styles.chip} onPress={() => navigation.navigate('Saved')} accessibilityRole="button">
+            <MaterialIcons name="bookmark-border" size={16} color={lightColors.text} />
             <Text style={styles.chipText}>Saved</Text>
           </Pressable>
           <Pressable style={styles.chip} onPress={() => navigation.navigate('Playlists')} accessibilityRole="button">
+            <MaterialIcons name="playlist-play" size={16} color={lightColors.text} />
             <Text style={styles.chipText}>Playlists</Text>
           </Pressable>
         </ScrollView>
+
+        {/* Samagam Sessions were only reachable from a Home banner;
+            the You/Library tab is the other natural home for them. */}
+        <Pressable
+          style={styles.sessionsRow}
+          onPress={() => navigation.navigate('Sessions')}
+          accessibilityRole="button"
+        >
+          <MaterialIcons name="groups" size={24} color={lightColors.text} />
+          <View style={styles.sessionsLines}>
+            <Text style={styles.sessionsTitle}>Samagam Sessions</Text>
+            <Text style={styles.sessionsMeta}>Scheduled group playbacks — upcoming, now playing, completed</Text>
+          </View>
+          <MaterialIcons name="chevron-right" size={22} color={lightColors.textSecondary} />
+        </Pressable>
 
         {/* Playlists — stacked rows */}
         <View style={styles.rowsBlock}>
@@ -275,7 +395,13 @@ export function LibraryScreen({ navigation }: Props) {
                 <Text style={styles.sectionLoadingText}>Loading…</Text>
               </View>
             ) : (
-              <Text style={styles.rowsEmpty}>{user ? 'No playlists yet.' : 'No public playlists yet.'}</Text>
+              <Text style={styles.rowsEmpty}>
+                {summaries.error
+                  ? 'Playlists could not be loaded — use Retry above.'
+                  : user
+                    ? 'No playlists yet.'
+                    : 'No public playlists yet.'}
+              </Text>
             )
           ) : null}
           {user ? (
@@ -317,7 +443,11 @@ export function LibraryScreen({ navigation }: Props) {
               </View>
             ) : (
               <Text style={styles.rowsEmpty}>
-                {user ? 'Samagams you save will appear here.' : 'Sign in to save samagams here.'}
+                {user
+                  ? saved.error
+                    ? 'Saved recordings could not be loaded — use Retry above.'
+                    : 'Samagams you save will appear here.'
+                  : 'Sign in to save samagams here.'}
               </Text>
             )
           ) : null}
@@ -394,6 +524,20 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
   },
   adminLinkText: { fontSize: 15, fontWeight: '500', color: lightColors.text },
+  profileButtonsAlt: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.lg,
+    backgroundColor: lightColors.surfaceVariant,
+    borderRadius: radii.card,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  errorBannerText: { flex: 1, fontSize: 13, color: lightColors.textSecondary },
+  errorBannerAction: { fontSize: 14, fontWeight: '700', color: lightColors.text },
   signInBlock: { paddingHorizontal: spacing.lg, paddingTop: spacing.md },
   signInTitle: { fontSize: 20, fontWeight: '600', color: lightColors.text },
   signInText: { fontSize: 14, color: lightColors.textSecondary, marginTop: spacing.xs },
@@ -434,13 +578,43 @@ const styles = StyleSheet.create({
     color: lightColors.text,
     marginTop: spacing.sm,
   },
+  sessionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.xl,
+  },
+  sessionsLines: { flex: 1 },
+  sessionsTitle: { fontSize: 16, fontWeight: '600', color: lightColors.text },
+  sessionsMeta: { fontSize: 13, color: lightColors.textSecondary, marginTop: 2 },
   chipsContent: { paddingHorizontal: spacing.lg, gap: spacing.sm, paddingTop: spacing.md },
   chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     backgroundColor: lightColors.surfaceVariant,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
     paddingVertical: 8,
   },
+  signInAvatar: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: lightColors.surfaceVariant,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
+  },
+  channelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.lg,
+  },
+  channelRowText: { flex: 1, fontSize: 15, fontWeight: '500', color: lightColors.text },
   chipText: { fontSize: 14, fontWeight: '500', color: lightColors.text },
   rowsBlock: { paddingHorizontal: spacing.lg },
   sectionLoading: {

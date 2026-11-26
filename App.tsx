@@ -4,6 +4,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { RootNavigator } from './src/navigation';
+import { appLinking } from './src/navigation/linking';
 import { AuthProvider } from './src/features/auth';
 import { registerServiceWorker } from './src/lib/registerServiceWorker';
 
@@ -23,7 +24,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <NavigationContainer>
+        <NavigationContainer linking={appLinking}>
           <RootNavigator />
           <StatusBar style="auto" />
         </NavigationContainer>

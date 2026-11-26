@@ -1,7 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Dimensions, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Image } from 'expo-image';
+import { MaterialIcons } from '@expo/vector-icons';
 import type { CompositeScreenProps } from '@react-navigation/native';
+import { useScrollToTop } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppHeader } from '../../components/layout/AppHeader';
@@ -9,16 +11,17 @@ import { SecondaryTabs } from '../../components/layout/SecondaryTabs';
 import { EmptyState } from '../../components/common/EmptyState';
 import { ShelfCard } from '../../components/video/ShelfCard';
 import { SkeletonCard } from '../../components/video/SkeletonCard';
-import { apiCardData } from '../../components/video/cardData';
+import { apiCardData, formatDateLine } from '../../components/video/cardData';
 import { useAuth } from '../../features/auth';
 import { useOfficialChannel } from '../../features/channel';
 import {
   fetchChannelLiveAndUpcoming,
   fetchChannelUploads,
+  isShortVideo,
   type YouTubeVideoMetadata,
 } from '../../lib/youtube';
-import { FEED_LIST_PERF, H_LIST_PERF } from '../../lib/listPerf';
-import { lightColors, nativeApp, spacing } from '../../theme';
+import { FEED_LIST_PERF } from '../../lib/listPerf';
+import { lightColors, nativeApp, radii, spacing } from '../../theme';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
 
 type Props = CompositeScreenProps<
@@ -26,23 +29,50 @@ type Props = CompositeScreenProps<
   NativeStackScreenProps<RootStackParamList>
 >;
 
-const CAROUSEL_CARD_WIDTH = Math.round(Dimensions.get('window').width * nativeApp.shelfCard.carouselCardWidthRatio);
+type UploadFilter = 'all' | 'videos' | 'live';
+type UploadSort = 'latest' | 'oldest';
+
+const FILTERS: { key: UploadFilter; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'videos', label: 'Videos' },
+  { key: 'live', label: 'Live' },
+];
 
 /**
- * Subscriptions (reference §2 geometry): channel avatar rail with a
- * red live dot when the channel is genuinely live on YouTube, a "Most
- * relevant" heading, and a horizontal carousel of inset shelf cards.
- * This app follows ONE channel — Bhai Gursharan Singh Ji's official
- * channel — so the rail and shelves show that channel's real data
- * from the YouTube API. There is NO Shorts shelf (user decision).
+ * Subscriptions (reference §2 + QA fixes 72–76): channel avatar rail,
+ * a "Most relevant" heading, and the channel's uploads as ONE
+ * consistent, responsive grid.
+ *
+ * QA fixes in this rewrite:
+ *  - Shorts are filtered OUT of the uploads with the same heuristic
+ *    search uses (isShortVideo) — never showcased (user ban).
+ *  - Working filter chips (All / Videos / Live) and a working sort
+ *    (Latest / Oldest) — previously neither existed.
+ *  - The old carousel + list split produced inconsistent cards (a
+ *    first card with no title, missing channel/meta lines) and sliced
+ *    the second column off at desktop widths. Now every item is the
+ *    same ShelfCard in a 1/2/3-column grid by window width, and card
+ *    data falls back to the channel title / publish date so no card
+ *    renders blank lines. Items with no title at all (deleted/private
+ *    uploads) are dropped rather than shown as ghosts.
+ *  - The rail name gets room for two lines instead of one truncated
+ *    line. The rail has exactly one entry because this app follows
+ *    exactly one channel — real data, honestly shown.
+ * There is NO Shorts shelf (user decision).
  */
 export function SubscriptionsScreen({ navigation }: Props) {
   const { user, profile } = useAuth();
+  const listRef = useRef<FlatList<YouTubeVideoMetadata>>(null);
+  useScrollToTop(listRef);
   const channel = useOfficialChannel();
+  const { width } = useWindowDimensions();
   const [uploads, setUploads] = useState<YouTubeVideoMetadata[]>([]);
   const [isLiveNow, setIsLiveNow] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<UploadFilter>('all');
+  const [sort, setSort] = useState<UploadSort>('latest');
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!channel?.uploadsPlaylistId || !channel.channelId) return;
@@ -56,6 +86,7 @@ export function SubscriptionsScreen({ navigation }: Props) {
         if (!active) return;
         setUploads(page.videos);
         setIsLiveNow(live.some((v) => v.liveBroadcastContent === 'live'));
+        setError(null);
       } catch (e) {
         if (active) setError(e instanceof Error ? e.message : 'Could not load the channel.');
       } finally {
@@ -65,24 +96,36 @@ export function SubscriptionsScreen({ navigation }: Props) {
     return () => {
       active = false;
     };
-  }, [channel]);
+  }, [channel, reloadKey]);
 
-  // QA issue 14: order newest-first by real publish date (the
-  // uploads-playlist order is insertion order, not guaranteed date
-  // order). The "Most relevant" heading itself is the reference's
-  // own section heading (screenshot 02) and stays a heading.
-  const sortedUploads = useMemo(
-    () => [...uploads].sort((a, b) => b.publishedAt.localeCompare(a.publishedAt)),
-    [uploads],
-  );
-  const carousel = useMemo(() => sortedUploads.slice(0, 10), [sortedUploads]);
-  const rest = useMemo(() => sortedUploads.slice(10), [sortedUploads]);
+  const visible = useMemo(() => {
+    const clean = uploads.filter((v) => v.title.trim().length > 0 && !isShortVideo(v));
+    const filtered =
+      filter === 'all'
+        ? clean
+        : filter === 'videos'
+          ? clean.filter((v) => v.liveBroadcastContent === 'none')
+          : clean.filter((v) => v.liveBroadcastContent !== 'none');
+    const sorted = [...filtered].sort((a, b) =>
+      sort === 'latest'
+        ? b.publishedAt.localeCompare(a.publishedAt)
+        : a.publishedAt.localeCompare(b.publishedAt),
+    );
+    return sorted;
+  }, [uploads, filter, sort]);
 
-  const renderRest = useCallback(
+  const columns = width >= 1024 ? 3 : width >= 640 ? 2 : 1;
+
+  const renderItem = useCallback(
     ({ item }: { item: YouTubeVideoMetadata }) => {
-      const data = apiCardData(item, channel?.avatarUrl ?? null);
+      const base = apiCardData(item, channel?.avatarUrl ?? null);
+      const data = {
+        ...base,
+        channelLine: base.channelLine || (channel?.title ?? ''),
+        metaLine: base.metaLine || formatDateLine(item.publishedAt),
+      };
       return (
-        <View style={styles.listPad}>
+        <View style={columns > 1 ? styles.gridCell : undefined}>
           <ShelfCard
             data={data}
             onPress={() => navigation.navigate('Watch', { youtubeVideoId: item.youtubeVideoId })}
@@ -90,83 +133,83 @@ export function SubscriptionsScreen({ navigation }: Props) {
         </View>
       );
     },
-    [channel, navigation],
-  );
-
-  const renderCarouselItem = useCallback(
-    ({ item }: { item: YouTubeVideoMetadata }) => {
-      const data = apiCardData(item, channel?.avatarUrl ?? null);
-      return (
-        <View style={styles.carouselCard}>
-          <ShelfCard
-            data={data}
-            onPress={() => navigation.navigate('Watch', { youtubeVideoId: item.youtubeVideoId })}
-          />
-        </View>
-      );
-    },
-    [channel, navigation],
+    [channel, navigation, columns],
   );
 
   const keyExtractor = useCallback((item: YouTubeVideoMetadata) => item.youtubeVideoId, []);
-
-  // Everything above the main list (avatar rail, heading, carousel)
-  // lives in the list's header so the screen has ONE virtualised
-  // scroll container (UX perf pass — see the return comment).
-  const listHeader = useMemo(() => {
-    if (!channel) return null;
-    return (
-      <View>
-        {/* Avatar rail — the one channel this app follows. */}
-        <View style={styles.rail}>
-          <Pressable
-            style={styles.railItem}
-            onPress={() => navigation.navigate('Channel', { channelId: channel.channelId })}
-            accessibilityRole="button"
-          >
-            <View style={styles.railAvatarWrap}>
-              {channel.avatarUrl ? (
-                <Image source={{ uri: channel.avatarUrl }} style={styles.railAvatar} contentFit="cover" cachePolicy="memory-disk" />
-              ) : (
-                <View style={[styles.railAvatar, styles.avatarFallback]}>
-                  <Text style={styles.avatarInitial}>{channel.title.charAt(0)}</Text>
-                </View>
-              )}
-              {isLiveNow ? <View style={styles.liveDot} /> : null}
-            </View>
-            <Text style={styles.railName} numberOfLines={1}>
-              {channel.title}
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={() => navigation.navigate('Channel', { channelId: channel.channelId })}
-            accessibilityRole="button"
-            style={styles.railAll}
-          >
-            <Text style={styles.railAllText}>All</Text>
-          </Pressable>
-        </View>
-
-        <Text style={styles.heading}>Most relevant</Text>
-        <FlatList
-          horizontal
-          data={carousel}
-          keyExtractor={keyExtractor}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.carouselContent}
-          renderItem={renderCarouselItem}
-          {...H_LIST_PERF}
-        />
-      </View>
-    );
-  }, [channel, isLiveNow, carousel, keyExtractor, navigation, renderCarouselItem]);
   const initial = profile?.display_name?.charAt(0)?.toUpperCase() ?? user?.email?.charAt(0)?.toUpperCase() ?? null;
+
+  const header = (
+    <View>
+      {/* Avatar rail — the one channel this app follows. */}
+      <View style={styles.rail}>
+        <Pressable
+          style={styles.railItem}
+          onPress={() => navigation.navigate('Channel', { channelId: channel?.channelId })}
+          accessibilityRole="button"
+          accessibilityLabel={channel?.title ?? 'Official channel'}
+        >
+          <View style={styles.railAvatarWrap}>
+            {channel?.avatarUrl ? (
+              <Image source={{ uri: channel.avatarUrl }} style={styles.railAvatar} contentFit="cover" cachePolicy="memory-disk" />
+            ) : (
+              <View style={[styles.railAvatar, styles.avatarFallback]}>
+                <Text style={styles.avatarInitial}>{channel?.title.charAt(0) ?? 'B'}</Text>
+              </View>
+            )}
+            {isLiveNow ? <View style={styles.liveDot} /> : null}
+          </View>
+          <Text style={styles.railName} numberOfLines={2}>
+            {channel?.title ?? ''}
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => navigation.navigate('Channel', { channelId: channel?.channelId })}
+          accessibilityRole="button"
+          style={styles.railAll}
+        >
+          <Text style={styles.railAllText}>All</Text>
+        </Pressable>
+      </View>
+
+      <Text style={styles.heading}>Most relevant</Text>
+
+      {/* Filter chips + sort (QA 76): real, working controls. */}
+      <View style={styles.controlsRow}>
+        <View style={styles.chipsRow}>
+          {FILTERS.map((f) => {
+            const active = filter === f.key;
+            return (
+              <Pressable
+                key={f.key}
+                style={[styles.chip, active && styles.chipActive]}
+                onPress={() => setFilter(f.key)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+              >
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>{f.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Pressable
+          style={styles.sortButton}
+          onPress={() => setSort((s) => (s === 'latest' ? 'oldest' : 'latest'))}
+          accessibilityRole="button"
+          accessibilityLabel={`Sort by date, currently ${sort === 'latest' ? 'latest first' : 'oldest first'}. Tap to change.`}
+        >
+          <MaterialIcons name="swap-vert" size={18} color={lightColors.text} />
+          <Text style={styles.sortText}>{sort === 'latest' ? 'Latest' : 'Oldest'}</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
 
   return (
     <View style={styles.container}>
       <AppHeader
         onSearchPress={() => navigation.navigate('Search')}
-        onAccountPress={() => navigation.navigate('Account')}
+        onAccountPress={() => navigation.navigate('MainTabs', { screen: 'Library' })}
         avatarInitial={initial}
       />
       <SecondaryTabs
@@ -186,23 +229,43 @@ export function SubscriptionsScreen({ navigation }: Props) {
           <SkeletonCard variant="shelf" />
         </View>
       ) : error || !channel ? (
-        <EmptyState title="Could not load subscriptions" message={error ?? 'The official channel could not be loaded.'} />
+        <EmptyState
+          title="Could not load subscriptions"
+          message={error ?? 'The official channel could not be loaded.'}
+          actionLabel="Try again"
+          onAction={() => {
+            setLoading(true);
+            setReloadKey((k) => k + 1);
+          }}
+        />
       ) : (
-        /* UX perf pass: this was a ScrollView wrapping a second,
-           scroll-disabled FlatList for `rest` — with scrolling off,
-           virtualisation is disabled and EVERY remaining upload card
-           mounted at once (the screen's main jank source). It is now a
-           single virtualised FlatList; the rail/heading/carousel moved
-           into ListHeaderComponent above with identical layout. */
         <FlatList
-          data={rest}
+          ref={listRef}
+          key={`cols-${columns}`}
+          data={visible}
+          numColumns={columns}
           keyExtractor={keyExtractor}
-          renderItem={renderRest}
-          ListHeaderComponent={listHeader ?? undefined}
+          renderItem={renderItem}
+          ListHeaderComponent={header}
+          contentContainerStyle={styles.listPad}
+          columnWrapperStyle={columns > 1 ? styles.columnWrapper : undefined}
           ListEmptyComponent={
-            uploads.length === 0 ? (
-              <EmptyState title="No uploads yet" message="The channel's uploads will appear here." />
-            ) : undefined
+            <EmptyState
+              title={
+                uploads.length === 0
+                  ? 'No uploads yet'
+                  : filter === 'live'
+                    ? 'No live or upcoming broadcasts'
+                    : 'Nothing here'
+              }
+              message={
+                uploads.length === 0
+                  ? "The channel's uploads will appear here."
+                  : filter === 'live'
+                    ? 'This channel is not live right now and has no upcoming broadcasts on YouTube.'
+                    : 'No uploads match this filter.'
+              }
+            />
           }
           {...FEED_LIST_PERF}
         />
@@ -217,11 +280,10 @@ const styles = StyleSheet.create({
   rail: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
     gap: spacing.lg,
   },
-  railItem: { width: nativeApp.avatarRail.avatarSize + 12, alignItems: 'center' },
+  railItem: { width: 96, alignItems: 'center' },
   railAvatarWrap: { position: 'relative' },
   railAvatar: {
     width: nativeApp.avatarRail.avatarSize,
@@ -247,6 +309,7 @@ const styles = StyleSheet.create({
   },
   railName: {
     fontSize: nativeApp.avatarRail.nameFontSize,
+    lineHeight: 15,
     color: lightColors.text,
     marginTop: spacing.xs,
     textAlign: 'center',
@@ -257,10 +320,34 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '600',
     color: lightColors.text,
-    paddingHorizontal: spacing.lg,
     marginTop: spacing.xl,
     marginBottom: spacing.md,
   },
-  carouselContent: { paddingHorizontal: spacing.lg, gap: spacing.lg },
-  carouselCard: { width: CAROUSEL_CARD_WIDTH },
+  controlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.lg,
+    gap: spacing.md,
+  },
+  chipsRow: { flexDirection: 'row', gap: spacing.sm },
+  chip: {
+    backgroundColor: lightColors.surfaceVariant,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 7,
+  },
+  chipActive: { backgroundColor: lightColors.text },
+  chipText: { fontSize: 14, fontWeight: '500', color: lightColors.text },
+  chipTextActive: { color: lightColors.background },
+  sortButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 7,
+    paddingHorizontal: spacing.sm,
+  },
+  sortText: { fontSize: 14, fontWeight: '600', color: lightColors.text },
+  columnWrapper: { gap: spacing.lg },
+  gridCell: { flex: 1 },
 });

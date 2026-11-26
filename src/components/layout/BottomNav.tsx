@@ -2,6 +2,7 @@ import React, { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { layout, lightColors } from '../../theme';
 
 export interface BottomNavItem {
@@ -27,11 +28,17 @@ interface BottomNavProps {
  * decision): 4 ICON-ONLY slots, no text labels — Home, Subscriptions,
  * circled +, profile avatar. There is deliberately NO Shorts slot:
  * the user decided the app has no Shorts anywhere. Bar is white with
- * a faint top hairline; safe-area padding is applied by the caller.
+ * a faint top hairline; the bar applies the bottom safe-area inset
+ * itself (see below).
  */
 export const BottomNav = memo(function BottomNav({ items, activeKey, onPress }: BottomNavProps) {
+  // The bar must clear the device gesture/home area itself — the old
+  // comment claimed "the caller applies safe-area padding", but no
+  // caller did, so on gesture-nav Android the slots sat under the
+  // system gesture pill and taps near the bottom felt swallowed.
+  const insets = useSafeAreaInsets();
   return (
-    <View style={styles.bar}>
+    <View style={[styles.bar, { height: layout.bottomNavHeight + insets.bottom, paddingBottom: insets.bottom }]}>
       {items.map((item) => {
         const active = item.key === activeKey;
         return (

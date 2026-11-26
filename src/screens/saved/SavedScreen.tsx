@@ -12,6 +12,8 @@ import type { SavedItem } from '../../features/library/types';
 import type { LibraryRootStackParamList } from '../../features/library/screenTypes';
 import { ScreenMessage } from '../../features/library/components/ScreenMessage';
 import { SkeletonCard } from '../../components/video/SkeletonCard';
+import { goBackOrTab } from '../../navigation/safeBack';
+import { StackTabBar } from '../../components/layout/StackTabBar';
 import { SwipeableRow } from '../../features/library/components/SwipeableRow';
 import { VideoListRow } from '../../features/library/components/VideoListRow';
 import { ROW_LIST_PERF } from '../../lib/listPerf';
@@ -72,7 +74,7 @@ export function SavedScreen({ navigation }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.topBar}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={10} accessibilityLabel="Back" accessibilityRole="button">
+        <Pressable onPress={() => goBackOrTab(navigation, 'Library')} hitSlop={10} accessibilityLabel="Back" accessibilityRole="button">
           <MaterialIcons name="arrow-back" size={24} color={lightColors.text} />
         </Pressable>
         <Text style={styles.topBarTitle}>Saved</Text>
@@ -94,6 +96,8 @@ export function SavedScreen({ navigation }: Props) {
         <ScreenMessage
           title="Sign in to see your saved recordings"
           message="Saved recordings are kept with your account, so only you can see them."
+          actionLabel="Sign in"
+          onAction={() => navigation.navigate('SignIn')}
         />
       ) : saved.loading && saved.data.length === 0 ? (
         <View style={styles.listPad}>
@@ -115,11 +119,14 @@ export function SavedScreen({ navigation }: Props) {
             <ScreenMessage
               title="No saved recordings yet"
               message="Tap the bookmark on any samagam to keep it here."
+              actionLabel="Browse samagams"
+              onAction={() => navigation.navigate('MainTabs', { screen: 'Home' })}
             />
           }
           {...ROW_LIST_PERF}
         />
       )}
+      <StackTabBar navigation={navigation} activeTab="Library" />
     </View>
   );
 }

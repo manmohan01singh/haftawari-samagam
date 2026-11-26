@@ -11,6 +11,8 @@ import { removePlaylistItem } from '../../features/library/libraryService';
 import { formatClock } from '../../features/library/format';
 import type { PlaylistDetailItem } from '../../features/library/types';
 import type { LibraryRootStackParamList } from '../../features/library/screenTypes';
+import { goBackOrTab } from '../../navigation/safeBack';
+import { StackTabBar } from '../../components/layout/StackTabBar';
 import { ScreenLoading, ScreenMessage } from '../../features/library/components/ScreenMessage';
 import { SwipeableRow } from '../../features/library/components/SwipeableRow';
 import { VideoListRow } from '../../features/library/components/VideoListRow';
@@ -113,13 +115,24 @@ export function PlaylistScreen({ navigation, route }: Props) {
         {totalSeconds > 0 ? ` · ${formatClock(totalSeconds)} total` : ''}
       </Text>
       {actionError ? <Text style={styles.errorLine}>{actionError}</Text> : null}
+      {detail.items.length > 0 ? (
+        <Pressable
+          style={styles.playAllButton}
+          onPress={() => navigation.navigate('Watch', { videoRowId: detail.items[0].video.id })}
+          accessibilityRole="button"
+          accessibilityLabel="Play the first recording in this playlist"
+        >
+          <MaterialIcons name="play-arrow" size={20} color={lightColors.subscribeText} />
+          <Text style={styles.playAllText}>Play</Text>
+        </Pressable>
+      ) : null}
     </View>
   ) : null;
 
   return (
     <View style={styles.container}>
       <View style={styles.topBar}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={10} accessibilityLabel="Back" accessibilityRole="button">
+        <Pressable onPress={() => goBackOrTab(navigation, 'Library')} hitSlop={10} accessibilityLabel="Back" accessibilityRole="button">
           <MaterialIcons name="arrow-back" size={24} color={lightColors.text} />
         </Pressable>
         <Text style={styles.topBarTitle} numberOfLines={1}>
@@ -154,11 +167,14 @@ export function PlaylistScreen({ navigation, route }: Props) {
             <ScreenMessage
               title="No recordings yet"
               message="This playlist is empty. Add recordings to it from any samagam's save menu."
+              actionLabel="Browse samagams"
+              onAction={() => navigation.navigate('MainTabs', { screen: 'Home' })}
             />
           }
           {...ROW_LIST_PERF}
         />
       )}
+      <StackTabBar navigation={navigation} activeTab="Library" />
     </View>
   );
 }
@@ -192,4 +208,16 @@ const styles = StyleSheet.create({
   playlistDescription: { fontSize: 14, lineHeight: 20, color: lightColors.textSecondary, marginTop: spacing.xs },
   playlistMeta: { fontSize: 13, color: lightColors.textSecondary, marginTop: spacing.xs },
   errorLine: { color: lightColors.accent, fontSize: 13, paddingTop: spacing.sm },
+  playAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: spacing.xs,
+    backgroundColor: lightColors.subscribeBackground,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 9,
+    marginTop: spacing.md,
+  },
+  playAllText: { fontSize: 14, fontWeight: '600', color: lightColors.subscribeText },
 });
