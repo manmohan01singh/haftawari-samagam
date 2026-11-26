@@ -9,8 +9,13 @@
  *  - No video is ever cached: playback is the official YouTube embed,
  *    online only.
  */
-const CACHE_VERSION = 'haftawari-shell-v1';
-const SHELL_ASSETS = ['/', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/favicon.ico'];
+const CACHE_VERSION = 'haftawari-shell-v2';
+/* The web build is served under a base path (experiments.baseUrl, e.g.
+ * GitHub Pages /haftawari-samagam/). All shell paths are therefore
+ * relative to this worker's own URL, and bundle detection uses the
+ * derived base path — root-absolute paths would 404 under a subpath. */
+const BASE_PATH = self.location.pathname.slice(0, self.location.pathname.lastIndexOf('/') + 1);
+const SHELL_ASSETS = ['./', './manifest.webmanifest', './icon-192.png', './icon-512.png', './favicon.ico'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -60,14 +65,14 @@ self.addEventListener('fetch', (event) => {
       return fetch(request).then((response) => {
         // Cache successful same-origin shell/bundle responses for
         // offline shell loads; navigations fall back to the shell.
-        if (response.ok && (request.mode === 'navigate' || url.pathname.startsWith('/_expo/'))) {
+        if (response.ok && (request.mode === 'navigate' || url.pathname.startsWith(BASE_PATH + '_expo/'))) {
           const copy = response.clone();
           caches.open(CACHE_VERSION).then((cache) => cache.put(request, copy));
         }
         return response;
       }).catch(() => {
         if (request.mode === 'navigate') {
-          return caches.match('/', { ignoreSearch: true });
+          return caches.match('./', { ignoreSearch: true });
         }
         throw new Error('offline and not cached');
       });
