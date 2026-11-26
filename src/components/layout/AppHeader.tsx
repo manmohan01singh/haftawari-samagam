@@ -47,10 +47,15 @@ export const AppHeader = memo(function AppHeader({
         <Pressable onPress={onAccountPress} hitSlop={8} accessibilityLabel="Account">
           {avatarUrl ? (
             <Image source={{ uri: avatarUrl }} style={styles.avatar} contentFit="cover" cachePolicy="memory-disk" />
-          ) : (
+          ) : avatarInitial ? (
             <View style={[styles.avatar, styles.avatarFallback]}>
-              <Text style={styles.avatarInitial}>{avatarInitial ?? '?'}</Text>
+              <Text style={styles.avatarInitial}>{avatarInitial}</Text>
             </View>
+          ) : (
+            // Signed out (QA issue 19): the fallback used to render a
+            // literal "?" in a grey circle, which reads as broken.
+            // A person glyph is the honest signed-out affordance.
+            <MaterialIcons name="account-circle" size={28} color={lightColors.textSecondary} />
           )}
         </Pressable>
       </View>

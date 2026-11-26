@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import {
+  ActivityIndicator,
   Dimensions,
   FlatList,
   Pressable,
@@ -29,6 +30,7 @@ import { resumeRatio } from '../../features/library/format';
 import type { HistoryItem, PlaylistSummary } from '../../features/library/types';
 import type { LibraryRootStackParamList } from '../../features/library/screenTypes';
 import { CreatePlaylistSheet } from '../../features/library/components/CreatePlaylistSheet';
+import { ScreenLoading } from '../../features/library/components/ScreenMessage';
 import { listThumbnailUrl } from '../../components/video/cardData';
 import { PlaylistRow } from '../../features/library/components/PlaylistRow';
 import { VideoListRow } from '../../features/library/components/VideoListRow';
@@ -161,7 +163,7 @@ export function LibraryScreen({ navigation }: Props) {
             The backend is not configured in this build, so your library cannot be loaded.
           </Text>
         ) : authLoading ? (
-          <Text style={styles.emptyLine}>Loading…</Text>
+          <ScreenLoading label="Loading your library…" />
         ) : user ? (
           <>
             <View style={styles.profileBlock}>
@@ -232,13 +234,14 @@ export function LibraryScreen({ navigation }: Props) {
             contentContainerStyle={styles.historyContent}
             {...H_LIST_PERF}
           />
+        ) : user && history.loading ? (
+          <View style={[styles.sectionLoading, styles.sectionLoadingPadded]}>
+            <ActivityIndicator size="small" color={lightColors.textSecondary} />
+            <Text style={styles.sectionLoadingText}>Loading…</Text>
+          </View>
         ) : (
           <Text style={styles.emptyLine}>
-            {user
-              ? history.loading
-                ? 'Loading…'
-                : 'Recordings you watch will appear here.'
-              : 'Sign in to build your history.'}
+            {user ? 'Recordings you watch will appear here.' : 'Sign in to build your history.'}
           </Text>
         )}
 
@@ -266,13 +269,14 @@ export function LibraryScreen({ navigation }: Props) {
             <PlaylistRow key={summary.playlist.id} summary={summary} onPress={openPlaylist} />
           ))}
           {summaries.data.length === 0 ? (
-            <Text style={styles.rowsEmpty}>
-              {summaries.loading
-                ? 'Loading…'
-                : user
-                  ? 'No playlists yet.'
-                  : 'No public playlists yet.'}
-            </Text>
+            summaries.loading ? (
+              <View style={styles.sectionLoading}>
+                <ActivityIndicator size="small" color={lightColors.textSecondary} />
+                <Text style={styles.sectionLoadingText}>Loading…</Text>
+              </View>
+            ) : (
+              <Text style={styles.rowsEmpty}>{user ? 'No playlists yet.' : 'No public playlists yet.'}</Text>
+            )
           ) : null}
           {user ? (
             <Pressable style={styles.newPlaylistRow} onPress={() => setCreateOpen(true)} accessibilityRole="button">
@@ -306,13 +310,16 @@ export function LibraryScreen({ navigation }: Props) {
             />
           ))}
           {saved.data.length === 0 ? (
-            <Text style={styles.rowsEmpty}>
-              {user
-                ? saved.loading
-                  ? 'Loading…'
-                  : 'Samagams you save will appear here.'
-                : 'Sign in to save samagams here.'}
-            </Text>
+            user && saved.loading ? (
+              <View style={styles.sectionLoading}>
+                <ActivityIndicator size="small" color={lightColors.textSecondary} />
+                <Text style={styles.sectionLoadingText}>Loading…</Text>
+              </View>
+            ) : (
+              <Text style={styles.rowsEmpty}>
+                {user ? 'Samagams you save will appear here.' : 'Sign in to save samagams here.'}
+              </Text>
+            )
           ) : null}
         </View>
       </ScrollView>
@@ -436,6 +443,14 @@ const styles = StyleSheet.create({
   },
   chipText: { fontSize: 14, fontWeight: '500', color: lightColors.text },
   rowsBlock: { paddingHorizontal: spacing.lg },
+  sectionLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingTop: spacing.md,
+  },
+  sectionLoadingPadded: { paddingHorizontal: spacing.lg },
+  sectionLoadingText: { fontSize: 14, color: lightColors.textSecondary },
   rowsEmpty: { fontSize: 14, color: lightColors.textSecondary, paddingTop: spacing.md },
   newPlaylistRow: {
     flexDirection: 'row',

@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
     width: '100%',
     aspectRatio: layout.thumbnailAspectRatio,
     borderRadius: nativeApp.shelfCard.thumbnailRadius,
-    backgroundColor: lightColors.playerBackground,
+    backgroundColor: lightColors.surfaceVariant,
   },
   thumbnailEmpty: { backgroundColor: lightColors.surfaceVariant },
   badgeWrap: { position: 'absolute', left: spacing.sm, bottom: spacing.sm },

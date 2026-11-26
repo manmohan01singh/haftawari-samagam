@@ -10,7 +10,8 @@ import { removeSavedVideo } from '../../features/library/libraryService';
 import { formatDateLine } from '../../features/library/format';
 import type { SavedItem } from '../../features/library/types';
 import type { LibraryRootStackParamList } from '../../features/library/screenTypes';
-import { ScreenLoading, ScreenMessage } from '../../features/library/components/ScreenMessage';
+import { ScreenMessage } from '../../features/library/components/ScreenMessage';
+import { SkeletonCard } from '../../components/video/SkeletonCard';
 import { SwipeableRow } from '../../features/library/components/SwipeableRow';
 import { VideoListRow } from '../../features/library/components/VideoListRow';
 import { ROW_LIST_PERF } from '../../lib/listPerf';
@@ -84,14 +85,22 @@ export function SavedScreen({ navigation }: Props) {
           message="The backend isn't configured in this build, so there is nothing saved to show."
         />
       ) : authLoading ? (
-        <ScreenLoading label="Loading your saved recordings…" />
+        <View style={styles.listPad}>
+          <SkeletonCard variant="row" />
+          <SkeletonCard variant="row" />
+          <SkeletonCard variant="row" />
+        </View>
       ) : !user ? (
         <ScreenMessage
           title="Sign in to see your saved recordings"
           message="Saved recordings are kept with your account, so only you can see them."
         />
       ) : saved.loading && saved.data.length === 0 ? (
-        <ScreenLoading label="Loading your saved recordings…" />
+        <View style={styles.listPad}>
+          <SkeletonCard variant="row" />
+          <SkeletonCard variant="row" />
+          <SkeletonCard variant="row" />
+        </View>
       ) : saved.error && saved.data.length === 0 ? (
         <ScreenMessage title="Could not load saved recordings" message={saved.error} actionLabel="Try again" onAction={saved.reload} />
       ) : (

@@ -268,13 +268,14 @@ export function HomeScreen({ navigation }: Props) {
           if (key === 'subs') navigation.navigate('Subscriptions');
         }}
       />
-      {categories.length > 0 ? (
-        <ChipsRow
-          chips={[ALL_CHIP, ...categories.map((c) => c.name)]}
-          selected={selectedCategory}
-          onSelect={setSelectedCategory}
-        />
-      ) : null}
+      {/* Always rendered, even before categories arrive (QA issue
+          11): conditionally mounting this row pushed the whole feed
+          down when categories loaded — a visible jump mid-scroll. */}
+      <ChipsRow
+        chips={[ALL_CHIP, ...categories.map((c) => c.name)]}
+        selected={selectedCategory}
+        onSelect={setSelectedCategory}
+      />
 
       {/* Samagam Sessions entry point — scheduled group playbacks
           (UPCOMING / NOW PLAYING / COMPLETED), listed on their own
@@ -326,6 +327,13 @@ export function HomeScreen({ navigation }: Props) {
           ListFooterComponent={
             loadingMore ? (
               <ActivityIndicator style={styles.footerSpinner} color={lightColors.textSecondary} />
+            ) : exhausted ? (
+              <View style={styles.endOfFeed}>
+                <MaterialIcons name="check-circle" size={18} color={lightColors.textSecondary} />
+                <Text style={styles.endOfFeedText}>
+                  You&rsquo;re all caught up — that&rsquo;s every published samagam
+                </Text>
+              </View>
             ) : undefined
           }
           {...FEED_LIST_PERF}
@@ -352,6 +360,15 @@ const styles = StyleSheet.create({
   sessionsTitle: { ...typography.channelName, fontWeight: '600', color: lightColors.text },
   sessionsSub: { ...typography.metadata, color: lightColors.textSecondary, marginTop: 1 },
   footerSpinner: { paddingVertical: spacing.lg },
+  endOfFeed: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.lg,
+  },
+  endOfFeedText: { ...typography.metadata, color: lightColors.textSecondary, textAlign: 'center' },
   inlineError: {
     ...typography.metadata,
     color: lightColors.accent,

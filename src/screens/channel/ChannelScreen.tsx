@@ -199,6 +199,11 @@ export function ChannelScreen({ route, navigation }: Props) {
     return (
       <View style={styles.container}>
         <View style={styles.listPad}>
+          <View style={styles.loadingRow}>
+            <ActivityIndicator color={lightColors.text} />
+            <Text style={styles.loadingLabel}>Loading channel…</Text>
+          </View>
+          <SkeletonCard variant="shelf" />
           <SkeletonCard variant="shelf" />
           <SkeletonCard variant="shelf" />
         </View>
@@ -232,7 +237,17 @@ export function ChannelScreen({ route, navigation }: Props) {
           ) : undefined
         }
         ListEmptyComponent={
-          loading ? undefined : tab === 'live' ? (
+          // QA issue 8: while the tab's data is still loading, show
+          // skeleton rows — previously this was `undefined` (videos)
+          // or a premature "No live…" message (live), i.e. a blank
+          // white area / wrong state for the whole fetch.
+          (tab === 'videos' && loading) || (tab === 'live' && !liveLoaded) ? (
+            <View>
+              <SkeletonCard variant="shelf" />
+              <SkeletonCard variant="shelf" />
+              <SkeletonCard variant="shelf" />
+            </View>
+          ) : tab === 'live' ? (
             <EmptyState
               title="No live or upcoming broadcasts"
               message="This channel is not live right now and has no upcoming broadcasts scheduled on YouTube."
@@ -307,4 +322,6 @@ const styles = StyleSheet.create({
   tabLabel: { fontSize: 15, fontWeight: '500', color: lightColors.textSecondary },
   tabLabelActive: { color: lightColors.text, fontWeight: '600' },
   footerSpinner: { paddingVertical: spacing.lg },
+  loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 16 },
+  loadingLabel: { fontSize: 15, color: lightColors.textSecondary },
 });

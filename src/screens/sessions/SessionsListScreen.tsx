@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { EmptyState } from '../../components/common/EmptyState';
 import { SessionCard } from '../../features/sessions/components/SessionCard';
+import { SkeletonCard } from '../../components/video/SkeletonCard';
 import { useServerClock } from '../../features/sessions/hooks/useServerClock';
 import {
   listSessionsWithVideos,
@@ -180,9 +181,17 @@ export function SessionsListScreen({ navigation }: Props) {
   }
 
   if (loading) {
+    // Skeleton cards in the real list geometry (QA issue 16) — the
+    // previous state was a lone spinner on an empty page.
     return (
-      <View style={styles.center}>
-        <ActivityIndicator color={lightColors.text} />
+      <View style={styles.loadingPad}>
+        <View style={styles.loadingRow}>
+          <ActivityIndicator color={lightColors.text} />
+          <Text style={styles.loadingLabel}>Loading Samagams…</Text>
+        </View>
+        <SkeletonCard variant="shelf" />
+        <SkeletonCard variant="shelf" />
+        <SkeletonCard variant="shelf" />
       </View>
     );
   }
@@ -239,6 +248,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: lightColors.background,
   },
+  loadingPad: { flex: 1, backgroundColor: lightColors.background, paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
+  loadingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingBottom: spacing.lg },
+  loadingLabel: { ...typography.body, color: lightColors.textSecondary },
   sectionHeader: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,

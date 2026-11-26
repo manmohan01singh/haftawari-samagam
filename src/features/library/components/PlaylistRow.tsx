@@ -93,7 +93,7 @@ const styles = StyleSheet.create({
     width: '100%',
     aspectRatio: layout.thumbnailAspectRatio,
     borderRadius: radii.card,
-    backgroundColor: lightColors.playerBackground,
+    backgroundColor: lightColors.surfaceVariant,
   },
   thumbEmpty: {
     backgroundColor: lightColors.surfaceVariant,

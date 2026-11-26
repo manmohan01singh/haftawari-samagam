@@ -39,6 +39,7 @@ export const FeedCard = memo(function FeedCard({ data, onPress, saved, onToggleS
             style={styles.thumbnail}
             contentFit="cover"
             cachePolicy="memory-disk"
+            transition={200}
           />
         ) : (
           <View style={[styles.thumbnail, styles.thumbnailEmpty]} />
@@ -105,7 +106,10 @@ const styles = StyleSheet.create({
   thumbnail: {
     width: '100%',
     aspectRatio: layout.thumbnailAspectRatio,
-    backgroundColor: lightColors.playerBackground,
+    // Light placeholder while the image is in flight (QA issue 7) —
+    // this was playerBackground (pure black), so every slow thumbnail
+    // read as a black rectangle. Matches the skeleton colour.
+    backgroundColor: lightColors.surfaceVariant,
   },
   thumbnailEmpty: { backgroundColor: lightColors.surfaceVariant },
   liveBadge: {

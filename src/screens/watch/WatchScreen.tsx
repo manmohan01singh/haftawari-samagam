@@ -34,7 +34,7 @@ import {
   recordWatchHistory,
   setVideoSaved,
 } from '../../lib/videos';
-import { layout, lightColors, nativeApp, radii, spacing } from '../../theme';
+import { layout, lightColors, nativeApp, radii, spacing, typography } from '../../theme';
 import type { Video } from '../../types/database';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -109,6 +109,9 @@ export function WatchScreen({ route, navigation }: Props) {
         if (!active) return;
         const metaParts: string[] = [];
         if (meta) {
+          if (meta.liveBroadcastContent === 'live' && meta.concurrentViewers != null) {
+            metaParts.push(`${formatCount(meta.concurrentViewers)} watching`);
+          }
           if (meta.likeCount != null) metaParts.push(`${formatCount(meta.likeCount)} likes`);
           if (meta.viewCount != null) metaParts.push(`${formatCount(meta.viewCount)} views`);
           metaParts.push(formatDateLine(meta.publishedAt));
@@ -350,7 +353,10 @@ export function WatchScreen({ route, navigation }: Props) {
   if (loading) {
     return (
       <View style={styles.container}>
-        <View style={styles.playerSkeleton} />
+        <View style={styles.playerSkeleton}>
+          <ActivityIndicator color={lightColors.textSecondary} />
+          <Text style={styles.playerSkeletonLabel}>Loading recording…</Text>
+        </View>
         <View style={styles.sheetSkeleton}>
           <View style={[styles.skelLine, { width: '85%' }]} />
           <View style={[styles.skelLine, { width: '55%', marginTop: 8 }]} />
@@ -463,8 +469,12 @@ const styles = StyleSheet.create({
   playerSkeleton: {
     width: '100%',
     aspectRatio: layout.thumbnailAspectRatio,
-    backgroundColor: lightColors.playerBackground,
+    backgroundColor: lightColors.surfaceVariant,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
   },
+  playerSkeletonLabel: { ...typography.metadata, color: lightColors.textSecondary },
   sheetSkeleton: { padding: spacing.lg },
   skelLine: { height: 18, borderRadius: 4, backgroundColor: lightColors.surfaceVariant },
 });

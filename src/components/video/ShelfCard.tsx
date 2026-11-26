@@ -35,6 +35,7 @@ export const ShelfCard = memo(function ShelfCard({ data, onPress, showAvatar = f
             style={styles.thumbnail}
             contentFit="cover"
             cachePolicy="memory-disk"
+            transition={200}
           />
         ) : (
           <View style={[styles.thumbnail, styles.thumbnailEmpty]} />

@@ -11,7 +11,8 @@ import type { PlaylistSummary } from '../../features/library/types';
 import type { LibraryRootStackParamList } from '../../features/library/screenTypes';
 import { CreatePlaylistSheet } from '../../features/library/components/CreatePlaylistSheet';
 import { PlaylistRow } from '../../features/library/components/PlaylistRow';
-import { ScreenLoading, ScreenMessage } from '../../features/library/components/ScreenMessage';
+import { ScreenMessage } from '../../features/library/components/ScreenMessage';
+import { SkeletonCard } from '../../components/video/SkeletonCard';
 import { ROW_LIST_PERF } from '../../lib/listPerf';
 
 type Props = NativeStackScreenProps<LibraryRootStackParamList, 'Playlists'>;
@@ -82,7 +83,11 @@ export function PlaylistsScreen({ navigation }: Props) {
           message="The backend isn't configured in this build, so there are no playlists to show."
         />
       ) : authLoading || (summaries.loading && summaries.data.length === 0) ? (
-        <ScreenLoading label="Loading playlists…" />
+        <View style={styles.listPad}>
+          <SkeletonCard variant="row" />
+          <SkeletonCard variant="row" />
+          <SkeletonCard variant="row" />
+        </View>
       ) : summaries.error && summaries.data.length === 0 ? (
         <ScreenMessage title="Could not load playlists" message={summaries.error} actionLabel="Try again" onAction={summaries.reload} />
       ) : (

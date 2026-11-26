@@ -6,9 +6,27 @@ import { layout, lightColors, nativeApp, radii, spacing } from '../../theme';
  * Loading placeholder with the EXACT geometry of the real card, so the
  * list does not jump when data arrives (performance requirement).
  * `feed` = full-bleed home card; `shelf` = inset card with side padding
- * supplied by the parent, matching ShelfCard.
+ * supplied by the parent, matching ShelfCard; `row` = the compact
+ * VideoListRow geometry (40%-width thumbnail at left, lines at right)
+ * used by History / Saved / Playlist lists (QA round 2, issue 16:
+ * those screens showed a lone "Loading…" on a huge empty page).
  */
-export const SkeletonCard = memo(function SkeletonCard({ variant }: { variant: 'feed' | 'shelf' }) {
+export const SkeletonCard = memo(function SkeletonCard({
+  variant,
+}: {
+  variant: 'feed' | 'shelf' | 'row';
+}) {
+  if (variant === 'row') {
+    return (
+      <View style={styles.rowCard}>
+        <View style={styles.rowThumb} />
+        <View style={styles.rowLines}>
+          <View style={[styles.line, { width: '88%' }]} />
+          <View style={[styles.lineSm, { width: '45%', marginTop: 7 }]} />
+        </View>
+      </View>
+    );
+  }
   const isFeed = variant === 'feed';
   return (
     <View style={isFeed ? styles.feedCard : styles.shelfCard}>
@@ -52,6 +70,20 @@ const styles = StyleSheet.create({
   line: { height: 17, borderRadius: 4, backgroundColor: lightColors.surfaceVariant },
   lineSm: { height: 13, borderRadius: 4, backgroundColor: lightColors.surfaceVariant },
   row: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: spacing.md },
+  rowCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  rowThumb: {
+    width: '40%',
+    maxWidth: 168,
+    aspectRatio: layout.thumbnailAspectRatio,
+    borderRadius: radii.card,
+    backgroundColor: lightColors.surfaceVariant,
+  },
+  rowLines: { flex: 1, paddingTop: 2 },
   avatar: {
     width: 40,
     height: 40,

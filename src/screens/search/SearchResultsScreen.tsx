@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -230,6 +230,14 @@ export function SearchResultsScreen({ route, navigation }: Props) {
 
       {loading ? (
         <View style={styles.listPad}>
+          {/* QA issues 4/9: a labelled searching state — the user must
+              be able to tell their tap registered and a search is
+              running, not stare at a blank page. */}
+          <View style={styles.searchingRow}>
+            <ActivityIndicator color={lightColors.text} />
+            <Text style={styles.searchingLabel}>Searching for “{query}”…</Text>
+          </View>
+          <SkeletonCard variant="shelf" />
           <SkeletonCard variant="shelf" />
           <SkeletonCard variant="shelf" />
         </View>
@@ -278,6 +286,8 @@ const styles = StyleSheet.create({
     height: 44,
   },
   fieldText: { ...typography.body, fontSize: 16, color: lightColors.text, flex: 1 },
+  searchingRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 16 },
+  searchingLabel: { fontSize: 15, color: lightColors.textSecondary },
   listPad: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
   skippedNote: {
     ...typography.metadata,

@@ -67,8 +67,16 @@ export function SubscriptionsScreen({ navigation }: Props) {
     };
   }, [channel]);
 
-  const carousel = useMemo(() => uploads.slice(0, 10), [uploads]);
-  const rest = useMemo(() => uploads.slice(10), [uploads]);
+  // QA issue 14: order newest-first by real publish date (the
+  // uploads-playlist order is insertion order, not guaranteed date
+  // order). The "Most relevant" heading itself is the reference's
+  // own section heading (screenshot 02) and stays a heading.
+  const sortedUploads = useMemo(
+    () => [...uploads].sort((a, b) => b.publishedAt.localeCompare(a.publishedAt)),
+    [uploads],
+  );
+  const carousel = useMemo(() => sortedUploads.slice(0, 10), [sortedUploads]);
+  const rest = useMemo(() => sortedUploads.slice(10), [sortedUploads]);
 
   const renderRest = useCallback(
     ({ item }: { item: YouTubeVideoMetadata }) => {

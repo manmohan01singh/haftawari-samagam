@@ -51,21 +51,33 @@ export const BottomNav = memo(function BottomNav({ items, activeKey, onPress }: 
               item.avatarUrl ? (
                 <Image
                   source={{ uri: item.avatarUrl }}
-                  style={styles.avatar}
+                  style={[styles.avatar, active && styles.avatarActive]}
                   contentFit="cover"
                   cachePolicy="memory-disk"
                 />
-              ) : (
-                <View style={[styles.avatar, styles.avatarFallback]}>
-                  <Text style={styles.avatarInitial}>{item.avatarInitial ?? '?'}</Text>
+              ) : item.avatarInitial ? (
+                <View style={[styles.avatar, styles.avatarFallback, active && styles.avatarActive]}>
+                  <Text style={styles.avatarInitial}>{item.avatarInitial}</Text>
                 </View>
+              ) : (
+                // Signed out (QA issue 19): person glyph, not a "?".
+                <MaterialIcons
+                  name="account-circle"
+                  size={28}
+                  color={active ? lightColors.text : lightColors.textSecondary}
+                />
               )
             ) : (
-              <MaterialIcons
-                name={(item.icon ?? 'home') as keyof typeof MaterialIcons.glyphMap}
-                size={26}
-                color={active ? lightColors.text : lightColors.textSecondary}
-              />
+              // QA issue 21: the active slot previously differed only
+              // by icon colour (near-invisible, especially on desktop).
+              // A pill behind the active icon makes the state legible.
+              <View style={[styles.iconPill, active && styles.iconPillActive]}>
+                <MaterialIcons
+                  name={(item.icon ?? 'home') as keyof typeof MaterialIcons.glyphMap}
+                  size={26}
+                  color={active ? lightColors.text : lightColors.textSecondary}
+                />
+              </View>
             )}
           </Pressable>
         );
@@ -92,7 +104,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  iconPill: { borderRadius: 999, paddingHorizontal: 18, paddingVertical: 4 },
+  iconPillActive: { backgroundColor: lightColors.surfaceVariant },
   avatar: { width: 28, height: 28, borderRadius: 14 },
+  avatarActive: { borderWidth: 2, borderColor: lightColors.text },
   avatarFallback: {
     backgroundColor: lightColors.surfaceVariant,
     alignItems: 'center',

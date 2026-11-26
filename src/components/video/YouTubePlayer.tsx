@@ -1,5 +1,6 @@
-import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import React, { useState } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { Image } from 'expo-image';
 import { WebView } from 'react-native-webview';
 import { layout, lightColors } from '../../theme';
 
@@ -31,11 +32,16 @@ interface YouTubePlayerProps {
  * outside PiP still pauses per YouTube policy.
  */
 export function YouTubePlayer({ youtubeVideoId }: YouTubePlayerProps) {
+  // Same loading facade as the web player (QA issues 5/6): the real
+  // thumbnail + spinner until the WebView finishes its first load,
+  // removed immediately afterwards — never over the playing embed.
+  const [loaded, setLoaded] = useState(false);
   const embedUrl = `https://www.youtube.com/embed/${encodeURIComponent(youtubeVideoId)}?rel=0&playsinline=1`;
   return (
     <View style={styles.wrap}>
       <WebView
         source={{ uri: embedUrl }}
+        onLoadEnd={() => setLoaded(true)}
         style={styles.webview}
         allowsFullscreenVideo
         allowsInlineMediaPlayback
@@ -45,6 +51,19 @@ export function YouTubePlayer({ youtubeVideoId }: YouTubePlayerProps) {
         domStorageEnabled
         originWhitelist={['https://www.youtube.com', 'https://www.youtube-nocookie.com']}
       />
+      {!loaded ? (
+        <View style={styles.facade} pointerEvents="none">
+          <Image
+            source={{ uri: `https://i.ytimg.com/vi/${encodeURIComponent(youtubeVideoId)}/hqdefault.jpg` }}
+            style={styles.poster}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+          />
+          <View style={styles.spinnerWrap}>
+            <ActivityIndicator color="#FFFFFF" />
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -56,4 +75,15 @@ const styles = StyleSheet.create({
     backgroundColor: lightColors.playerBackground,
   },
   webview: { flex: 1, backgroundColor: lightColors.playerBackground },
+  facade: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  poster: { width: '100%', height: '100%' },
+  spinnerWrap: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });
