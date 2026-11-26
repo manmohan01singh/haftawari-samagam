@@ -224,10 +224,17 @@ export function HomeScreen({ navigation }: Props) {
           items={[
             { key: 'home', label: 'Home' },
             { key: 'subs', label: 'Subs' },
+            { key: 'live', label: 'Live' },
           ]}
           selectedKey="home"
           onSelect={(key) => {
             if (key === 'subs') navigation.navigate('Subscriptions');
+            // "Live" is the reference tab row's live entry; in this
+            // app the live surface is Samagam Sessions (NOW PLAYING) —
+            // a real destination, not a dead tab. "Music"/"More" from
+            // the screenshot have no section in this app and are not
+            // shown as dead tabs.
+            if (key === 'live') navigation.navigate('Sessions');
           }}
         />
       </View>
