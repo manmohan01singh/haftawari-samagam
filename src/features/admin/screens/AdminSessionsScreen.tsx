@@ -24,6 +24,7 @@ import {
   adminStyles,
   formatDateTime,
   sessionStatusTone,
+  friendlyError,
 } from '../components/AdminUi';
 
 const STATUS_ORDER: SessionStatus[] = ['now_playing', 'upcoming', 'completed', 'cancelled'];
@@ -38,8 +39,24 @@ function todayLocalDate(): string {
 /** Combine a YYYY-MM-DD date and HH:MM time (device-local) into an ISO string. */
 function toIso(dateStr: string, timeStr: string): string | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr) || !/^\d{2}:\d{2}$/.test(timeStr)) return null;
+  const [y, mo, da] = dateStr.split('-').map(Number);
+  const [h, mi] = timeStr.split(':').map(Number);
+  if (h > 23 || mi > 59) return null;
   const d = new Date(`${dateStr}T${timeStr}:00`);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  if (Number.isNaN(d.getTime())) return null;
+  // Round-trip check: JS silently rolls 30 Feb → 2 Mar; reject that.
+  if (d.getFullYear() !== y || d.getMonth() + 1 !== mo || d.getDate() !== da) return null;
+  return d.toISOString();
+}
+
+/** Split an ISO instant back into local YYYY-MM-DD / HH:MM fields. */
+function splitLocal(iso: string): { date: string; time: string } {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return {
+    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+  };
 }
 
 function SessionsContent({ ctx }: { ctx: AdminContext }) {
@@ -58,6 +75,17 @@ function SessionsContent({ ctx }: { ctx: AdminContext }) {
   const [endTime, setEndTime] = useState('');
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  // "Now" for the future-start check, refreshed on focus and each
+  // minute — kept in state so validation stays a pure function of it.
+  const [nowTs, setNowTs] = useState(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      setNowTs(Date.now());
+      const t = setInterval(() => setNowTs(Date.now()), 60000);
+      return () => clearInterval(t);
+    }, []),
+  );
 
   const load = useCallback(async () => {
     setError(null);
@@ -66,7 +94,7 @@ function SessionsContent({ ctx }: { ctx: AdminContext }) {
       setSessions(sess);
       setPublishedVideos(pubs);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(friendlyError(err));
     }
   }, []);
 
@@ -75,6 +103,38 @@ function SessionsContent({ ctx }: { ctx: AdminContext }) {
       void load();
     }, [load]),
   );
+
+  // Live validation + preview, computed from the fields as typed —
+  // problems are shown BEFORE submit, not discovered after it.
+  const schedule = useMemo(() => {
+    const problems: string[] = [];
+    const startIso = startTime.trim() ? toIso(startDate.trim(), startTime.trim()) : null;
+    if (!startTime.trim()) {
+      problems.push('Enter a start time.');
+    } else if (!startIso) {
+      problems.push('Start date/time is not a real date — use YYYY-MM-DD and HH:MM (24-hour).');
+    } else if (nowTs > 0 && new Date(startIso).getTime() <= nowTs) {
+      problems.push('Start must be in the future.');
+    }
+    let endIso: string | null = null;
+    if (endDate.trim() || endTime.trim()) {
+      endIso = toIso(endDate.trim() || startDate.trim(), endTime.trim());
+      if (!endIso) {
+        problems.push('End date/time is not a real date — use YYYY-MM-DD and HH:MM (24-hour).');
+      } else if (startIso && endIso <= startIso) {
+        problems.push('End must be after the start.');
+      }
+    }
+    return { problems, startIso, endIso };
+  }, [startDate, startTime, endDate, endTime, nowTs]);
+
+  const fillEndPlus2h = useCallback(() => {
+    if (!schedule.startIso) return;
+    const end = new Date(new Date(schedule.startIso).getTime() + 2 * 60 * 60 * 1000);
+    const parts = splitLocal(end.toISOString());
+    setEndDate(parts.date);
+    setEndTime(parts.time);
+  }, [schedule.startIso]);
 
   const grouped = useMemo(() => {
     const map = new Map<SessionStatus, SessionWithVideo[]>();
@@ -95,6 +155,10 @@ function SessionsContent({ ctx }: { ctx: AdminContext }) {
       setFormError('Enter the start date as YYYY-MM-DD and the start time as HH:MM (24-hour).');
       return;
     }
+    if (new Date(startIso).getTime() <= Date.now()) {
+      setFormError('Start must be in the future.');
+      return;
+    }
     let endIso: string | null = null;
     if (endDate.trim() || endTime.trim()) {
       endIso = toIso(endDate.trim() || startDate.trim(), endTime.trim());
@@ -103,7 +167,7 @@ function SessionsContent({ ctx }: { ctx: AdminContext }) {
         return;
       }
       if (endIso <= startIso) {
-        setFormError('The end must be after the start.');
+        setFormError('End must be after the start.');
         return;
       }
     }
@@ -139,7 +203,7 @@ function SessionsContent({ ctx }: { ctx: AdminContext }) {
       setEndTime('');
       setNotice(`Session scheduled for ${formatDateTime(startIso)}.`);
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : String(err));
+      setFormError(friendlyError(err));
     } finally {
       setCreating(false);
     }
@@ -156,7 +220,7 @@ function SessionsContent({ ctx }: { ctx: AdminContext }) {
       );
       setNotice('Session cancelled.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(friendlyError(err));
     } finally {
       setBusyId(null);
     }
@@ -201,6 +265,9 @@ function SessionsContent({ ctx }: { ctx: AdminContext }) {
           placeholderTextColor={lightColors.textSecondary}
         />
 
+        <Text style={styles.help}>
+          Dates are YYYY-MM-DD and times are 24-hour HH:MM, in your device&rsquo;s local time.
+        </Text>
         <View style={styles.dateRow}>
           <View style={styles.dateField}>
             <Text style={adminStyles.fieldLabel}>Start date</Text>
@@ -211,6 +278,8 @@ function SessionsContent({ ctx }: { ctx: AdminContext }) {
               placeholder="YYYY-MM-DD"
               placeholderTextColor={lightColors.textSecondary}
               autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="numbers-and-punctuation"
             />
           </View>
           <View style={styles.dateField}>
@@ -222,6 +291,8 @@ function SessionsContent({ ctx }: { ctx: AdminContext }) {
               placeholder="17:00"
               placeholderTextColor={lightColors.textSecondary}
               autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="numbers-and-punctuation"
             />
           </View>
         </View>
@@ -236,6 +307,8 @@ function SessionsContent({ ctx }: { ctx: AdminContext }) {
               placeholder="Same as start date"
               placeholderTextColor={lightColors.textSecondary}
               autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="numbers-and-punctuation"
             />
           </View>
           <View style={styles.dateField}>
@@ -247,17 +320,49 @@ function SessionsContent({ ctx }: { ctx: AdminContext }) {
               placeholder="19:00"
               placeholderTextColor={lightColors.textSecondary}
               autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="numbers-and-punctuation"
             />
           </View>
         </View>
+
+        {schedule.startIso ? (
+          <AdminButton
+            title="Set end to 2 hours after start"
+            disabled={creating}
+            onPress={fillEndPlus2h}
+          />
+        ) : null}
+
+        {schedule.startIso ? (
+          <View style={styles.previewBox}>
+            <Text style={styles.previewText}>
+              Starts: {formatDateTime(schedule.startIso)}
+              {schedule.endIso ? `\nEnds: ${formatDateTime(schedule.endIso)}` : ''}
+            </Text>
+          </View>
+        ) : null}
+
+        {schedule.problems.length > 0 ? (
+          <View style={styles.problemsBox}>
+            {schedule.problems.map((p) => (
+              <Text key={p} style={styles.problemText}>
+                {p}
+              </Text>
+            ))}
+          </View>
+        ) : null}
 
         {formError ? <ErrorBanner message={formError} /> : null}
         <AdminButton
           title={creating ? 'Scheduling…' : 'Schedule session'}
           variant="primary"
-          disabled={creating}
+          disabled={creating || !videoId || schedule.problems.length > 0}
           onPress={onCreate}
         />
+        {!videoId ? (
+          <Text style={styles.help}>Choose a published video above to enable scheduling.</Text>
+        ) : null}
       </View>
 
       {error ? <ErrorBanner message={error} onRetry={load} /> : null}
@@ -331,6 +436,19 @@ const styles = StyleSheet.create({
   videoOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   dateRow: { flexDirection: 'row', gap: spacing.md },
   dateField: { flex: 1 },
+  previewBox: {
+    backgroundColor: lightColors.surfaceVariant,
+    borderRadius: 12,
+    padding: spacing.md,
+  },
+  previewText: { ...typography.body, color: lightColors.text },
+  problemsBox: {
+    backgroundColor: '#FDECEC',
+    borderRadius: 12,
+    padding: spacing.md,
+    gap: spacing.xs,
+  },
+  problemText: { ...typography.body, color: '#8B0000' },
   listHeader: {
     flexDirection: 'row',
     alignItems: 'center',

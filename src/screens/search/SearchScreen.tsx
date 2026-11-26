@@ -32,8 +32,16 @@ export function SearchScreen({ navigation }: Props) {
   const userId = user?.id ?? null;
   const [query, setQuery] = useState('');
   const [history, setHistory] = useState<string[]>([]);
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  // Suggestions are stored keyed by the exact query they answer, so a
+  // list computed for an earlier keystroke can never render (or flash
+  // back after the field is cleared) for the current one.
+  const [sugState, setSugState] = useState<{ q: string; rows: Suggestion[] }>({
+    q: '',
+    rows: [],
+  });
+  const [confirmClear, setConfirmClear] = useState(false);
   const suggestSeq = useRef(0);
+  const inputRef = useRef<React.ElementRef<typeof TextInput>>(null);
 
   // Load this user's recent searches (guest bucket when signed out).
   useEffect(() => {
@@ -58,9 +66,11 @@ export function SearchScreen({ navigation }: Props) {
     const t = setTimeout(() => {
       getSuggestions(text, { userId })
         .then((rows) => {
-          if (suggestSeq.current === seq) setSuggestions(rows);
+          if (suggestSeq.current === seq) setSugState({ q: text, rows });
         })
-        .catch(() => undefined);
+        .catch(() => {
+          if (suggestSeq.current === seq) setSugState({ q: text, rows: [] });
+        });
     }, 200);
     return () => clearTimeout(t);
   }, [query, userId]);
@@ -82,15 +92,37 @@ export function SearchScreen({ navigation }: Props) {
     [userId],
   );
 
+  // Clear-all is destructive, so it is two-step: first tap arms the
+  // row ("Tap again to clear all"), second tap within a few seconds
+  // clears. The arm resets on its own so it cannot fire much later.
   const onClearHistory = useCallback(() => {
+    if (!confirmClear) {
+      setConfirmClear(true);
+      return;
+    }
+    setConfirmClear(false);
     void clearSearchHistory(userId)
       .then(() => setHistory([]))
       .catch(() => undefined);
-  }, [userId]);
+  }, [confirmClear, userId]);
+
+  useEffect(() => {
+    if (!confirmClear) return;
+    const t = setTimeout(() => setConfirmClear(false), 4000);
+    return () => clearTimeout(t);
+  }, [confirmClear]);
+
+  const onClearQuery = useCallback(() => {
+    setQuery('');
+    inputRef.current?.focus();
+  }, []);
 
   const typing = query.trim().length > 0;
+  const suggestions = sugState.q === query.trim() ? sugState.rows : [];
+  const suggesting = typing && sugState.q !== query.trim();
   const showHistory = !typing && history.length > 0;
   const showSuggestions = typing && suggestions.length > 0;
+  const showNoSuggestions = typing && !suggesting && suggestions.length === 0;
 
   return (
     <View style={styles.container}>
@@ -100,6 +132,7 @@ export function SearchScreen({ navigation }: Props) {
         </Pressable>
         <View style={styles.field}>
           <TextInput
+            ref={inputRef}
             style={styles.input}
             placeholder="Search samagams"
             placeholderTextColor={lightColors.textSecondary}
@@ -108,9 +141,11 @@ export function SearchScreen({ navigation }: Props) {
             onSubmitEditing={() => submit()}
             returnKeyType="search"
             autoFocus
+            autoCorrect={false}
+            enterKeyHint="search"
           />
           {query ? (
-            <Pressable onPress={() => setQuery('')} hitSlop={8} accessibilityLabel="Clear search">
+            <Pressable onPress={onClearQuery} hitSlop={8} accessibilityLabel="Clear search">
               <MaterialIcons name="close" size={20} color={lightColors.text} />
             </Pressable>
           ) : null}
@@ -143,9 +178,12 @@ export function SearchScreen({ navigation }: Props) {
               </Pressable>
             </View>
           )}
+          ListHeaderComponent={<Text style={styles.listHeading}>Recent searches</Text>}
           ListFooterComponent={
             <Pressable onPress={onClearHistory} style={styles.clearRow} accessibilityRole="button">
-              <Text style={styles.clearText}>Clear all search history</Text>
+              <Text style={[styles.clearText, confirmClear && styles.clearTextArmed]}>
+                {confirmClear ? 'Tap again to clear all search history' : 'Clear all search history'}
+              </Text>
             </Pressable>
           }
         />
@@ -155,25 +193,49 @@ export function SearchScreen({ navigation }: Props) {
           keyExtractor={(s, i) => `sug-${s.source}-${s.text}-${i}`}
           keyboardShouldPersistTaps="handled"
           renderItem={({ item }) => (
-            <Pressable
-              style={styles.row}
-              onPress={() => submit(item.text)}
-              accessibilityRole="button"
-            >
-              <MaterialIcons
-                name={item.source === 'history' ? 'history' : 'search'}
-                size={22}
-                color={lightColors.textSecondary}
-              />
-              <Text style={styles.rowText} numberOfLines={1}>
-                {item.text}
-              </Text>
-            </Pressable>
+            <View style={styles.row}>
+              <Pressable
+                style={styles.rowMain}
+                onPress={() => submit(item.text)}
+                accessibilityRole="button"
+              >
+                <MaterialIcons
+                  name={item.source === 'history' ? 'history' : 'search'}
+                  size={22}
+                  color={lightColors.textSecondary}
+                />
+                <Text style={styles.rowText} numberOfLines={1}>
+                  {item.text}
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setQuery(item.text);
+                  inputRef.current?.focus();
+                }}
+                hitSlop={8}
+                accessibilityLabel={`Fill search with "${item.text}" without searching yet`}
+              >
+                <MaterialIcons name="north-west" size={20} color={lightColors.textSecondary} />
+              </Pressable>
+            </View>
           )}
         />
+      ) : showNoSuggestions ? (
+        <View>
+          <Text style={styles.hint}>
+            No suggestions for &ldquo;{query.trim()}&rdquo; yet.
+          </Text>
+          <Pressable onPress={() => submit()} style={styles.clearRow} accessibilityRole="button">
+            <Text style={styles.clearText}>Search for &ldquo;{query.trim()}&rdquo; anyway</Text>
+          </Pressable>
+        </View>
+      ) : typing ? (
+        <Text style={styles.hint}>Searching suggestions…</Text>
       ) : (
         <Text style={styles.hint}>
-          Search the published archive and the official channel of Bhai Gursharan Singh Ji.
+          Search the published archive and the official channel of Bhai Gursharan Singh Ji. Try a
+          shabad title, a word from it, or the channel name.
         </Text>
       )}
     </View>
@@ -217,4 +279,13 @@ const styles = StyleSheet.create({
   rowText: { ...typography.body, fontSize: 16, color: lightColors.text, flex: 1 },
   clearRow: { paddingHorizontal: spacing.lg, paddingVertical: spacing.lg },
   clearText: { ...typography.body, fontWeight: '600', color: lightColors.text },
+  clearTextArmed: { color: lightColors.accent },
+  listHeading: {
+    ...typography.metadata,
+    color: lightColors.textSecondary,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xs,
+    textTransform: 'uppercase',
+  },
 });

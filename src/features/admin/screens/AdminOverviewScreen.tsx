@@ -13,6 +13,7 @@ import {
   LoadingView,
   SectionTitle,
   StatCard,
+  friendlyError,
 } from '../components/AdminUi';
 
 type Props = NativeStackScreenProps<AdminStackParamList, 'AdminOverview'>;
@@ -35,7 +36,7 @@ function OverviewContent({ navigation }: { navigation: Props['navigation'] }) {
     try {
       setCounts(await fetchOverviewCounts());
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(friendlyError(err));
     }
   }, []);
 

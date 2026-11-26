@@ -13,6 +13,7 @@ import {
   LoadingView,
   SectionTitle,
   formatDateTime,
+  friendlyError,
 } from '../components/AdminUi';
 
 function detailsSummary(details: Record<string, unknown> | null): string | null {
@@ -37,7 +38,7 @@ function AuditLogsContent() {
       const ids = [...new Set(rows.map((l) => l.actor_id).filter((x): x is string => !!x))];
       setActors(await fetchProfilesByIds(ids));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(friendlyError(err));
     }
   }, []);
 

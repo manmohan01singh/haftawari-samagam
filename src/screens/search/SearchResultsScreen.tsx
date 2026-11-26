@@ -70,6 +70,7 @@ export function SearchResultsScreen({ route, navigation }: Props) {
     error: string | null;
   } | null>(null);
   const [latest, setLatest] = useState<YouTubeVideoMetadata[]>([]);
+  const [attempt, setAttempt] = useState(0);
   const loading = result?.query !== query;
   const error = result?.query === query ? result.error : null;
   const data = result?.query === query ? result.data : null;
@@ -83,19 +84,25 @@ export function SearchResultsScreen({ route, navigation }: Props) {
       .then((data) => {
         if (active) setResult({ query, data, error: null });
       })
-      .catch((e) => {
+      .catch(() => {
         if (active) {
+          // Human message only — never surface a raw engine/API error.
           setResult({
             query,
             data: null,
-            error: e instanceof Error ? e.message : 'Search failed.',
+            error: 'Search could not be completed. Check your connection and try again.',
           });
         }
       });
     return () => {
       active = false;
     };
-  }, [query]);
+  }, [query, attempt]);
+
+  const retry = useCallback(() => {
+    setResult(null);
+    setAttempt((n) => n + 1);
+  }, []);
 
   // Cancel any pending/in-flight search when the screen unmounts.
   useEffect(() => {
@@ -218,12 +225,26 @@ export function SearchResultsScreen({ route, navigation }: Props) {
         <Pressable onPress={() => navigation.goBack()} hitSlop={10} accessibilityLabel="Back">
           <MaterialIcons name="arrow-back" size={24} color={lightColors.text} />
         </Pressable>
-        <Pressable style={styles.field} onPress={() => navigation.navigate('Search')}>
-          <Text style={styles.fieldText} numberOfLines={1}>
-            {query}
-          </Text>
-          <MaterialIcons name="close" size={20} color={lightColors.text} />
-        </Pressable>
+        <View style={styles.field}>
+          <Pressable
+            style={styles.fieldMain}
+            onPress={() => navigation.navigate('Search')}
+            accessibilityRole="button"
+            accessibilityLabel="Edit search"
+          >
+            <Text style={styles.fieldText} numberOfLines={1}>
+              {query}
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => navigation.navigate('Search')}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Clear search and start a new one"
+          >
+            <MaterialIcons name="close" size={20} color={lightColors.text} />
+          </Pressable>
+        </View>
       </View>
 
       {loading ? (
@@ -232,7 +253,12 @@ export function SearchResultsScreen({ route, navigation }: Props) {
           <SkeletonCard variant="shelf" />
         </View>
       ) : error ? (
-        <EmptyState title="Search failed" message={error} />
+        <View style={styles.emptyWrap}>
+          <EmptyState title="Search failed" message={error} />
+          <Pressable style={styles.actionPill} onPress={retry} accessibilityRole="button">
+            <Text style={styles.actionPillText}>Try again</Text>
+          </Pressable>
+        </View>
       ) : (
         <FlatList
           data={items}
@@ -242,10 +268,26 @@ export function SearchResultsScreen({ route, navigation }: Props) {
           contentContainerStyle={styles.listPad}
           ListEmptyComponent={
             channelMatches ? undefined : (
-              <EmptyState
-                title="No results found"
-                message={`Nothing in the archive or the official channel matches "${query}".`}
-              />
+              <View style={styles.emptyWrap}>
+                <EmptyState
+                  title="No results found"
+                  message={`Nothing in the archive or the official channel matches "${query}". Check the spelling, try fewer words, or search for part of the shabad title.`}
+                />
+                <Pressable
+                  style={styles.actionPill}
+                  onPress={() => navigation.navigate('Search')}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.actionPillText}>Edit search</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.actionPillOutline}
+                  onPress={() => navigation.goBack()}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.actionPillOutlineText}>Go back</Text>
+                </Pressable>
+              </View>
             )
           }
           removeClippedSubviews
@@ -278,6 +320,23 @@ const styles = StyleSheet.create({
     height: 44,
   },
   fieldText: { ...typography.body, fontSize: 16, color: lightColors.text, flex: 1 },
+  fieldMain: { flex: 1, justifyContent: 'center', alignSelf: 'stretch' },
+  emptyWrap: { alignItems: 'center', gap: spacing.md, paddingTop: spacing.xl },
+  actionPill: {
+    backgroundColor: lightColors.subscribeBackground,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+  },
+  actionPillText: { ...typography.chip, color: lightColors.subscribeText },
+  actionPillOutline: {
+    borderWidth: 1,
+    borderColor: lightColors.border,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+  },
+  actionPillOutlineText: { ...typography.chip, color: lightColors.text },
   listPad: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
   skippedNote: {
     ...typography.metadata,

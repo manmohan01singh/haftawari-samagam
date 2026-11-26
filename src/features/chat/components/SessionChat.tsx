@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -78,6 +78,7 @@ export function SessionChat({
     authorNames,
   });
   const [draft, setDraft] = useState('');
+  const inputRef = useRef<React.ElementRef<typeof TextInput>>(null);
 
   // Inverted list: newest message first in data, rendered at the bottom.
   const invertedMessages = useMemo(() => chat.messages.slice().reverse(), [chat.messages]);
@@ -89,8 +90,15 @@ export function SessionChat({
   const keyExtractor = useCallback((item: ChatMessageWithAuthor) => item.id, []);
 
   const handleSend = useCallback(async () => {
+    if (!draft.trim() || chat.sending) return;
     const sent = await chat.send(draft);
-    if (sent) setDraft('');
+    if (sent) {
+      setDraft('');
+      // Keep the keyboard open and focus in the field so the sangat can
+      // send a follow-up without tapping back in (esp. mobile web,
+      // where submit would otherwise blur the input away).
+      inputRef.current?.focus();
+    }
   }, [chat, draft]);
 
   const canChat = Boolean(chat.user) && chat.hasJoined === true;
@@ -158,7 +166,11 @@ export function SessionChat({
     );
   } else {
     body = (
-      <FlatList
+      <>
+        {chat.listError ? (
+          <Text style={styles.listErrorBanner}>{chat.listError}</Text>
+        ) : null}
+        <FlatList
         data={invertedMessages}
         inverted
         keyExtractor={keyExtractor}
@@ -177,19 +189,31 @@ export function SessionChat({
         initialNumToRender={20}
         maxToRenderPerBatch={20}
         windowSize={11}
+        style={styles.messageList}
       />
+      </>
     );
   }
 
   return (
     <KeyboardAvoidingView
       style={styles.sheet}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={keyboardVerticalOffset}
     >
-      <View style={styles.handleRow}>
+      {/* Tapping the drag-handle area closes the sheet too — the handle
+          is the visual affordance users reach for first. The backdrop
+          and × in the host/header remain the other close paths. */}
+      <Pressable
+        style={styles.handleRow}
+        onPress={onClose}
+        disabled={!onClose}
+        accessibilityRole={onClose ? 'button' : undefined}
+        accessibilityLabel={onClose ? 'Close chat' : undefined}
+        hitSlop={6}
+      >
         <View style={styles.dragHandle} />
-      </View>
+      </Pressable>
 
       <View style={styles.headerRow}>
         <Text style={styles.title}>Live chat</Text>
@@ -226,11 +250,20 @@ export function SessionChat({
           </View>
           {identityName ? (
             <Text style={styles.identityLine}>Chat publicly as {identityName}</Text>
+          ) : (
+            <Text style={styles.identityLine}>
+              Chat publicly — no display name is set on your profile.
+            </Text>
+          )}
+          {chat.sendError ? (
+            <Text style={styles.errorText} accessibilityRole="alert">
+              {chat.sendError} Your draft is kept below — tap Send to retry.
+            </Text>
           ) : null}
-          {chat.sendError ? <Text style={styles.errorText}>{chat.sendError}</Text> : null}
           <View style={styles.inputRow}>
             <View style={styles.inputPill}>
               <TextInput
+                ref={inputRef}
                 style={styles.input}
                 value={draft}
                 onChangeText={setDraft}
@@ -241,24 +274,34 @@ export function SessionChat({
                 returnKeyType="send"
                 onSubmitEditing={() => void handleSend()}
                 blurOnSubmit={false}
+                enterKeyHint="send"
               />
-              {draft.trim().length > 0 ? (
-                <Pressable
-                  onPress={() => void handleSend()}
-                  disabled={chat.sending}
-                  accessibilityRole="button"
-                  accessibilityLabel="Send message"
-                  hitSlop={6}
-                >
-                  {chat.sending ? (
-                    <ActivityIndicator size="small" color={lightColors.accent} />
-                  ) : (
-                    <MaterialIcons name="send" size={22} color={lightColors.accent} />
-                  )}
-                </Pressable>
-              ) : null}
+              <Pressable
+                onPress={() => void handleSend()}
+                disabled={!draft.trim() || chat.sending}
+                accessibilityRole="button"
+                accessibilityLabel="Send message"
+                accessibilityState={{ disabled: !draft.trim() || chat.sending }}
+                hitSlop={6}
+                style={!draft.trim() ? styles.sendDisabled : undefined}
+              >
+                {chat.sending ? (
+                  <ActivityIndicator size="small" color={lightColors.accent} />
+                ) : (
+                  <MaterialIcons
+                    name="send"
+                    size={22}
+                    color={draft.trim() ? lightColors.accent : lightColors.textSecondary}
+                  />
+                )}
+              </Pressable>
             </View>
           </View>
+          {draft.length > MAX_MESSAGE_LENGTH - 100 ? (
+            <Text style={styles.charCount}>
+              {draft.length} / {MAX_MESSAGE_LENGTH}
+            </Text>
+          ) : null}
         </>
       ) : null}
     </KeyboardAvoidingView>
@@ -316,6 +359,25 @@ const styles = StyleSheet.create({
   },
   listArea: {
     flex: 1,
+    minHeight: 0,
+  },
+  messageList: { flex: 1 },
+  listErrorBanner: {
+    ...typography.metadata,
+    color: lightColors.accent,
+    backgroundColor: lightColors.surfaceVariant,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.sm,
+    padding: spacing.sm,
+    borderRadius: radii.badge,
+  },
+  sendDisabled: { opacity: 0.5 },
+  charCount: {
+    ...typography.metadata,
+    color: lightColors.textSecondary,
+    textAlign: 'right',
+    marginHorizontal: spacing.lg,
+    paddingBottom: spacing.sm,
   },
   listContent: {
     paddingVertical: spacing.sm,

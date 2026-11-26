@@ -23,6 +23,7 @@ import {
   SectionTitle,
   formatDateTime,
   sessionStatusTone,
+  friendlyError,
 } from '../components/AdminUi';
 
 function ModerationContent({ ctx }: { ctx: AdminContext }) {
@@ -42,7 +43,7 @@ function ModerationContent({ ctx }: { ctx: AdminContext }) {
       const ids = [...new Set(rows.map((m) => m.user_id))];
       setAuthors(await fetchProfilesByIds(ids));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(friendlyError(err));
     }
   }, []);
 
@@ -59,7 +60,7 @@ function ModerationContent({ ctx }: { ctx: AdminContext }) {
         });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(friendlyError(err));
     }
   }, [loadMessages]);
 
@@ -89,7 +90,7 @@ function ModerationContent({ ctx }: { ctx: AdminContext }) {
       );
       setNotice(message.is_removed ? 'Message restored.' : 'Message removed from chat.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(friendlyError(err));
     } finally {
       setBusyId(null);
     }

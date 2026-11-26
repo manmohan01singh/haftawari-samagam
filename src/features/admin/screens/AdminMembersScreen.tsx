@@ -15,6 +15,7 @@ import {
   SectionTitle,
   formatDateTime,
   roleChip,
+  friendlyError,
 } from '../components/AdminUi';
 
 function MembersContent() {
@@ -26,7 +27,7 @@ function MembersContent() {
     try {
       setMembers(await listMembers());
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(friendlyError(err));
     }
   }, []);
 

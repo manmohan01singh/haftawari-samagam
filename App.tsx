@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import { RootNavigator } from './src/navigation';
 import { AuthProvider } from './src/features/auth';
 import { registerServiceWorker } from './src/lib/registerServiceWorker';
+import { PwaBanners } from './src/components/pwa/PwaBanners';
 
 /**
  * Haftawari Samagam.
@@ -27,6 +28,7 @@ export default function App() {
           <RootNavigator />
           <StatusBar style="auto" />
         </NavigationContainer>
+        <PwaBanners />
       </AuthProvider>
     </SafeAreaProvider>
   );
