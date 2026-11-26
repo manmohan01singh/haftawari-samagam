@@ -44,5 +44,7 @@ export type RootStackParamList = {
   Account: undefined;
   SignIn: undefined;
   SignUp: undefined;
+  /** Set-new-password gate shown after a password-recovery email link. */
+  SetNewPassword: undefined;
   Admin: NavigatorScreenParams<AdminStackParamList>;
 };

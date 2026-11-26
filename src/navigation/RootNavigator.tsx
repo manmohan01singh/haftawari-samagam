@@ -5,7 +5,7 @@ import { AdminStack } from './AdminStack';
 import { useAuth } from '../features/auth';
 import { WatchScreen } from '../screens/watch';
 import { SearchScreen, SearchResultsScreen } from '../screens/search';
-import { SignInScreen, SignUpScreen } from '../screens/auth';
+import { SetNewPasswordScreen, SignInScreen, SignUpScreen } from '../screens/auth';
 import { ChannelScreen } from '../screens/channel';
 import { PlaylistScreen } from '../screens/playlist';
 import { SavedScreen } from '../screens/saved';
@@ -19,7 +19,21 @@ import type { RootStackParamList } from './types';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export function RootNavigator() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, passwordRecovery, loading } = useAuth();
+
+  // Password-recovery gate: a user who landed from a reset email has
+  // a live session but came here to SET A NEW PASSWORD — before this
+  // gate existed no screen did that, so the reset flow dead-ended.
+  // While the flag is set, the set-new-password form is the whole
+  // app; it clears the flag on success (or explicit skip).
+  if (passwordRecovery && !loading) {
+    return (
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="SetNewPassword" component={SetNewPasswordScreen} />
+      </Stack.Navigator>
+    );
+  }
+
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="MainTabs" component={MainTabs} />
