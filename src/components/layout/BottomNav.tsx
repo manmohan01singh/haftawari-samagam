@@ -11,7 +11,7 @@ export interface BottomNavItem {
   label: string;
   /** MaterialIcons glyph name for icon slots. */
   icon?: string;
-  /** 'channel' renders the circled play glyph (QA43: the slot opens the official channel — a '+' falsely promised Create/upload); 'avatar' renders the profile slot. */
+  /** 'create' renders the circled-+ glyph in reference proportions (the slot opens the official channel in this app — destination unchanged, glyph matched to ref in round 2); 'avatar' renders the profile slot. */
   kind?: 'icon' | 'create' | 'avatar';
   avatarUrl?: string | null;
   avatarInitial?: string | null;
@@ -51,8 +51,14 @@ export const BottomNav = memo(function BottomNav({ items, activeKey, onPress }: 
             accessibilityState={{ selected: active }}
           >
             {item.kind === 'create' ? (
+              // Round-2 pixel pass: the reference centre slot is a
+              // circled + (thin circle ~28dp, plus glyph ~20dp) — the
+              // merged build's play-arrow circle read wrong at a
+              // glance. The slot's DESTINATION is unchanged (it still
+              // opens the official channel; only the glyph matches
+              // the reference geometry now).
               <View style={styles.createCircle}>
-                <MaterialIcons name="play-arrow" size={22} color={lightColors.text} />
+                <MaterialIcons name="add" size={20} color={lightColors.text} />
               </View>
             ) : item.kind === 'avatar' ? (
               item.avatarUrl ? (
@@ -75,16 +81,17 @@ export const BottomNav = memo(function BottomNav({ items, activeKey, onPress }: 
                 </View>
               )
             ) : (
-              // QA issue 21: the active slot previously differed only
-              // by icon colour (near-invisible, especially on desktop).
-              // A pill behind the active icon makes the state legible.
-              <View style={[styles.iconPill, active && styles.iconPillActive]}>
-                <MaterialIcons
-                  name={(item.icon ?? 'home') as keyof typeof MaterialIcons.glyphMap}
-                  size={26}
-                  color={active ? lightColors.text : lightColors.textSecondary}
-                />
-              </View>
+              // Round-2 pixel pass: the reference has NO pill behind
+              // the active icon (that was a QA-21 addition; the
+              // round-2 master prompt's selected-state-as-in-ref
+              // instruction overrides it). Active = full-strength
+              // black glyph, inactive = dimmed glyph, both 24dp,
+              // no background shape — exactly the ref-1 bottom bar.
+              <MaterialIcons
+                name={(item.icon ?? 'home') as keyof typeof MaterialIcons.glyphMap}
+                size={24}
+                color={active ? lightColors.text : lightColors.textSecondary}
+              />
             )}
           </Pressable>
         );
@@ -103,16 +110,14 @@ const styles = StyleSheet.create({
   },
   item: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   createCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     borderWidth: 1.5,
     borderColor: lightColors.text,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconPill: { borderRadius: 999, paddingHorizontal: 18, paddingVertical: 4 },
-  iconPillActive: { backgroundColor: lightColors.surfaceVariant },
   avatar: { width: 28, height: 28, borderRadius: 14 },
   // Active-state cue for the avatar slot (QA 50): a 2px ring in the
   // primary text colour; icon slots cue via the pill behind the icon.

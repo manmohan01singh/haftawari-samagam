@@ -48,16 +48,22 @@ export const SecondaryTabs = memo(function SecondaryTabs({ items, selectedKey, o
 
 const styles = StyleSheet.create({
   scroll: { flexGrow: 0 },
+  // Round-2 pixel pass, measured from ref-1-home.jpg (1080px-wide
+  // capture, ÷2.62 for dp): the tab row is DENSE — selected pill
+  // ~36dp tall with ~14dp horizontal padding, unselected labels
+  // ~10-12dp apart, row ~38dp tall overall. The old geometry
+  // (16dp item padding + 16dp row padding) spread Home/Subs/Live
+  // across the whole width and read sparse next to the reference.
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 5,
+    gap: 2,
   },
   item: {
-    paddingHorizontal: nativeApp.secondaryTabs.horizontalPadding,
-    paddingVertical: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: radii.pill,
   },
   itemSelected: { backgroundColor: '#F8E9EC' },
