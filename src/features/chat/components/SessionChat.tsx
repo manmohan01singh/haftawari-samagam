@@ -3,11 +3,13 @@ import {
   ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
+  PanResponder,
   Platform,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -80,6 +82,42 @@ export function SessionChat({
   });
   const [draft, setDraft] = useState('');
   const inputRef = useRef<React.ElementRef<typeof TextInput>>(null);
+
+  // Sheet sizing (round-2 ref-5): the sheet defaults to 72% of the
+  // screen so the player stays visible above it, and drags up to 92%.
+  // Drag is claimed ONLY by the handle/header region (move-based, so
+  // taps on × still land) — the message list scrolls independently.
+  const { height: windowHeight } = useWindowDimensions();
+  const [expanded, setExpanded] = useState(false);
+  const [dragDy, setDragDy] = useState(0);
+  const baseHeight =
+    windowHeight *
+    (expanded
+      ? nativeApp.chatSheet.expandedHeightRatio
+      : nativeApp.chatSheet.defaultHeightRatio);
+  const sheetHeight = Math.max(240, Math.min(windowHeight * 0.98, baseHeight - dragDy));
+
+  const dragResponder = useMemo(
+    () =>
+      PanResponder.create({
+        // Move-based claiming: a drag (|dy| > 4) is sheet drag; a tap
+        // falls through to the handle Pressable / × button underneath.
+        onMoveShouldSetPanResponder: (_evt, gesture) => Math.abs(gesture.dy) > 4,
+        onPanResponderMove: (_evt, gesture) => setDragDy(gesture.dy),
+        onPanResponderRelease: (_evt, gesture) => {
+          const threshold = nativeApp.chatSheet.dragSnapThreshold;
+          if (gesture.dy > threshold) {
+            if (expanded) setExpanded(false);
+            else onClose?.();
+          } else if (gesture.dy < -threshold) {
+            setExpanded(true);
+          }
+          setDragDy(0);
+        },
+        onPanResponderTerminate: () => setDragDy(0),
+      }),
+    [expanded, onClose],
+  );
 
   // Inverted list: newest message first in data, rendered at the bottom.
   const invertedMessages = useMemo(() => chat.messages.slice().reverse(), [chat.messages]);
@@ -198,13 +236,15 @@ export function SessionChat({
 
   return (
     <KeyboardAvoidingView
-      style={styles.sheet}
+      style={[styles.sheet, { height: sheetHeight }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={keyboardVerticalOffset}
     >
-      {/* Tapping the drag-handle area closes the sheet too — the handle
-          is the visual affordance users reach for first. The backdrop
-          and × in the host/header remain the other close paths. */}
+      {/* Drag region: handle + header + sub-line. Dragging up expands
+          (72% → 92%), dragging down collapses, then closes; tapping
+          the handle closes too. The message list is OUTSIDE this
+          region and scrolls independently. */}
+      <View {...dragResponder.panHandlers}>
       <Pressable
         style={styles.handleRow}
         onPress={onClose}
@@ -237,6 +277,7 @@ export function SessionChat({
             <Text style={styles.subLabel}>{chat.participantCount}</Text>
           </View>
         ) : null}
+      </View>
       </View>
 
       <View style={styles.listArea}>{body}</View>
@@ -311,7 +352,6 @@ export function SessionChat({
 
 const styles = StyleSheet.create({
   sheet: {
-    flex: 1,
     backgroundColor: lightColors.surface,
     borderTopLeftRadius: nativeApp.watchSheet.topRadius,
     borderTopRightRadius: nativeApp.watchSheet.topRadius,
@@ -451,6 +491,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
+    minHeight: 44, // ref-5 "Chat…" pill height
     gap: spacing.sm,
   },
   input: {

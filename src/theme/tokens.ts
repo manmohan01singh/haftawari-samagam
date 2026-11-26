@@ -84,6 +84,8 @@ export interface ThemeColors {
   selectedChipBackground: string;
   selectedChipText: string;
   playerBackground: string;
+  /** Pale blue-grey tint behind the search channel-result block (ref-3 / §3). */
+  searchTint: string;
 }
 
 export const lightColors: ThemeColors = {
@@ -100,6 +102,7 @@ export const lightColors: ThemeColors = {
   selectedChipBackground: '#0F0F0F',
   selectedChipText: '#FFFFFF',
   playerBackground: '#000000',
+  searchTint: '#E8EEF2',
 };
 
 export const darkColors: ThemeColors = {
@@ -116,6 +119,7 @@ export const darkColors: ThemeColors = {
   selectedChipBackground: '#F1F1F1',
   selectedChipText: '#0F0F0F',
   playerBackground: '#000000',
+  searchTint: '#1C262C',
 };
 
 /**
@@ -176,6 +180,25 @@ export const nativeApp = {
     badgeHeight: 20, // e.g. top-fan crown pill after a handle
     noticeRadius: radii.card, // 12
     reactionButtonSize: 56, // floating heart circle
+    /**
+     * Sheet heights as a fraction of screen height (round-2 ref-5):
+     * default leaves the player visible above (~28% of the screen);
+     * expanded is the drag-up state.
+     */
+    defaultHeightRatio: 0.72,
+    expandedHeightRatio: 0.92,
+    /** Drag distance (dp) past which a release snaps open/closed. */
+    dragSnapThreshold: 90,
+  },
+  /** Search channel-result block (round-2 ref-3 / §3). */
+  searchChannel: {
+    headerHeight: 56,
+    pillHeight: 48,
+    avatarSize: 88,
+    nameFontSize: 20,
+    buttonHeight: 44,
+    buttonGap: 12,
+    tint: '#E8EEF2', // pale blue-grey; mirrors lightColors.searchTint
   },
 } as const;
 
