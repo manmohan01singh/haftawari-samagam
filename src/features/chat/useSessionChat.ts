@@ -264,27 +264,46 @@ export function useSessionChat(
   }, []);
 
   /** Resolve and cache author names for any not-yet-known user ids. */
-  const resolveAuthors = useCallback(async (userIds: string[]) => {
-    const missing = userIds.filter(
-      (id) => !(id in authorsRef.current) && !(id in (authorNamesRef.current ?? {})),
-    );
-    if (missing.length === 0) return;
-    try {
-      const found = await chatService.fetchAuthors(missing);
-      setAuthors((prev) => {
-        const next = { ...prev };
-        for (const id of missing) {
-          // Only cache ids the query actually answered for; the rest
-          // stay unknown (and are retried if the caller gains access).
-          if (id in found) next[id] = found[id];
+  const resolveAuthors = useCallback(
+    async (userIds: string[]) => {
+      const missing = userIds.filter(
+        (id) => !(id in authorsRef.current) && !(id in (authorNamesRef.current ?? {})),
+      );
+      if (missing.length === 0) return;
+      try {
+        // Preferred source: the session_participant_names RPC
+        // (migration 0002) — it can name every participant of this
+        // session, which plain profile reads cannot (RLS limits
+        // members to their own row). When the RPC is unavailable or
+        // leaves ids unanswered, fall back to the direct profile read
+        // for the remainder (own row + anything admins may read).
+        let found: Record<string, string | null> = {};
+        try {
+          found = await chatService.fetchParticipantNames(sessionId, missing);
+        } catch {
+          found = {};
         }
-        return next;
-      });
-    } catch {
-      // Name resolution is best-effort: messages still render with the
-      // neutral fallback label. Never fabricate a name on failure.
-    }
-  }, []);
+        const unanswered = missing.filter((id) => !(id in found));
+        if (unanswered.length > 0) {
+          const fallback = await chatService.fetchAuthors(unanswered).catch(() => ({}));
+          found = { ...fallback, ...found };
+        }
+        setAuthors((prev) => {
+          const next = { ...prev };
+          for (const id of missing) {
+            // Only cache ids a query actually answered for; the rest
+            // stay unknown (and are retried if the caller gains access).
+            if (id in found) next[id] = found[id];
+          }
+          return next;
+        });
+      } catch {
+        // Name resolution is best-effort: messages still render with the
+        // neutral fallback label. Never fabricate a name on failure.
+      }
+    },
+    [sessionId],
+  );
 
   // ── Participant count from the roster (only when readable) ───────
   useEffect(() => {

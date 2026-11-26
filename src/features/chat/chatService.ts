@@ -141,6 +141,33 @@ export async function fetchAuthors(
   return map;
 }
 
+/**
+ * Display names of a session's participants via the
+ * `session_participant_names` RPC (migration 0002). The function is
+ * SECURITY DEFINER and returns names ONLY for participants of the
+ * session, and only when the caller is a participant or an admin —
+ * precisely the set of chat authors a reader may legitimately label.
+ * Throws when the RPC is unavailable (e.g. migration not applied yet)
+ * so callers can fall back to `fetchAuthors`.
+ */
+export async function fetchParticipantNames(
+  sessionId: string,
+  userIds: string[],
+): Promise<Record<string, string | null>> {
+  const wanted = new Set(Array.from(new Set(userIds)).filter(Boolean));
+  if (wanted.size === 0) return {};
+  const supabase = requireSupabase();
+  const { data, error } = await supabase.rpc('session_participant_names', {
+    p_session_id: sessionId,
+  });
+  if (error) throw error;
+  const map: Record<string, string | null> = {};
+  for (const row of (data ?? []) as { user_id: string; display_name: string | null }[]) {
+    if (wanted.has(row.user_id)) map[row.user_id] = row.display_name;
+  }
+  return map;
+}
+
 /** The caller's own profile row (always readable under RLS), or null. */
 export async function fetchOwnProfile(userId: string): Promise<Profile | null> {
   const supabase = requireSupabase();
