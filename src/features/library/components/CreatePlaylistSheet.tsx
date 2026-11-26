@@ -59,9 +59,15 @@ export function CreatePlaylistSheet({ visible, onCreate, onClose }: CreatePlayli
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
-      <Pressable style={styles.backdrop} onPress={handleClose}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <Pressable style={styles.sheet} onPress={() => undefined}>
+      <View style={styles.backdrop}>
+        <Pressable
+          style={styles.backdropFill}
+          onPress={handleClose}
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+        />
+        <KeyboardAvoidingView style={styles.sheetWrap} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={styles.sheet}>
             <View style={styles.handle} />
             <Text style={styles.heading}>New playlist</Text>
             <TextInput
@@ -113,15 +119,17 @@ export function CreatePlaylistSheet({ visible, onCreate, onClose }: CreatePlayli
                 <Text style={styles.createText}>{busy ? 'Creating…' : 'Create'}</Text>
               </Pressable>
             </View>
-          </Pressable>
+          </View>
         </KeyboardAvoidingView>
-      </Pressable>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  backdropFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  sheetWrap: { zIndex: 1 },
   sheet: {
     backgroundColor: lightColors.surface,
     borderTopLeftRadius: nativeApp.watchSheet.topRadius,
@@ -159,6 +167,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
     paddingVertical: 10,
+    minHeight: 44,
+    justifyContent: 'center',
     backgroundColor: lightColors.surfaceVariant,
   },
   cancelText: { fontSize: 14, fontWeight: '600', color: lightColors.text },
@@ -166,6 +176,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
     paddingVertical: 10,
+    minHeight: 44,
+    justifyContent: 'center',
     backgroundColor: lightColors.subscribeBackground,
   },
   createText: { fontSize: 14, fontWeight: '600', color: lightColors.subscribeText },

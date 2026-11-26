@@ -16,6 +16,7 @@ import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import { layout, lightColors, radii, spacing } from '../../theme';
+import { ICON_HIT_SLOP } from '../../lib/touch';
 import type { MainTabParamList } from '../../navigation/types';
 import {
   useCurrentUser,
@@ -128,16 +129,17 @@ export function LibraryScreen({ navigation }: Props) {
         <Pressable
           style={styles.accountsPill}
           onPress={() => navigation.navigate('Account')}
+          hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
           accessibilityRole="button"
         >
           <Text style={styles.accountsText}>Accounts</Text>
           <MaterialIcons name="keyboard-arrow-down" size={20} color={lightColors.text} />
         </Pressable>
         <View style={styles.headerActions}>
-          <Pressable onPress={() => navigation.navigate('Search')} hitSlop={8} accessibilityLabel="Search" accessibilityRole="button">
+          <Pressable onPress={() => navigation.navigate('Search')} hitSlop={ICON_HIT_SLOP} accessibilityLabel="Search" accessibilityRole="button">
             <MaterialIcons name="search" size={24} color={lightColors.text} />
           </Pressable>
-          <Pressable onPress={() => navigation.navigate('Settings')} hitSlop={8} accessibilityLabel="Settings" accessibilityRole="button">
+          <Pressable onPress={() => navigation.navigate('Settings')} hitSlop={ICON_HIT_SLOP} accessibilityLabel="Settings" accessibilityRole="button">
             <MaterialIcons name="settings" size={24} color={lightColors.text} />
           </Pressable>
         </View>
@@ -188,6 +190,7 @@ export function LibraryScreen({ navigation }: Props) {
               <Pressable
                 style={styles.adminLink}
                 onPress={() => navigation.navigate('Admin', { screen: 'AdminOverview' })}
+                hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
                 accessibilityRole="button"
               >
                 <MaterialIcons name="dashboard" size={18} color={lightColors.text} />
@@ -201,6 +204,13 @@ export function LibraryScreen({ navigation }: Props) {
             <Text style={styles.signInText}>
               Your history, saved samagams and playlists are kept with your account.
             </Text>
+            <Pressable
+              style={styles.signInButton}
+              onPress={() => navigation.navigate('SignIn')}
+              accessibilityRole="button"
+            >
+              <Text style={styles.signInButtonText}>Sign in</Text>
+            </Pressable>
           </View>
         )}
 
@@ -208,6 +218,7 @@ export function LibraryScreen({ navigation }: Props) {
         <Pressable
           style={styles.sectionHeadingRow}
           onPress={() => navigation.navigate('History')}
+          hitSlop={{ top: 8, bottom: 8, left: 0, right: 0 }}
           accessibilityRole="button"
         >
           <Text style={styles.sectionHeading}>History</Text>
@@ -239,13 +250,13 @@ export function LibraryScreen({ navigation }: Props) {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.chipsContent}
         >
-          <Pressable style={styles.chip} onPress={() => navigation.navigate('History')} accessibilityRole="button">
+          <Pressable style={styles.chip} onPress={() => navigation.navigate('History')} hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }} accessibilityRole="button">
             <Text style={styles.chipText}>Recent</Text>
           </Pressable>
-          <Pressable style={styles.chip} onPress={() => navigation.navigate('Saved')} accessibilityRole="button">
+          <Pressable style={styles.chip} onPress={() => navigation.navigate('Saved')} hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }} accessibilityRole="button">
             <Text style={styles.chipText}>Saved</Text>
           </Pressable>
-          <Pressable style={styles.chip} onPress={() => navigation.navigate('Playlists')} accessibilityRole="button">
+          <Pressable style={styles.chip} onPress={() => navigation.navigate('Playlists')} hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }} accessibilityRole="button">
             <Text style={styles.chipText}>Playlists</Text>
           </Pressable>
         </ScrollView>
@@ -271,7 +282,7 @@ export function LibraryScreen({ navigation }: Props) {
             </Pressable>
           ) : null}
           {summaries.data.length > playlistPreview.length ? (
-            <Pressable style={styles.viewAllRow} onPress={() => navigation.navigate('Playlists')} accessibilityRole="button">
+            <Pressable style={styles.viewAllRow} onPress={() => navigation.navigate('Playlists')} hitSlop={{ top: 4, bottom: 4, left: 0, right: 0 }} accessibilityRole="button">
               <Text style={styles.viewAllText}>View all playlists</Text>
               <MaterialIcons name="chevron-right" size={18} color={lightColors.textSecondary} />
             </Pressable>
@@ -282,6 +293,7 @@ export function LibraryScreen({ navigation }: Props) {
         <Pressable
           style={styles.sectionHeadingRow}
           onPress={() => navigation.navigate('Saved')}
+          hitSlop={{ top: 8, bottom: 8, left: 0, right: 0 }}
           accessibilityRole="button"
         >
           <Text style={styles.sectionHeading}>Saved</Text>
@@ -380,6 +392,16 @@ const styles = StyleSheet.create({
   signInBlock: { paddingHorizontal: spacing.lg, paddingTop: spacing.md },
   signInTitle: { fontSize: 20, fontWeight: '600', color: lightColors.text },
   signInText: { fontSize: 14, color: lightColors.textSecondary, marginTop: spacing.xs },
+  signInButton: {
+    alignSelf: 'flex-start',
+    marginTop: spacing.lg,
+    backgroundColor: lightColors.subscribeBackground,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.xl,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  signInButtonText: { fontSize: 15, fontWeight: '600', color: lightColors.subscribeText },
   sectionHeadingRow: {
     flexDirection: 'row',
     alignItems: 'center',

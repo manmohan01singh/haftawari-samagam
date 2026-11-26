@@ -47,11 +47,11 @@ export function SessionCard({ item, effectiveStatus, nowMs, onPress }: SessionCa
         ) : (
           <View style={[styles.thumbnail, styles.thumbnailEmpty]} />
         )}
-        <View style={styles.badgeWrap}>
+        <View style={styles.badgeWrap} pointerEvents="none">
           <SessionStatusBadge status={effectiveStatus} />
         </View>
         {effectiveStatus === 'completed' && video?.duration_seconds != null ? (
-          <View style={styles.durationBadge}>
+          <View style={styles.durationBadge} pointerEvents="none">
             <Text style={styles.durationText}>{formatDuration(video.duration_seconds)}</Text>
           </View>
         ) : null}

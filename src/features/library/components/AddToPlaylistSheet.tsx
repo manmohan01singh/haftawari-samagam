@@ -97,13 +97,20 @@ export function AddToPlaylistSheet({ visible, userId, videoId, onClose, onChange
   };
 
   return (
+    <>
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={() => undefined}>
+      <View style={styles.backdrop}>
+        <Pressable
+          style={styles.backdropFill}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+        />
+        <View style={styles.sheet}>
           <View style={styles.handle} />
           <View style={styles.headerRow}>
             <Text style={styles.heading}>Save to playlist</Text>
-            <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button" accessibilityLabel="Close">
+            <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close">
               <MaterialIcons name="close" size={24} color={lightColors.text} />
             </Pressable>
           </View>
@@ -157,20 +164,23 @@ export function AddToPlaylistSheet({ visible, userId, videoId, onClose, onChange
               )}
             />
           )}
-        </Pressable>
-      </Pressable>
-      <CreatePlaylistSheet
-        visible={createOpen}
-        onCreate={handleCreate}
-        onClose={() => setCreateOpen(false)}
-      />
+        </View>
+      </View>
     </Modal>
+    <CreatePlaylistSheet
+      visible={createOpen}
+      onCreate={handleCreate}
+      onClose={() => setCreateOpen(false)}
+    />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  backdropFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   sheet: {
+    zIndex: 1,
     backgroundColor: lightColors.surface,
     borderTopLeftRadius: nativeApp.watchSheet.topRadius,
     borderTopRightRadius: nativeApp.watchSheet.topRadius,

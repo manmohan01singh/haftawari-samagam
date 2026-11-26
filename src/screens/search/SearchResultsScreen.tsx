@@ -13,6 +13,9 @@ import {
   type CardVideoData,
 } from '../../components/video/cardData';
 import { useOfficialChannel } from '../../features/channel';
+import { Toast, useToast } from '../../components/common/Toast';
+import { shareContent, shareFeedback } from '../../lib/share';
+import { OFFICIAL_CHANNEL_ID } from '../../lib/youtube';
 import {
   createSearchController,
   type SearchResults,
@@ -41,6 +44,8 @@ function searchResultCardData(v: VideoResult, channelAvatarUrl: string | null): 
     metaLine:
       v.liveBroadcastContent === 'live' ? 'Live now' : formatDateLine(v.publishedAt),
     channelAvatarUrl,
+    youtubeVideoId: v.youtubeVideoId,
+    channelId: OFFICIAL_CHANNEL_ID,
   };
 }
 
@@ -70,6 +75,16 @@ export function SearchResultsScreen({ route, navigation }: Props) {
     error: string | null;
   } | null>(null);
   const [latest, setLatest] = useState<YouTubeVideoMetadata[]>([]);
+  const { toast, showToast } = useToast();
+  const shareVideo = useCallback(
+    (title: string, youtubeVideoId: string) => {
+      void shareContent(title, `https://www.youtube.com/watch?v=${youtubeVideoId}`).then((outcome) => {
+        const feedback = shareFeedback(outcome);
+        if (feedback) showToast(feedback);
+      });
+    },
+    [showToast],
+  );
   const loading = result?.query !== query;
   const error = result?.query === query ? result.error : null;
   const data = result?.query === query ? result.data : null;
@@ -130,6 +145,14 @@ export function SearchResultsScreen({ route, navigation }: Props) {
         <ShelfCard
           data={cardData}
           showAvatar={item.liveBroadcastContent === 'live'}
+          menuActions={[
+            {
+              key: 'share',
+              label: 'Share',
+              icon: 'share',
+              onPress: () => shareVideo(item.title, item.youtubeVideoId),
+            },
+          ]}
           onPress={() =>
             item.videoRowId
               ? navigation.navigate('Watch', { videoRowId: item.videoRowId })
@@ -138,7 +161,7 @@ export function SearchResultsScreen({ route, navigation }: Props) {
         />
       );
     },
-    [channel, navigation],
+    [channel, navigation, shareVideo],
   );
 
   const keyExtractor = useCallback(
@@ -200,6 +223,14 @@ export function SearchResultsScreen({ route, navigation }: Props) {
                   <ShelfCard
                     data={data}
                     showAvatar={item.liveBroadcastContent === 'live'}
+                    menuActions={[
+                      {
+                        key: 'share',
+                        label: 'Share',
+                        icon: 'share',
+                        onPress: () => shareVideo(item.title, item.youtubeVideoId),
+                      },
+                    ]}
                     onPress={() => navigation.navigate('Watch', { youtubeVideoId: item.youtubeVideoId })}
                   />
                 </View>
@@ -253,6 +284,7 @@ export function SearchResultsScreen({ route, navigation }: Props) {
           windowSize={7}
         />
       )}
+      <Toast message={toast} />
     </View>
   );
 }
@@ -302,6 +334,8 @@ const styles = StyleSheet.create({
     borderColor: lightColors.border,
     borderRadius: radii.pill,
     paddingVertical: 11,
+    minHeight: 44,
+    justifyContent: 'center',
     alignItems: 'center',
   },
   viewChannelText: { fontSize: 15, fontWeight: '600', color: lightColors.text },

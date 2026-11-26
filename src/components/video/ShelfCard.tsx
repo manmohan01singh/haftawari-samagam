@@ -5,6 +5,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { layout, lightColors, radii, spacing } from '../../theme';
 import { formatDuration } from './VideoCard';
 import type { CardVideoData } from './cardData';
+import { CardActionSheet, type CardMenuAction } from '../common/CardActionSheet';
+import { SMALL_ICON_HIT_SLOP } from '../../lib/touch';
 
 interface ShelfCardProps {
   data: CardVideoData;
@@ -15,6 +17,8 @@ interface ShelfCardProps {
    * the title when the item is a live broadcast.
    */
   showAvatar?: boolean;
+  /** Real actions for the ⋮ kebab menu (QA 31). Without them no kebab is rendered — a decorative ⋮ that opens the video is the bug being fixed. */
+  menuActions?: CardMenuAction[];
 }
 
 /**
@@ -23,9 +27,11 @@ interface ShelfCardProps {
  * a 2-line semibold title with ••• at its right, then grey channel and
  * metadata lines. Used by Subscriptions, Search, Channel and Library.
  */
-export const ShelfCard = memo(function ShelfCard({ data, onPress, showAvatar = false }: ShelfCardProps) {
+export const ShelfCard = memo(function ShelfCard({ data, onPress, showAvatar = false, menuActions }: ShelfCardProps) {
   const isLive = data.broadcastState === 'live';
+  const [menuOpen, setMenuOpen] = React.useState(false);
   return (
+    <>
     <Pressable onPress={onPress} style={styles.card} accessibilityRole="button">
       <View style={styles.thumbnailWrap}>
         {data.thumbnailUrl ? (
@@ -35,17 +41,18 @@ export const ShelfCard = memo(function ShelfCard({ data, onPress, showAvatar = f
             contentFit="cover"
             cachePolicy="memory-disk"
             transition={150}
+            pointerEvents="none"
           />
         ) : (
           <View style={[styles.thumbnail, styles.thumbnailEmpty]} />
         )}
         {isLive ? (
-          <View style={styles.liveBadge}>
+          <View style={styles.liveBadge} pointerEvents="none">
             <MaterialIcons name="sensors" size={14} color="#FFFFFF" />
             <Text style={styles.liveText}>LIVE</Text>
           </View>
         ) : data.durationSeconds != null ? (
-          <View style={styles.durationBadge}>
+          <View style={styles.durationBadge} pointerEvents="none">
             <Text style={styles.durationText}>{formatDuration(data.durationSeconds)}</Text>
           </View>
         ) : null}
@@ -66,7 +73,7 @@ export const ShelfCard = memo(function ShelfCard({ data, onPress, showAvatar = f
               </View>
             )}
             {isLive ? (
-              <View style={styles.avatarLivePill}>
+              <View style={styles.avatarLivePill} pointerEvents="none">
                 <Text style={styles.avatarLiveText}>LIVE</Text>
               </View>
             ) : null}
@@ -77,7 +84,17 @@ export const ShelfCard = memo(function ShelfCard({ data, onPress, showAvatar = f
             <Text style={styles.title} numberOfLines={2}>
               {data.title}
             </Text>
-            <MaterialIcons name="more-horiz" size={20} color={lightColors.text} style={styles.moreIcon} />
+            {menuActions && menuActions.length > 0 ? (
+              <Pressable
+                onPress={() => setMenuOpen(true)}
+                hitSlop={SMALL_ICON_HIT_SLOP}
+                accessibilityRole="button"
+                accessibilityLabel="More actions"
+                style={styles.moreButton}
+              >
+                <MaterialIcons name="more-horiz" size={20} color={lightColors.text} />
+              </Pressable>
+            ) : null}
           </View>
           <Text style={styles.channel} numberOfLines={1}>
             {data.channelLine}
@@ -90,6 +107,10 @@ export const ShelfCard = memo(function ShelfCard({ data, onPress, showAvatar = f
         </View>
       </View>
     </Pressable>
+    {menuActions && menuActions.length > 0 ? (
+      <CardActionSheet visible={menuOpen} onClose={() => setMenuOpen(false)} actions={menuActions} />
+    ) : null}
+    </>
   );
 });
 
@@ -149,7 +170,7 @@ const styles = StyleSheet.create({
   lines: { flex: 1 },
   titleRow: { flexDirection: 'row', alignItems: 'flex-start' },
   title: { flex: 1, fontSize: 16, lineHeight: 22, fontWeight: '600', color: lightColors.text },
-  moreIcon: { marginLeft: spacing.sm, marginTop: 1 },
+  moreButton: { marginLeft: spacing.sm, marginTop: 1, minWidth: 32, minHeight: 32, alignItems: 'center', justifyContent: 'center' },
   channel: { fontSize: 13, color: lightColors.textSecondary, marginTop: 3 },
   meta: { fontSize: 13, color: lightColors.textSecondary, marginTop: 1 },
 });

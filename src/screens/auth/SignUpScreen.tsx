@@ -171,7 +171,7 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: { opacity: 0.5 },
   primaryButtonText: { fontSize: 16, fontWeight: '600', color: lightColors.subscribeText },
-  switchRow: { alignItems: 'center', marginTop: spacing.xl },
+  switchRow: { alignItems: 'center', marginTop: spacing.xl, paddingVertical: spacing.md, minHeight: 44, justifyContent: 'center' },
   switchText: { ...typography.body, color: lightColors.textSecondary },
   switchStrong: { color: lightColors.text, fontWeight: '600' },
 });

@@ -1,12 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppHeader } from '../../components/layout/AppHeader';
-import { SecondaryTabs } from '../../components/layout/SecondaryTabs';
 import { ChipsRow } from '../../components/layout/ChipsRow';
+import { Toast, useToast } from '../../components/common/Toast';
+import { AddToPlaylistSheet } from '../../features/library';
+import { shareContent, shareFeedback } from '../../lib/share';
+import { OFFICIAL_CHANNEL_ID } from '../../lib/youtube';
 import { EmptyState } from '../../components/common/EmptyState';
 import { FeedCard } from '../../components/video/FeedCard';
 import { SkeletonCard } from '../../components/video/SkeletonCard';
@@ -51,6 +54,8 @@ export function HomeScreen({ navigation }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exhausted, setExhausted] = useState(false);
+  const [playlistVideoId, setPlaylistVideoId] = useState<string | null>(null);
+  const { toast, showToast } = useToast();
   const loadingRef = useRef(false);
 
   const loadPage = useCallback(async (offset: number): Promise<Video[]> => {
@@ -132,6 +137,16 @@ export function HomeScreen({ navigation }: Props) {
 
   const avatarUrl = channel?.avatarUrl ?? null;
 
+  const shareVideo = useCallback(
+    (title: string, youtubeVideoId: string) => {
+      void shareContent(title, `https://www.youtube.com/watch?v=${youtubeVideoId}`).then((outcome) => {
+        const feedback = shareFeedback(outcome);
+        if (feedback) showToast(feedback);
+      });
+    },
+    [showToast],
+  );
+
   const renderItem = useCallback(
     ({ item }: { item: Video }) => {
       const data: CardVideoData = supabaseCardData(item, avatarUrl);
@@ -162,15 +177,54 @@ export function HomeScreen({ navigation }: Props) {
                 }
               : undefined
           }
-          onShare={() => {
-            void Share.share({
-              message: `${item.title} — https://www.youtube.com/watch?v=${item.youtube_video_id}`,
-            });
-          }}
+          onShare={() => shareVideo(item.title, item.youtube_video_id)}
+          onChannelPress={() =>
+            navigation.navigate('Channel', { channelId: channel?.channelId ?? OFFICIAL_CHANNEL_ID })
+          }
+          menuActions={[
+            {
+              key: 'share',
+              label: 'Share',
+              icon: 'share',
+              onPress: () => shareVideo(item.title, item.youtube_video_id),
+            },
+            ...(user
+              ? [
+                  {
+                    key: 'save-toggle',
+                    label: savedIds.has(item.id) ? 'Remove from Saved' : 'Save to Saved',
+                    icon: savedIds.has(item.id) ? 'bookmark' : 'bookmark-border',
+                    onPress: () => {
+                      const next = !savedIds.has(item.id);
+                      setSavedIds((prev) => {
+                        const copy = new Set(prev);
+                        if (next) copy.add(item.id);
+                        else copy.delete(item.id);
+                        return copy;
+                      });
+                      void setVideoSaved(user.id, item.id, next).catch(() => {
+                        setSavedIds((prev) => {
+                          const copy = new Set(prev);
+                          if (next) copy.delete(item.id);
+                          else copy.add(item.id);
+                          return copy;
+                        });
+                      });
+                    },
+                  },
+                  {
+                    key: 'playlist',
+                    label: 'Save to playlist',
+                    icon: 'playlist-add',
+                    onPress: () => setPlaylistVideoId(item.id),
+                  },
+                ]
+              : []),
+          ]}
         />
       );
     },
-    [avatarUrl, navigation, savedIds, user],
+    [avatarUrl, channel, navigation, savedIds, shareVideo, user],
   );
 
   const keyExtractor = useCallback((item: Video) => item.id, []);
@@ -184,16 +238,10 @@ export function HomeScreen({ navigation }: Props) {
         onAccountPress={() => navigation.navigate('Account')}
         avatarInitial={initial}
       />
-      <SecondaryTabs
-        items={[
-          { key: 'home', label: 'Home' },
-          { key: 'subs', label: 'Subs' },
-        ]}
-        selectedKey="home"
-        onSelect={(key) => {
-          if (key === 'subs') navigation.navigate('Subscriptions');
-        }}
-      />
+      {/* QA44: the Home/Subs SecondaryTabs duplicated the bottom nav
+          exactly (same two destinations, no distinction), so the row
+          was removed from Home/Subscriptions. Category chips below are
+          filters, not navigation, and stay. */}
       {categories.length > 0 ? (
         <ChipsRow
           chips={[ALL_CHIP, ...categories.map((c) => c.name)]}
@@ -260,6 +308,13 @@ export function HomeScreen({ navigation }: Props) {
         />
       )}
       {error && videos.length > 0 ? <Text style={styles.inlineError}>{error}</Text> : null}
+      <AddToPlaylistSheet
+        visible={playlistVideoId != null}
+        userId={user?.id ?? null}
+        videoId={playlistVideoId}
+        onClose={() => setPlaylistVideoId(null)}
+      />
+      <Toast message={toast} />
     </View>
   );
 }

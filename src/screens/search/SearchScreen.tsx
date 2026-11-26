@@ -13,6 +13,8 @@ import {
   type Suggestion,
 } from '../../features/search';
 import type { RootStackParamList } from '../../navigation/types';
+import { SMALL_ICON_HIT_SLOP } from '../../lib/touch';
+import { ConfirmModal } from '../../features/library/components/ConfirmModal';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Search'>;
 
@@ -33,6 +35,16 @@ export function SearchScreen({ navigation }: Props) {
   const [query, setQuery] = useState('');
   const [history, setHistory] = useState<string[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  // QA45: destructive history actions get safeguards — Clear-all asks
+  // first (ConfirmModal), and a single remove can be undone.
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [lastRemoved, setLastRemoved] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!lastRemoved) return;
+    const t = setTimeout(() => setLastRemoved(null), 5000);
+    return () => clearTimeout(t);
+  }, [lastRemoved]);
   const suggestSeq = useRef(0);
 
   // Load this user's recent searches (guest bucket when signed out).
@@ -77,12 +89,21 @@ export function SearchScreen({ navigation }: Props) {
 
   const onRemoveHistory = useCallback(
     (entry: string) => {
+      setLastRemoved(entry);
       void removeSearchHistory(entry, userId).then(setHistory).catch(() => undefined);
     },
     [userId],
   );
 
+  const onUndoRemove = useCallback(() => {
+    if (!lastRemoved) return;
+    const entry = lastRemoved;
+    setLastRemoved(null);
+    void addSearchHistory(entry, userId).then(setHistory).catch(() => undefined);
+  }, [lastRemoved, userId]);
+
   const onClearHistory = useCallback(() => {
+    setConfirmClear(false);
     void clearSearchHistory(userId)
       .then(() => setHistory([]))
       .catch(() => undefined);
@@ -110,11 +131,20 @@ export function SearchScreen({ navigation }: Props) {
             autoFocus
           />
           {query ? (
-            <Pressable onPress={() => setQuery('')} hitSlop={8} accessibilityLabel="Clear search">
+            <Pressable onPress={() => setQuery('')} hitSlop={SMALL_ICON_HIT_SLOP} accessibilityLabel="Clear search" accessibilityRole="button">
               <MaterialIcons name="close" size={20} color={lightColors.text} />
             </Pressable>
           ) : null}
         </View>
+        {/* QA41: a visible submit affordance — search must not be Enter-only. */}
+        <Pressable
+          style={styles.submitButton}
+          onPress={() => submit()}
+          accessibilityLabel="Search"
+          accessibilityRole="button"
+        >
+          <MaterialIcons name="search" size={22} color={lightColors.subscribeText} />
+        </Pressable>
       </View>
 
       {showHistory ? (
@@ -136,7 +166,7 @@ export function SearchScreen({ navigation }: Props) {
               </Pressable>
               <Pressable
                 onPress={() => onRemoveHistory(item)}
-                hitSlop={8}
+                hitSlop={SMALL_ICON_HIT_SLOP}
                 accessibilityLabel={`Remove "${item}" from search history`}
               >
                 <MaterialIcons name="close" size={20} color={lightColors.textSecondary} />
@@ -144,7 +174,7 @@ export function SearchScreen({ navigation }: Props) {
             </View>
           )}
           ListFooterComponent={
-            <Pressable onPress={onClearHistory} style={styles.clearRow} accessibilityRole="button">
+            <Pressable onPress={() => setConfirmClear(true)} style={styles.clearRow} accessibilityRole="button">
               <Text style={styles.clearText}>Clear all search history</Text>
             </Pressable>
           }
@@ -176,6 +206,26 @@ export function SearchScreen({ navigation }: Props) {
           Search the published archive and the official channel of Bhai Gursharan Singh Ji.
         </Text>
       )}
+
+      {lastRemoved ? (
+        <View style={styles.undoBar}>
+          <Text style={styles.undoText} numberOfLines={1}>
+            Removed “{lastRemoved}”
+          </Text>
+          <Pressable onPress={onUndoRemove} hitSlop={8} accessibilityRole="button">
+            <Text style={styles.undoAction}>Undo</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      <ConfirmModal
+        visible={confirmClear}
+        title="Clear all search history?"
+        message="This removes every recent search saved on this device. This cannot be undone."
+        confirmLabel="Clear all"
+        onConfirm={onClearHistory}
+        onCancel={() => setConfirmClear(false)}
+      />
     </View>
   );
 }
@@ -217,4 +267,27 @@ const styles = StyleSheet.create({
   rowText: { ...typography.body, fontSize: 16, color: lightColors.text, flex: 1 },
   clearRow: { paddingHorizontal: spacing.lg, paddingVertical: spacing.lg },
   clearText: { ...typography.body, fontWeight: '600', color: lightColors.text },
+  submitButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: lightColors.subscribeBackground,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  undoBar: {
+    position: 'absolute',
+    left: spacing.lg,
+    right: spacing.lg,
+    bottom: spacing.xl,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: lightColors.text,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  undoText: { flex: 1, color: lightColors.subscribeText, fontSize: 14 },
+  undoAction: { color: '#8AB4F8', fontSize: 14, fontWeight: '700' },
 });

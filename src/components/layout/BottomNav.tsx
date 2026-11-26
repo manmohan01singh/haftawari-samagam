@@ -10,7 +10,7 @@ export interface BottomNavItem {
   label: string;
   /** MaterialIcons glyph name for icon slots. */
   icon?: string;
-  /** 'create' renders the circled + ; 'avatar' renders the profile slot. */
+  /** 'channel' renders the circled play glyph (QA43: the slot opens the official channel — a '+' falsely promised Create/upload); 'avatar' renders the profile slot. */
   kind?: 'icon' | 'create' | 'avatar';
   avatarUrl?: string | null;
   avatarInitial?: string | null;
@@ -45,7 +45,7 @@ export const BottomNav = memo(function BottomNav({ items, activeKey, onPress }: 
           >
             {item.kind === 'create' ? (
               <View style={styles.createCircle}>
-                <MaterialIcons name="add" size={22} color={lightColors.text} />
+                <MaterialIcons name="play-arrow" size={22} color={lightColors.text} />
               </View>
             ) : item.kind === 'avatar' ? (
               item.avatarUrl ? (
@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: lightColors.border,
   },
-  item: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  item: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   createCircle: {
     width: 34,
     height: 34,

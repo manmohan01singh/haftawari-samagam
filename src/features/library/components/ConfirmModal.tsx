@@ -30,8 +30,14 @@ export function ConfirmModal({
 }: ConfirmModalProps) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
-      <Pressable style={styles.backdrop} onPress={onCancel}>
-        <Pressable style={styles.card} onPress={() => undefined}>
+      <View style={styles.backdrop}>
+        <Pressable
+          style={styles.backdropFill}
+          onPress={onCancel}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss"
+        />
+        <View style={styles.card}>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.message}>{message}</Text>
           <View style={styles.actions}>
@@ -47,8 +53,8 @@ export function ConfirmModal({
               <Text style={styles.confirmText}>{busy ? 'Working…' : confirmLabel}</Text>
             </Pressable>
           </View>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
@@ -62,6 +68,7 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
   },
   card: {
+    zIndex: 1,
     width: '100%',
     maxWidth: 400,
     backgroundColor: lightColors.surface,
@@ -75,13 +82,18 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
     paddingVertical: 10,
+    minHeight: 44,
+    justifyContent: 'center',
     backgroundColor: lightColors.surfaceVariant,
   },
+  backdropFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   cancelText: { fontSize: 14, fontWeight: '600', color: lightColors.text },
   confirmButton: {
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
     paddingVertical: 10,
+    minHeight: 44,
+    justifyContent: 'center',
     backgroundColor: lightColors.accent,
   },
   confirmText: { fontSize: 14, fontWeight: '600', color: lightColors.onAccent },

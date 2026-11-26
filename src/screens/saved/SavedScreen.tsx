@@ -88,6 +88,8 @@ export function SavedScreen({ navigation }: Props) {
         <ScreenMessage
           title="Sign in to see your saved recordings"
           message="Saved recordings are kept with your account, so only you can see them."
+          actionLabel="Sign in"
+          onAction={() => navigation.navigate('SignIn')}
         />
       ) : saved.loading && saved.data.length === 0 ? (
         <ScreenLoading label="Loading your saved recordings…" />

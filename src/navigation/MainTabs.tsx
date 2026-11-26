@@ -10,18 +10,18 @@ import type { MainTabParamList, RootStackParamList } from './types';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
-/** Pseudo-key for the circled + slot — an action, not a tab route. */
+/** Pseudo-key for the centre slot — an action, not a tab route. QA43: it opens the official channel, so it renders a circled play glyph, not a misleading '+'. */
 const CREATE_KEY = '__create';
 
 /**
  * Main tabs under the app-owned BottomNav: 4 icon-only slots —
- * Home · Subscriptions · circled + · profile avatar (the Library/"You"
- * tab). NO Shorts slot (user decision, 26 Nov 2026).
+ * Home · Subscriptions · centre channel slot · profile avatar (the
+ * Library/"You" tab). NO Shorts slot (user decision, 26 Nov 2026).
  *
- * The circled + is retained from the reference geometry; this app has
- * no user uploads, so in Haftawari Samagam it opens the official
- * channel — the app's content home. Documented divergence, see
- * docs/ARCHITECTURE.md Phase 2 notes.
+ * The centre slot keeps the reference geometry (circled glyph) but
+ * shows a play glyph instead of '+' (QA43): this app has no user
+ * uploads, and the slot opens the official channel — the app's
+ * content home. Its accessibility label is "Official channel".
  */
 export function MainTabs() {
   const { user, profile } = useAuth();

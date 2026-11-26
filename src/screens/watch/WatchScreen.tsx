@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   FlatList,
   Pressable,
-  Share,
   StyleSheet,
   Text,
   View,
@@ -12,6 +11,9 @@ import { Image } from 'expo-image';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { EmptyState } from '../../components/common/EmptyState';
+import { LinkedText } from '../../components/common/LinkedText';
+import { Toast, useToast } from '../../components/common/Toast';
+import { shareContent, shareFeedback } from '../../lib/share';
 import { FeedCard } from '../../components/video/FeedCard';
 import { YouTubePlayer } from '../../components/video/YouTubePlayer';
 import { supabaseCardData, formatDateLine, type CardVideoData } from '../../components/video/cardData';
@@ -34,6 +36,7 @@ import {
   setVideoSaved,
 } from '../../lib/videos';
 import { layout, lightColors, nativeApp, radii, spacing } from '../../theme';
+import { ICON_HIT_SLOP } from '../../lib/touch';
 import type { Video } from '../../types/database';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -84,6 +87,7 @@ export function WatchScreen({ route, navigation }: Props) {
   const playerReady = resolved != null && readyFor === resolved.youtubeVideoId;
   const [savedState, setSavedState] = useState<{ rowId: string; saved: boolean } | null>(null);
   const [playlistSheetOpen, setPlaylistSheetOpen] = useState(false);
+  const { toast, showToast } = useToast();
   const saved =
     resolved?.row && savedState?.rowId === resolved.row.id ? savedState.saved : false;
   const historyRecordedFor = useRef<string | null>(null);
@@ -212,10 +216,14 @@ export function WatchScreen({ route, navigation }: Props) {
 
   const onShare = useCallback(() => {
     if (!resolved) return;
-    void Share.share({
-      message: `${resolved.title} — https://www.youtube.com/watch?v=${resolved.youtubeVideoId}`,
+    void shareContent(
+      resolved.title,
+      `https://www.youtube.com/watch?v=${resolved.youtubeVideoId}`,
+    ).then((outcome) => {
+      const feedback = shareFeedback(outcome);
+      if (feedback) showToast(feedback);
     });
-  }, [resolved]);
+  }, [resolved, showToast]);
 
   const onToggleSave = useCallback(() => {
     if (!user || !resolved?.row) return;
@@ -230,22 +238,42 @@ export function WatchScreen({ route, navigation }: Props) {
   const renderUpNext = useCallback(
     ({ item }: { item: Video }) => {
       const data: CardVideoData = supabaseCardData(item, officialChannel?.avatarUrl ?? null);
+      const shareItem = () => {
+        void shareContent(item.title, `https://www.youtube.com/watch?v=${item.youtube_video_id}`).then(
+          (outcome) => {
+            const feedback = shareFeedback(outcome);
+            if (feedback) showToast(feedback);
+          },
+        );
+      };
       return (
         <FeedCard
           data={data}
           onPress={() => navigation.push('Watch', { videoRowId: item.id })}
-          onShare={() => {
-            void Share.share({
-              message: `${item.title} — https://www.youtube.com/watch?v=${item.youtube_video_id}`,
-            });
-          }}
+          onShare={shareItem}
+          onChannelPress={() =>
+            navigation.navigate('Channel', { channelId: officialChannel?.channelId })
+          }
+          menuActions={[
+            { key: 'share', label: 'Share', icon: 'share', onPress: shareItem },
+          ]}
         />
       );
     },
-    [navigation, officialChannel],
+    [navigation, officialChannel, showToast],
   );
 
   const keyExtractor = useCallback((item: Video) => item.id, []);
+
+  // QA26: Watch had NO back affordance at all — the browser Back button
+  // exits the SPA, stranding phone users. A 44px back target floats over
+  // the player's top-left (the player itself keeps the reference look);
+  // it is rendered on the loading, error and loaded states alike.
+  const goBack = useCallback(() => {
+    if (navigation.canGoBack()) navigation.goBack();
+    else navigation.navigate('MainTabs', { screen: 'Home' });
+  }, [navigation]);
+  const backButton = <PlayerBackButton onPress={goBack} />;
 
   const header = useMemo(() => {
     if (!resolved) return null;
@@ -254,6 +282,7 @@ export function WatchScreen({ route, navigation }: Props) {
     return (
       <View>
         <View style={styles.playerWrap}>
+          <PlayerBackButton onPress={goBack} />
           {playerReady ? (
             <YouTubePlayer youtubeVideoId={resolved.youtubeVideoId} />
           ) : (
@@ -268,7 +297,7 @@ export function WatchScreen({ route, navigation }: Props) {
               ) : (
                 <View style={styles.playerThumb} />
               )}
-              <View style={styles.playerSpinner}>
+              <View style={styles.playerSpinner} pointerEvents="none">
                 <ActivityIndicator color="#FFFFFF" />
               </View>
             </>
@@ -278,7 +307,12 @@ export function WatchScreen({ route, navigation }: Props) {
           <Text style={styles.title} numberOfLines={expanded ? undefined : 2}>
             {resolved.title}
           </Text>
-          <Pressable onPress={() => setExpanded((v) => !v)}>
+          <Pressable
+            onPress={() => setExpanded((v) => !v)}
+            hitSlop={{ top: 10, bottom: 10, left: 0, right: 0 }}
+            accessibilityRole="button"
+            accessibilityLabel={expanded ? 'Show less' : 'Show more'}
+          >
             <Text style={styles.metaLine} numberOfLines={1}>
               {channel?.handle ?? ''} {resolved.metaLine ? ` · ${resolved.metaLine}` : ''}{' '}
               <Text style={styles.moreText}>{expanded ? 'less' : 'more'}</Text>
@@ -309,21 +343,29 @@ export function WatchScreen({ route, navigation }: Props) {
               ) : null}
             </View>
             <View style={styles.actions}>
-              {resolved.row && user ? (
-                <Pressable onPress={onToggleSave} hitSlop={8} accessibilityLabel={saved ? 'Remove from saved' : 'Save'}>
+              {resolved.row ? (
+                <Pressable
+                  onPress={user ? onToggleSave : () => navigation.navigate('SignIn')}
+                  hitSlop={ICON_HIT_SLOP}
+                  accessibilityLabel={saved ? 'Remove from saved' : 'Save'}
+                  accessibilityRole="button"
+                >
                   <MaterialIcons name={saved ? 'bookmark' : 'bookmark-border'} size={24} color={lightColors.text} />
                 </Pressable>
               ) : null}
-              {resolved.row && user ? (
+              {resolved.row ? (
                 <Pressable
-                  onPress={() => setPlaylistSheetOpen(true)}
-                  hitSlop={8}
+                  onPress={
+                    user ? () => setPlaylistSheetOpen(true) : () => navigation.navigate('SignIn')
+                  }
+                  hitSlop={ICON_HIT_SLOP}
                   accessibilityLabel="Save to playlist"
+                  accessibilityRole="button"
                 >
                   <MaterialIcons name="playlist-add" size={26} color={lightColors.text} />
                 </Pressable>
               ) : null}
-              <Pressable onPress={onShare} hitSlop={8} accessibilityLabel="Share">
+              <Pressable onPress={onShare} hitSlop={ICON_HIT_SLOP} accessibilityLabel="Share" accessibilityRole="button">
                 <MaterialIcons name="share" size={23} color={lightColors.text} />
               </Pressable>
             </View>
@@ -338,17 +380,18 @@ export function WatchScreen({ route, navigation }: Props) {
 
           {expanded && resolved.description ? (
             <View style={styles.descriptionBox}>
-              <Text style={styles.descriptionText}>{resolved.description}</Text>
+              <LinkedText text={resolved.description} style={styles.descriptionText} />
             </View>
           ) : null}
         </View>
       </View>
     );
-  }, [resolved, channel, playerReady, expanded, user, saved, onToggleSave, onShare, navigation]);
+  }, [resolved, channel, playerReady, expanded, user, saved, onToggleSave, onShare, navigation, goBack]);
 
   if (loading) {
     return (
       <View style={styles.container}>
+        {backButton}
         <View style={styles.playerSkeleton} />
         <View style={styles.sheetSkeleton}>
           <View style={[styles.skelLine, { width: '85%' }]} />
@@ -361,6 +404,7 @@ export function WatchScreen({ route, navigation }: Props) {
   if (error || !resolved) {
     return (
       <View style={styles.container}>
+        {backButton}
         <EmptyState title="Recording unavailable" message={error ?? 'This recording could not be loaded.'} />
       </View>
     );
@@ -388,7 +432,23 @@ export function WatchScreen({ route, navigation }: Props) {
         videoId={resolved.row?.id ?? null}
         onClose={() => setPlaylistSheetOpen(false)}
       />
+      <Toast message={toast} />
     </View>
+  );
+}
+
+/** 44px floating back target overlaid on the player's top-left (QA26). */
+function PlayerBackButton({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable
+      style={styles.backButton}
+      onPress={onPress}
+      hitSlop={6}
+      accessibilityRole="button"
+      accessibilityLabel="Back"
+    >
+      <MaterialIcons name="arrow-back" size={24} color="#FFFFFF" />
+    </Pressable>
   );
 }
 
@@ -400,6 +460,18 @@ const styles = StyleSheet.create({
     backgroundColor: lightColors.playerBackground,
   },
   playerThumb: { width: '100%', height: '100%', backgroundColor: lightColors.playerBackground },
+  backButton: {
+    position: 'absolute',
+    top: spacing.sm,
+    left: spacing.sm,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   playerSpinner: {
     position: 'absolute',
     top: 0,
@@ -446,6 +518,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
     paddingVertical: 9,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   viewChannelText: { fontSize: 14, fontWeight: '600', color: lightColors.text },
   descriptionBox: {

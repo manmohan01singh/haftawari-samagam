@@ -122,6 +122,8 @@ export function HistoryScreen({ navigation }: Props) {
         <ScreenMessage
           title="Sign in to see your history"
           message="Watch history is kept with your account, so only you can see it."
+          actionLabel="Sign in"
+          onAction={() => navigation.navigate('SignIn')}
         />
       ) : history.loading && history.data.length === 0 ? (
         <ScreenLoading label="Loading your history…" />

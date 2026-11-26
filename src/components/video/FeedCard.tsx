@@ -4,7 +4,9 @@ import { Image } from 'expo-image';
 import { MaterialIcons } from '@expo/vector-icons';
 import { layout, lightColors, nativeApp, spacing } from '../../theme';
 import { formatDuration } from './VideoCard';
+import { ICON_HIT_SLOP } from '../../lib/touch';
 import type { CardVideoData } from './cardData';
+import { CardActionSheet, type CardMenuAction } from '../common/CardActionSheet';
 
 interface FeedCardProps {
   data: CardVideoData;
@@ -13,6 +15,10 @@ interface FeedCardProps {
   saved?: boolean;
   onToggleSave?: () => void;
   onShare?: () => void;
+  /** Tapping the channel avatar (QA 32) — real channel destination only. */
+  onChannelPress?: () => void;
+  /** Real actions for the ⋮ kebab menu (QA 31/32). Kebab renders only when provided. */
+  menuActions?: CardMenuAction[];
 }
 
 /**
@@ -27,9 +33,23 @@ interface FeedCardProps {
  * (saved_videos) and Share (system share sheet). Like/Comment have no
  * backend in the schema, so they are not shown as dead buttons.
  */
-export const FeedCard = memo(function FeedCard({ data, onPress, saved, onToggleSave, onShare }: FeedCardProps) {
+export const FeedCard = memo(function FeedCard({ data, onPress, saved, onToggleSave, onShare, onChannelPress, menuActions }: FeedCardProps) {
   const isLive = data.broadcastState === 'live';
+  const [menuOpen, setMenuOpen] = React.useState(false);
+  const avatar = data.channelAvatarUrl ? (
+    <Image
+      source={{ uri: data.channelAvatarUrl }}
+      style={styles.avatar}
+      contentFit="cover"
+      cachePolicy="memory-disk"
+    />
+  ) : (
+    <View style={[styles.avatar, styles.avatarFallback]}>
+      <Text style={styles.avatarInitial}>{data.channelLine.replace('@', '').charAt(0).toUpperCase()}</Text>
+    </View>
+  );
   return (
+    <>
     <Pressable onPress={onPress} style={styles.card} accessibilityRole="button">
       <View style={styles.thumbnailWrap}>
         {data.thumbnailUrl ? (
@@ -39,17 +59,18 @@ export const FeedCard = memo(function FeedCard({ data, onPress, saved, onToggleS
             contentFit="cover"
             cachePolicy="memory-disk"
             transition={150}
+            pointerEvents="none"
           />
         ) : (
           <View style={[styles.thumbnail, styles.thumbnailEmpty]} />
         )}
         {isLive ? (
-          <View style={styles.liveBadge}>
+          <View style={styles.liveBadge} pointerEvents="none">
             <MaterialIcons name="sensors" size={14} color="#FFFFFF" />
             <Text style={styles.liveText}>LIVE</Text>
           </View>
         ) : data.durationSeconds != null ? (
-          <View style={styles.durationBadge}>
+          <View style={styles.durationBadge} pointerEvents="none">
             <Text style={styles.durationText}>{formatDuration(data.durationSeconds)}</Text>
           </View>
         ) : null}
@@ -59,17 +80,17 @@ export const FeedCard = memo(function FeedCard({ data, onPress, saved, onToggleS
           {data.title}
         </Text>
         <View style={styles.row}>
-          {data.channelAvatarUrl ? (
-            <Image
-              source={{ uri: data.channelAvatarUrl }}
-              style={styles.avatar}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-            />
+          {onChannelPress ? (
+            <Pressable
+              onPress={onChannelPress}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel={`Open channel ${data.channelLine}`}
+            >
+              {avatar}
+            </Pressable>
           ) : (
-            <View style={[styles.avatar, styles.avatarFallback]}>
-              <Text style={styles.avatarInitial}>{data.channelLine.replace('@', '').charAt(0).toUpperCase()}</Text>
-            </View>
+            avatar
           )}
           <View style={styles.lines}>
             <Text style={styles.handle} numberOfLines={1}>
@@ -83,19 +104,33 @@ export const FeedCard = memo(function FeedCard({ data, onPress, saved, onToggleS
           </View>
           <View style={styles.engagement}>
             {onToggleSave ? (
-              <Pressable onPress={onToggleSave} hitSlop={8} accessibilityLabel={saved ? 'Remove from saved' : 'Save'}>
+              <Pressable onPress={onToggleSave} hitSlop={ICON_HIT_SLOP} accessibilityLabel={saved ? 'Remove from saved' : 'Save'} accessibilityRole="button">
                 <MaterialIcons name={saved ? 'bookmark' : 'bookmark-border'} size={24} color={lightColors.text} />
               </Pressable>
             ) : null}
             {onShare ? (
-              <Pressable onPress={onShare} hitSlop={8} accessibilityLabel="Share">
+              <Pressable onPress={onShare} hitSlop={ICON_HIT_SLOP} accessibilityLabel="Share" accessibilityRole="button">
                 <MaterialIcons name="share" size={22} color={lightColors.text} />
+              </Pressable>
+            ) : null}
+            {menuActions && menuActions.length > 0 ? (
+              <Pressable
+                onPress={() => setMenuOpen(true)}
+                hitSlop={ICON_HIT_SLOP}
+                accessibilityLabel="More actions"
+                accessibilityRole="button"
+              >
+                <MaterialIcons name="more-vert" size={24} color={lightColors.text} />
               </Pressable>
             ) : null}
           </View>
         </View>
       </View>
     </Pressable>
+    {menuActions && menuActions.length > 0 ? (
+      <CardActionSheet visible={menuOpen} onClose={() => setMenuOpen(false)} actions={menuActions} />
+    ) : null}
+    </>
   );
 });
 

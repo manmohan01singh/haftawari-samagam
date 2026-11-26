@@ -99,8 +99,8 @@ export function PlaylistsScreen({ navigation }: Props) {
                   ? 'Create your first playlist to group samagams together.'
                   : 'There are no public playlists yet. Sign in to create your own.'
               }
-              actionLabel={user ? 'Create a playlist' : undefined}
-              onAction={user ? () => setCreateOpen(true) : undefined}
+              actionLabel={user ? 'Create a playlist' : 'Sign in'}
+              onAction={user ? () => setCreateOpen(true) : () => navigation.navigate('SignIn')}
             />
           }
           removeClippedSubviews

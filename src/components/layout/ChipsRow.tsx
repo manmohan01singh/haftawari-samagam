@@ -12,13 +12,14 @@ interface ChipsRowProps {
 /** Horizontally scrolling category chips; the selected chip is inverted. */
 export function ChipsRow({ chips, selected, onSelect }: ChipsRowProps) {
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row} keyboardShouldPersistTaps="handled">
       {chips.map((chip) => {
         const isSelected = chip === selected;
         return (
           <Pressable
             key={chip}
             onPress={() => onSelect?.(chip)}
+            hitSlop={{ top: 6, bottom: 6, left: 2, right: 2 }}
             style={[styles.chip, isSelected && styles.chipSelected]}
             accessibilityRole="button"
             accessibilityState={{ selected: isSelected }}

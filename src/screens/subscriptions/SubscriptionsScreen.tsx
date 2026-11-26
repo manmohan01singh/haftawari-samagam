@@ -5,7 +5,8 @@ import type { CompositeScreenProps } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppHeader } from '../../components/layout/AppHeader';
-import { SecondaryTabs } from '../../components/layout/SecondaryTabs';
+import { Toast, useToast } from '../../components/common/Toast';
+import { shareContent, shareFeedback } from '../../lib/share';
 import { EmptyState } from '../../components/common/EmptyState';
 import { ShelfCard } from '../../components/video/ShelfCard';
 import { SkeletonCard } from '../../components/video/SkeletonCard';
@@ -42,6 +43,17 @@ export function SubscriptionsScreen({ navigation }: Props) {
   const [isLiveNow, setIsLiveNow] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { toast, showToast } = useToast();
+
+  const shareVideo = useCallback(
+    (title: string, youtubeVideoId: string) => {
+      void shareContent(title, `https://www.youtube.com/watch?v=${youtubeVideoId}`).then((outcome) => {
+        const feedback = shareFeedback(outcome);
+        if (feedback) showToast(feedback);
+      });
+    },
+    [showToast],
+  );
 
   useEffect(() => {
     if (!channel?.uploadsPlaylistId || !channel.channelId) return;
@@ -76,10 +88,18 @@ export function SubscriptionsScreen({ navigation }: Props) {
         <ShelfCard
           data={data}
           onPress={() => navigation.navigate('Watch', { youtubeVideoId: item.youtubeVideoId })}
+          menuActions={[
+            {
+              key: 'share',
+              label: 'Share',
+              icon: 'share',
+              onPress: () => shareVideo(item.title, item.youtubeVideoId),
+            },
+          ]}
         />
       );
     },
-    [channel, navigation],
+    [channel, navigation, shareVideo],
   );
 
   const keyExtractor = useCallback((item: YouTubeVideoMetadata) => item.youtubeVideoId, []);
@@ -92,16 +112,7 @@ export function SubscriptionsScreen({ navigation }: Props) {
         onAccountPress={() => navigation.navigate('Account')}
         avatarInitial={initial}
       />
-      <SecondaryTabs
-        items={[
-          { key: 'home', label: 'Home' },
-          { key: 'subs', label: 'Subs' },
-        ]}
-        selectedKey="subs"
-        onSelect={(key) => {
-          if (key === 'home') navigation.navigate('Home');
-        }}
-      />
+      {/* QA44: SecondaryTabs removed — it duplicated the bottom nav. */}
 
       {loading ? (
         <View style={styles.listPad}>
@@ -137,6 +148,7 @@ export function SubscriptionsScreen({ navigation }: Props) {
               onPress={() => navigation.navigate('Channel', { channelId: channel.channelId })}
               accessibilityRole="button"
               style={styles.railAll}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             >
               <Text style={styles.railAllText}>All</Text>
             </Pressable>
@@ -156,6 +168,14 @@ export function SubscriptionsScreen({ navigation }: Props) {
                   <ShelfCard
                     data={data}
                     onPress={() => navigation.navigate('Watch', { youtubeVideoId: item.youtubeVideoId })}
+                    menuActions={[
+                      {
+                        key: 'share',
+                        label: 'Share',
+                        icon: 'share',
+                        onPress: () => shareVideo(item.title, item.youtubeVideoId),
+                      },
+                    ]}
                   />
                 </View>
               );
@@ -176,6 +196,7 @@ export function SubscriptionsScreen({ navigation }: Props) {
           </View>
         </ScrollView>
       )}
+      <Toast message={toast} />
     </View>
   );
 }

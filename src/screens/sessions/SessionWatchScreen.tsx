@@ -12,6 +12,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { EmptyState } from '../../components/common/EmptyState';
 import { ChatPreviewCard, SessionChat } from '../../features/chat/components';
 import { joinPresence, leavePresence } from '../../features/presence/presenceService';
@@ -69,7 +70,7 @@ const DRIFT_TOLERANCE_SECONDS = 5;
  * "LIVE": it is a scheduled group playback of a recording, not a newly
  * originated live broadcast.
  */
-export function SessionWatchScreen({ route }: Props) {
+export function SessionWatchScreen({ route, navigation }: Props) {
   const { sessionId } = route.params;
   const { nowMs } = useServerClock();
 
@@ -301,6 +302,19 @@ export function SessionWatchScreen({ route }: Props) {
 
   return (
     <View style={styles.root}>
+      {/* QA26/27: floating back target — this screen had no way back at all. */}
+      <Pressable
+        style={styles.backButton}
+        onPress={() => {
+          if (navigation.canGoBack()) navigation.goBack();
+          else navigation.navigate('Sessions');
+        }}
+        hitSlop={6}
+        accessibilityRole="button"
+        accessibilityLabel="Back"
+      >
+        <MaterialIcons name="arrow-back" size={24} color="#FFFFFF" />
+      </Pressable>
       {/* Player area (pinned at top, per reference) */}
       <View style={styles.playerArea}>
         {showEmbed ? (
@@ -459,6 +473,18 @@ export function SessionWatchScreen({ route }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: lightColors.playerBackground },
+  backButton: {
+    position: 'absolute',
+    top: spacing.sm,
+    left: spacing.sm,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   center: {
     flex: 1,
     alignItems: 'center',
@@ -505,6 +531,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   syncButtonText: { fontSize: 13, fontWeight: '600', color: lightColors.text },
   actionRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.lg },
@@ -513,6 +541,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.sm + 2,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   joinPillText: { color: lightColors.subscribeText, fontSize: 14, fontWeight: '600' },
   joinedPill: {
@@ -520,6 +550,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.sm + 2,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   joinedPillText: { color: lightColors.text, fontSize: 14, fontWeight: '600' },
   disabled: { opacity: 0.5 },

@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import { MaterialIcons } from '@expo/vector-icons';
 import { branding } from '../../config/branding';
 import { layout, lightColors, spacing } from '../../theme';
+import { ICON_HIT_SLOP } from '../../lib/touch';
 
 interface AppHeaderProps {
   onSearchPress: () => void;
@@ -41,10 +42,10 @@ export const AppHeader = memo(function AppHeader({
         </Text>
       </View>
       <View style={styles.actions}>
-        <Pressable onPress={onSearchPress} hitSlop={8} accessibilityLabel="Search">
+        <Pressable onPress={onSearchPress} hitSlop={ICON_HIT_SLOP} accessibilityLabel="Search" accessibilityRole="button">
           <MaterialIcons name="search" size={24} color={lightColors.text} />
         </Pressable>
-        <Pressable onPress={onAccountPress} hitSlop={8} accessibilityLabel="Account">
+        <Pressable onPress={onAccountPress} hitSlop={ICON_HIT_SLOP} accessibilityLabel="Account" accessibilityRole="button">
           {avatarUrl ? (
             <Image source={{ uri: avatarUrl }} style={styles.avatar} contentFit="cover" cachePolicy="memory-disk" />
           ) : (
