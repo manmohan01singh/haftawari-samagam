@@ -1,0 +1,126 @@
+import React, { memo, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
+import { MaterialIcons } from '@expo/vector-icons';
+import { layout, lightColors, radii, spacing } from '../../theme';
+import { CardActionSheet, type CardMenuAction } from '../common/CardActionSheet';
+import { formatDuration } from './VideoCard';
+import type { CardVideoData } from './cardData';
+
+interface GridCardProps {
+  data: CardVideoData;
+  onPress?: () => void;
+  menuActions?: CardMenuAction[];
+}
+
+/**
+ * Compact grid card (round-2 ref-2 Subscriptions geometry, measured
+ * from the reference screenshot at 412dp width): the cell is ~187dp
+ * wide; thumbnail 16:9 radius 12 with the LIVE/duration pill
+ * bottom-right; below it a 2-line 14px semibold title with the ⋯
+ * menu at its right, then single 12px grey channel and meta lines.
+ * Used by the Subscriptions 2-column grid (and reusable anywhere a
+ * compact grid is needed). All data is the shared CardVideoData —
+ * real API values only.
+ */
+export const GridCard = memo(function GridCard({ data, onPress, menuActions }: GridCardProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const isLive = data.broadcastState === 'live';
+  return (
+    <View style={styles.cell}>
+      <Pressable onPress={onPress} style={styles.card} accessibilityRole="button" accessibilityLabel={data.title}>
+        <View style={styles.thumbnailWrap}>
+          {data.thumbnailUrl ? (
+            <Image
+              source={{ uri: data.thumbnailUrl }}
+              style={styles.thumbnail}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              transition={150}
+            />
+          ) : (
+            <View style={[styles.thumbnail, styles.thumbnailEmpty]} />
+          )}
+          {isLive ? (
+            <View style={styles.liveBadge}>
+              <MaterialIcons name="sensors" size={12} color="#FFFFFF" />
+              <Text style={styles.liveText}>LIVE</Text>
+            </View>
+          ) : data.durationSeconds != null ? (
+            <View style={styles.durationBadge}>
+              <Text style={styles.durationText}>{formatDuration(data.durationSeconds)}</Text>
+            </View>
+          ) : null}
+        </View>
+        <View style={styles.titleRow}>
+          <Text style={styles.title} numberOfLines={2}>
+            {data.title}
+          </Text>
+          {menuActions && menuActions.length > 0 ? (
+            <Pressable
+              onPress={() => setMenuOpen(true)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Video options"
+              style={styles.moreButton}
+            >
+              <MaterialIcons name="more-vert" size={18} color={lightColors.text} />
+            </Pressable>
+          ) : null}
+        </View>
+        <Text style={styles.channel} numberOfLines={1}>
+          {data.channelLine}
+        </Text>
+        {data.metaLine ? (
+          <Text style={styles.meta} numberOfLines={1}>
+            {data.metaLine}
+          </Text>
+        ) : null}
+      </Pressable>
+      {menuActions && menuActions.length > 0 ? (
+        <CardActionSheet visible={menuOpen} onClose={() => setMenuOpen(false)} actions={menuActions} />
+      ) : null}
+    </View>
+  );
+});
+
+const styles = StyleSheet.create({
+  cell: { flex: 1 },
+  card: { paddingBottom: spacing.xl },
+  thumbnailWrap: { position: 'relative' },
+  thumbnail: {
+    width: '100%',
+    aspectRatio: layout.thumbnailAspectRatio,
+    borderRadius: radii.card,
+    backgroundColor: lightColors.playerBackground,
+  },
+  thumbnailEmpty: { backgroundColor: lightColors.surfaceVariant },
+  liveBadge: {
+    position: 'absolute',
+    right: spacing.sm,
+    bottom: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: lightColors.accent,
+    borderRadius: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
+  liveText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
+  durationBadge: {
+    position: 'absolute',
+    right: spacing.sm,
+    bottom: spacing.sm,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    borderRadius: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
+  durationText: { color: '#FFFFFF', fontSize: 11, fontWeight: '600' },
+  titleRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: spacing.sm },
+  title: { flex: 1, fontSize: 14, lineHeight: 19, fontWeight: '600', color: lightColors.text },
+  moreButton: { marginLeft: 2, marginTop: 1 },
+  channel: { fontSize: 12, color: lightColors.textSecondary, marginTop: 2 },
+  meta: { fontSize: 12, color: lightColors.textSecondary, marginTop: 1 },
+});

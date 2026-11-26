@@ -27,16 +27,16 @@ import {
   useProfile,
   useSavedItems,
 } from '../../features/library/hooks';
-import { createPlaylist } from '../../features/library/libraryService';
+import { createPlaylist, removeHistoryEntry } from '../../features/library/libraryService';
+import { OFFICIAL_CHANNEL_HANDLE } from '../../lib/youtube';
 import { resumeRatio } from '../../features/library/format';
 import type { HistoryItem, PlaylistSummary } from '../../features/library/types';
 import type { LibraryRootStackParamList } from '../../features/library/screenTypes';
 import { CreatePlaylistSheet } from '../../features/library/components/CreatePlaylistSheet';
 import { ScreenLoading } from '../../features/library/components/ScreenMessage';
 import { listThumbnailUrl } from '../../components/video/cardData';
-import { useLocalHistory } from '../../features/library/localHistory';
+import { removeLocalHistoryEntry, useLocalHistory } from '../../features/library/localHistory';
 import { PlaylistRow } from '../../features/library/components/PlaylistRow';
-import { VideoListRow } from '../../features/library/components/VideoListRow';
 import { H_LIST_PERF } from '../../lib/listPerf';
 
 type Props = CompositeScreenProps<
@@ -105,42 +105,66 @@ export function LibraryScreen({ navigation }: Props) {
     [summaries, user],
   );
 
+  const removeFromShelf = useCallback(
+    (item: HistoryItem) => {
+      if (!user) return;
+      history.setData(history.data.filter((h) => h.entry.video_id !== item.entry.video_id));
+      void removeHistoryEntry(user.id, item.entry.video_id).catch(() => history.reload());
+    },
+    [history, user],
+  );
+
   const renderHistoryCard = useCallback(
     ({ item }: { item: HistoryItem }) => {
       const ratio = resumeRatio(item.entry.last_position_seconds, item.video.duration_seconds);
       const thumbUrl = listThumbnailUrl(item.video.youtube_video_id, item.video.thumbnail_url);
       return (
-        <Pressable
-          style={styles.historyCard}
-          onPress={() => openVideo(item.video.id)}
-          accessibilityRole="button"
-          accessibilityLabel={item.video.title}
-        >
-          <View style={styles.historyThumbWrap}>
-            {thumbUrl ? (
-              <Image
-                source={{ uri: thumbUrl }}
-                style={styles.historyThumb}
-                contentFit="cover"
-                cachePolicy="memory-disk"
-                recyclingKey={item.video.id}
-              />
-            ) : (
-              <View style={[styles.historyThumb, styles.thumbEmpty]} />
-            )}
-            {ratio != null ? (
-              <View style={styles.progressTrack}>
-                <View style={[styles.progressFill, { width: `${Math.round(ratio * 100)}%` }]} />
-              </View>
-            ) : null}
+        <View style={styles.historyCard}>
+          <Pressable
+            onPress={() => openVideo(item.video.id)}
+            accessibilityRole="button"
+            accessibilityLabel={item.video.title}
+          >
+            <View style={styles.historyThumbWrap}>
+              {thumbUrl ? (
+                <Image
+                  source={{ uri: thumbUrl }}
+                  style={styles.historyThumb}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                  recyclingKey={item.video.id}
+                />
+              ) : (
+                <View style={[styles.historyThumb, styles.thumbEmpty]} />
+              )}
+              {ratio != null ? (
+                <View style={styles.progressTrack}>
+                  <View style={[styles.progressFill, { width: `${Math.round(ratio * 100)}%` }]} />
+                </View>
+              ) : null}
+            </View>
+          </Pressable>
+          <View style={styles.historyTitleRow}>
+            <Text style={styles.historyTitle} numberOfLines={2}>
+              {item.video.title}
+            </Text>
+            <Pressable
+              onPress={() => removeFromShelf(item)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Remove from history"
+              style={styles.historyMore}
+            >
+              <MaterialIcons name="more-horiz" size={20} color={lightColors.text} />
+            </Pressable>
           </View>
-          <Text style={styles.historyTitle} numberOfLines={2}>
-            {item.video.title}
+          <Text style={styles.historyChannel} numberOfLines={1}>
+            {OFFICIAL_CHANNEL_HANDLE}
           </Text>
-        </Pressable>
+        </View>
       );
     },
-    [openVideo ],
+    [openVideo, removeFromShelf],
   );
 
   const displayName = profile?.display_name ?? null;
@@ -200,28 +224,19 @@ export function LibraryScreen({ navigation }: Props) {
             <View style={styles.profileButtons}>
               <Pressable
                 style={[styles.pillButton, styles.pillDark]}
-                onPress={() => navigation.navigate('Playlists')}
+                onPress={() => navigation.navigate('Channel', {})}
                 accessibilityRole="button"
               >
-                <Text style={[styles.pillText, styles.pillTextDark]}>Your playlists</Text>
+                <Text style={[styles.pillText, styles.pillTextDark]}>View channel</Text>
               </Pressable>
               <Pressable
                 style={[styles.pillButton, styles.pillLight]}
-                onPress={() => navigation.navigate('Saved')}
+                onPress={() => navigation.navigate('Sessions')}
                 accessibilityRole="button"
               >
-                <Text style={[styles.pillText, styles.pillTextLight]}>Saved</Text>
+                <Text style={[styles.pillText, styles.pillTextLight]}>Samagam Sessions</Text>
               </Pressable>
             </View>
-            <Pressable
-              style={styles.channelRow}
-              onPress={() => navigation.navigate('Channel', {})}
-              accessibilityRole="button"
-            >
-              <MaterialIcons name="play-circle-outline" size={22} color={lightColors.text} />
-              <Text style={styles.channelRowText}>Official channel</Text>
-              <MaterialIcons name="chevron-right" size={20} color={lightColors.textSecondary} />
-            </Pressable>
             {profile?.role === 'admin' ? (
               <Pressable
                 style={styles.adminLink}
@@ -236,13 +251,17 @@ export function LibraryScreen({ navigation }: Props) {
           </>
         ) : (
           <View style={styles.signInBlock}>
-            <View style={styles.signInAvatar}>
-              <MaterialIcons name="person" size={40} color={lightColors.textSecondary} />
+            <View style={styles.signInRow}>
+              <View style={styles.signInAvatar}>
+                <MaterialIcons name="person" size={32} color={lightColors.textSecondary} />
+              </View>
+              <View style={styles.signInLines}>
+                <Text style={styles.signInTitle}>Sign in to see your library</Text>
+                <Text style={styles.signInText}>
+                  Your history, saved samagams and playlists are kept with your account.
+                </Text>
+              </View>
             </View>
-            <Text style={styles.signInTitle}>Sign in to see your library</Text>
-            <Text style={styles.signInText}>
-              Your history, saved samagams and playlists are kept with your account.
-            </Text>
             {/* This block used to be text-only: a signed-out user landed
                 here and had NO way to sign in from this screen. */}
             <View style={styles.profileButtonsAlt}>
@@ -313,30 +332,49 @@ export function LibraryScreen({ navigation }: Props) {
               contentContainerStyle={styles.historyContent}
               {...H_LIST_PERF}
               renderItem={({ item }) => (
-                <Pressable
-                  style={styles.historyCard}
-                  onPress={() =>
-                    navigation.navigate(
-                      'Watch',
-                      item.videoRowId
-                        ? { videoRowId: item.videoRowId }
-                        : { youtubeVideoId: item.youtubeVideoId },
-                    )
-                  }
-                  accessibilityRole="button"
-                  accessibilityLabel={item.title}
-                >
-                  <View style={styles.historyThumbWrap}>
-                    {item.thumbnailUrl ? (
-                      <Image source={{ uri: item.thumbnailUrl }} style={styles.historyThumb} resizeMode="cover" />
-                    ) : (
-                      <View style={[styles.historyThumb, styles.thumbEmpty]} />
-                    )}
+                <View style={styles.historyCard}>
+                  <Pressable
+                    onPress={() =>
+                      navigation.navigate(
+                        'Watch',
+                        item.videoRowId
+                          ? { videoRowId: item.videoRowId }
+                          : { youtubeVideoId: item.youtubeVideoId },
+                      )
+                    }
+                    accessibilityRole="button"
+                    accessibilityLabel={item.title}
+                  >
+                    <View style={styles.historyThumbWrap}>
+                      {item.thumbnailUrl ? (
+                        <Image source={{ uri: item.thumbnailUrl }} style={styles.historyThumb} resizeMode="cover" />
+                      ) : (
+                        <View style={[styles.historyThumb, styles.thumbEmpty]} />
+                      )}
+                    </View>
+                  </Pressable>
+                  <View style={styles.historyTitleRow}>
+                    <Text style={styles.historyTitle} numberOfLines={2}>
+                      {item.title}
+                    </Text>
+                    <Pressable
+                      onPress={() => {
+                        void removeLocalHistoryEntry(item.youtubeVideoId)
+                          .catch(() => undefined)
+                          .finally(() => local.reload());
+                      }}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel="Remove from device history"
+                      style={styles.historyMore}
+                    >
+                      <MaterialIcons name="more-horiz" size={20} color={lightColors.text} />
+                    </Pressable>
                   </View>
-                  <Text style={styles.historyTitle} numberOfLines={2}>
-                    {item.title}
+                  <Text style={styles.historyChannel} numberOfLines={1}>
+                    {OFFICIAL_CHANNEL_HANDLE}
                   </Text>
-                </Pressable>
+                </View>
               )}
             />
             <Text style={styles.emptyLine}>Watched on this device while signed out.</Text>
@@ -359,33 +397,16 @@ export function LibraryScreen({ navigation }: Props) {
           contentContainerStyle={styles.chipsContent}
         >
           <Pressable style={styles.chip} onPress={() => navigation.navigate('History')} hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }} accessibilityRole="button">
-            <MaterialIcons name="history" size={16} color={lightColors.text} />
             <Text style={styles.chipText}>Recent</Text>
+            <MaterialIcons name="keyboard-arrow-down" size={18} color={lightColors.text} />
           </Pressable>
           <Pressable style={styles.chip} onPress={() => navigation.navigate('Saved')} hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }} accessibilityRole="button">
-            <MaterialIcons name="bookmark-border" size={16} color={lightColors.text} />
             <Text style={styles.chipText}>Saved</Text>
           </Pressable>
           <Pressable style={styles.chip} onPress={() => navigation.navigate('Playlists')} hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }} accessibilityRole="button">
-            <MaterialIcons name="playlist-play" size={16} color={lightColors.text} />
             <Text style={styles.chipText}>Playlists</Text>
           </Pressable>
         </ScrollView>
-
-        {/* Samagam Sessions were only reachable from a Home banner;
-            the You/Library tab is the other natural home for them. */}
-        <Pressable
-          style={styles.sessionsRow}
-          onPress={() => navigation.navigate('Sessions')}
-          accessibilityRole="button"
-        >
-          <MaterialIcons name="groups" size={24} color={lightColors.text} />
-          <View style={styles.sessionsLines}>
-            <Text style={styles.sessionsTitle}>Samagam Sessions</Text>
-            <Text style={styles.sessionsMeta}>Scheduled group playbacks — upcoming, now playing, completed</Text>
-          </View>
-          <MaterialIcons name="chevron-right" size={22} color={lightColors.textSecondary} />
-        </Pressable>
 
         {/* Playlists — stacked rows */}
         <View style={styles.rowsBlock}>
@@ -422,41 +443,74 @@ export function LibraryScreen({ navigation }: Props) {
           ) : null}
         </View>
 
-        {/* Saved — compact rows */}
-        <Pressable
-          style={styles.sectionHeadingRow}
-          onPress={() => navigation.navigate('Saved')}
-          hitSlop={{ top: 8, bottom: 8, left: 0, right: 0 }}
-          accessibilityRole="button"
-        >
-          <Text style={styles.sectionHeading}>Saved</Text>
-          <MaterialIcons name="chevron-right" size={22} color={lightColors.text} />
-        </Pressable>
+        {/* Collection rows (ref-4 geometry: left thumbnail, title +
+            privacy/count line). Only REAL collections exist here:
+            Saved (saved_videos) and Samagam Sessions. The reference's
+            Liked/Downloads/Watch later rows have no backend in this
+            app and are not imitated. */}
         <View style={styles.rowsBlock}>
-          {savedPreview.map((item) => (
-            <VideoListRow
-              key={item.entry.video_id}
-              video={item.video}
-              onPress={(video) => openVideo(video.id)}
-            />
-          ))}
-          {saved.data.length === 0 ? (
-            user && saved.loading ? (
-              <View style={styles.sectionLoading}>
-                <ActivityIndicator size="small" color={lightColors.textSecondary} />
-                <Text style={styles.sectionLoadingText}>Loading…</Text>
-              </View>
-            ) : (
-              <Text style={styles.rowsEmpty}>
+          <Pressable
+            style={styles.collectionRow}
+            onPress={() => navigation.navigate('Saved')}
+            accessibilityRole="button"
+          >
+            <View style={styles.collectionThumbWrap}>
+              <View style={styles.stackEdge} pointerEvents="none" />
+              {savedPreview[0] ? (
+                <Image
+                  source={{
+                    uri:
+                      listThumbnailUrl(
+                        savedPreview[0].video.youtube_video_id,
+                        savedPreview[0].video.thumbnail_url,
+                      ) ?? undefined,
+                  }}
+                  style={styles.collectionThumb}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                />
+              ) : (
+                <View style={[styles.collectionThumb, styles.thumbEmptyCenter]}>
+                  <MaterialIcons name="bookmark-border" size={30} color={lightColors.textSecondary} />
+                </View>
+              )}
+            </View>
+            <View style={styles.collectionLines}>
+              <Text style={styles.collectionTitle} numberOfLines={2}>
+                Saved
+              </Text>
+              <Text style={styles.collectionMeta} numberOfLines={1}>
                 {user
                   ? saved.error
-                    ? 'Saved recordings could not be loaded — use Retry above.'
-                    : 'Samagams you save will appear here.'
-                  : 'Sign in to save samagams here.'}
+                    ? 'Could not be loaded — use Retry above'
+                    : `Private · ${saved.data.length} ${saved.data.length === 1 ? 'recording' : 'recordings'}`
+                  : 'Sign in to save samagams here'}
               </Text>
-            )
-          ) : null}
+            </View>
+          </Pressable>
+
+          <Pressable
+            style={styles.collectionRow}
+            onPress={() => navigation.navigate('Sessions')}
+            accessibilityRole="button"
+          >
+            <View style={styles.collectionThumbWrap}>
+              <View style={styles.stackEdge} pointerEvents="none" />
+              <View style={[styles.collectionThumb, styles.thumbEmptyCenter]}>
+                <MaterialIcons name="groups" size={30} color={lightColors.textSecondary} />
+              </View>
+            </View>
+            <View style={styles.collectionLines}>
+              <Text style={styles.collectionTitle} numberOfLines={2}>
+                Samagam Sessions
+              </Text>
+              <Text style={styles.collectionMeta} numberOfLines={1}>
+                Group playbacks — upcoming, now playing, completed
+              </Text>
+            </View>
+          </Pressable>
         </View>
+
       </ScrollView>
 
       <CreatePlaylistSheet visible={createOpen} onCreate={handleCreate} onClose={() => setCreateOpen(false)} />
@@ -493,16 +547,16 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
   },
   profileAvatar: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     backgroundColor: lightColors.surfaceVariant,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  profileInitial: { fontSize: 34, fontWeight: '600', color: lightColors.textSecondary },
+  profileInitial: { fontSize: 28, fontWeight: '600', color: lightColors.textSecondary },
   profileLines: { flex: 1 },
-  profileName: { fontSize: 26, fontWeight: '700', color: lightColors.text },
+  profileName: { fontSize: 24, fontWeight: '600', color: lightColors.text },
   profileMeta: { fontSize: 14, color: lightColors.textSecondary, marginTop: 3 },
   profileButtons: {
     flexDirection: 'row',
@@ -544,8 +598,8 @@ const styles = StyleSheet.create({
   errorBannerText: { flex: 1, fontSize: 13, color: lightColors.textSecondary },
   errorBannerAction: { fontSize: 14, fontWeight: '700', color: lightColors.text },
   signInBlock: { paddingHorizontal: spacing.lg, paddingTop: spacing.md },
-  signInTitle: { fontSize: 20, fontWeight: '600', color: lightColors.text },
-  signInText: { fontSize: 14, color: lightColors.textSecondary, marginTop: spacing.xs },
+  signInTitle: { fontSize: 17, fontWeight: '600', color: lightColors.text },
+  signInText: { fontSize: 13, lineHeight: 18, color: lightColors.textSecondary, marginTop: 3 },
   signInButton: {
     alignSelf: 'flex-start',
     marginTop: spacing.lg,
@@ -586,41 +640,62 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   progressFill: { height: '100%', backgroundColor: lightColors.accent },
+  historyTitleRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: spacing.sm },
   historyTitle: {
+    flex: 1,
     fontSize: 14,
     lineHeight: 19,
     fontWeight: '600',
     color: lightColors.text,
-    marginTop: spacing.sm,
   },
-  sessionsRow: {
+  historyMore: { marginLeft: spacing.xs, marginTop: 1 },
+  historyChannel: { fontSize: 12, color: lightColors.textSecondary, marginTop: 2 },
+  collectionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-    marginTop: spacing.xl,
+    gap: spacing.lg,
+    paddingVertical: spacing.sm,
   },
-  sessionsLines: { flex: 1 },
-  sessionsTitle: { fontSize: 16, fontWeight: '600', color: lightColors.text },
-  sessionsMeta: { fontSize: 13, color: lightColors.textSecondary, marginTop: 2 },
+  collectionThumbWrap: { width: '40%', maxWidth: 168, position: 'relative', paddingTop: 6 },
+  collectionThumb: {
+    width: '100%',
+    aspectRatio: layout.thumbnailAspectRatio,
+    borderRadius: radii.card,
+    backgroundColor: lightColors.surfaceVariant,
+  },
+  thumbEmptyCenter: { alignItems: 'center', justifyContent: 'center' },
+  stackEdge: {
+    position: 'absolute',
+    top: 0,
+    left: 6,
+    right: 6,
+    height: 10,
+    borderTopLeftRadius: radii.card,
+    borderTopRightRadius: radii.card,
+    backgroundColor: lightColors.border,
+  },
+  collectionLines: { flex: 1 },
+  collectionTitle: { fontSize: 17, fontWeight: '500', color: lightColors.text },
+  collectionMeta: { fontSize: 13, color: lightColors.textSecondary, marginTop: 3 },
   chipsContent: { paddingHorizontal: spacing.lg, gap: spacing.sm, paddingTop: spacing.md },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 2,
     backgroundColor: lightColors.surfaceVariant,
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.lg,
+    borderRadius: 10,
+    paddingHorizontal: spacing.md + 2,
     paddingVertical: 8,
   },
+  signInRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
+  signInLines: { flex: 1 },
   signInAvatar: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: lightColors.surfaceVariant,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.md,
   },
   channelRow: {
     flexDirection: 'row',

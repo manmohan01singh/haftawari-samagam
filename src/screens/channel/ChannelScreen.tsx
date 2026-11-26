@@ -222,12 +222,20 @@ export function ChannelScreen({ route, navigation }: Props) {
             <Text style={styles.avatarInitial}>{channel.title.charAt(0)}</Text>
           </View>
         )}
-        <Text style={styles.name}>{channel.title}</Text>
-        <Text style={styles.metaLine}>
-          {channel.handle ?? ''}
-          {channel.subscriberCount != null ? `  •  ${formatCount(channel.subscriberCount)} subscribers` : ''}
-          {channel.videoCount != null ? `  •  ${formatCount(channel.videoCount)} videos` : ''}
-        </Text>
+        <View style={styles.identityLines}>
+          <Text style={styles.name}>{channel.title}</Text>
+          {channel.handle ? <Text style={styles.handleLine}>{channel.handle}</Text> : null}
+          <Text style={styles.metaLine}>
+            {[
+              channel.subscriberCount != null ? `${formatCount(channel.subscriberCount)} subscribers` : null,
+              channel.videoCount != null ? `${formatCount(channel.videoCount)} videos` : null,
+            ]
+              .filter(Boolean)
+              .join('  •  ')}
+          </Text>
+        </View>
+      </View>
+      <View style={styles.identityActions}>
         <Pressable
           style={[styles.subscribePill, following && styles.subscribePillActive]}
           onPress={toggleFollow}
@@ -239,6 +247,7 @@ export function ChannelScreen({ route, navigation }: Props) {
           </Text>
         </Pressable>
         <Text style={styles.followNote}>Saved on this device only</Text>
+      </View>
         {channel.description ? (
           <View style={styles.descriptionWrap}>
             <LinkedText
@@ -258,7 +267,6 @@ export function ChannelScreen({ route, navigation }: Props) {
             ) : null}
           </View>
         ) : null}
-      </View>
       <View style={styles.tabs}>
         {(
           [
@@ -444,47 +452,58 @@ const styles = StyleSheet.create({
   },
   topBarTitle: { flex: 1, fontSize: 17, fontWeight: '600', color: lightColors.text },
   banner: {
-    width: '100%',
-    aspectRatio: 21 / 9,
-    borderRadius: 12,
+    // Full-bleed: escape the list's horizontal padding (same trick
+    // as topBar) and use the mobile banner's own 1546x423 aspect, so
+    // the banner art fills the strip edge-to-edge with no letterbox
+    // bands and no rounded-corner crop.
+    marginHorizontal: -spacing.lg,
+    aspectRatio: 1546 / 423,
     backgroundColor: lightColors.surfaceVariant,
-    marginTop: spacing.sm,
   },
-  identity: { alignItems: 'center', paddingTop: spacing.lg },
-  avatar: { width: 96, height: 96, borderRadius: 48 },
+  identity: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg,
+    paddingTop: spacing.lg,
+  },
+  identityLines: { flex: 1 },
+  identityActions: { marginTop: spacing.lg },
+  avatar: { width: 72, height: 72, borderRadius: 36 },
   avatarFallback: {
     backgroundColor: lightColors.surfaceVariant,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarInitial: { fontSize: 30, fontWeight: '600', color: lightColors.textSecondary },
+  avatarInitial: { fontSize: 24, fontWeight: '600', color: lightColors.textSecondary },
   name: {
-    fontSize: 22,
-    lineHeight: 27,
-    fontWeight: '700',
+    fontSize: 20,
+    lineHeight: 25,
+    fontWeight: '600',
     color: lightColors.text,
-    textAlign: 'center',
-    marginTop: spacing.md,
   },
-  metaLine: {
+  handleLine: {
     fontSize: 14,
     color: lightColors.textSecondary,
-    textAlign: 'center',
-    marginTop: spacing.xs,
+    marginTop: 2,
+  },
+  metaLine: {
+    fontSize: 13,
+    color: lightColors.textSecondary,
+    marginTop: 2,
   },
   description: {
     fontSize: 14,
     lineHeight: 20,
     color: lightColors.textSecondary,
-    textAlign: 'center',
     marginTop: spacing.sm,
   },
   gridCell: { flex: 1 },
   columnWrapper: { gap: spacing.lg },
-  descriptionWrap: { alignItems: 'center', marginTop: spacing.sm },
+  descriptionWrap: { marginTop: spacing.md },
   moreText: { fontSize: 14, fontWeight: '600', color: lightColors.text, marginTop: spacing.xs },
   subscribePill: {
-    marginTop: spacing.lg,
+    alignSelf: 'stretch',
+    alignItems: 'center',
     backgroundColor: lightColors.subscribeBackground,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.xl,
