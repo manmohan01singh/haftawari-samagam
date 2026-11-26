@@ -10,7 +10,7 @@ import { AppHeader } from '../../components/layout/AppHeader';
 import { Toast, useToast } from '../../components/common/Toast';
 import { shareContent, shareFeedback } from '../../lib/share';
 import { EmptyState } from '../../components/common/EmptyState';
-import { ShelfCard } from '../../components/video/ShelfCard';
+import { GridCard } from '../../components/video/GridCard';
 import { SkeletonCard } from '../../components/video/SkeletonCard';
 import { apiCardData, formatDateLine } from '../../components/video/cardData';
 import { useAuth } from '../../features/auth';
@@ -49,16 +49,17 @@ const FILTERS: { key: UploadFilter; label: string }[] = [
  *    search uses (isShortVideo) — never showcased (user ban).
  *  - Working filter chips (All / Videos / Live) and a working sort
  *    (Latest / Oldest) — previously neither existed.
- *  - The old carousel + list split produced inconsistent cards (a
- *    first card with no title, missing channel/meta lines) and sliced
- *    the second column off at desktop widths. Now every item is the
- *    same ShelfCard in a 1/2/3-column grid by window width, and card
- *    data falls back to the channel title / publish date so no card
- *    renders blank lines. Items with no title at all (deleted/private
- *    uploads) are dropped rather than shown as ghosts.
- *  - The rail name gets room for two lines instead of one truncated
- *    line. The rail has exactly one entry because this app follows
- *    exactly one channel — real data, honestly shown.
+ *  - Every item is the same compact GridCard; card data falls back
+ *    to the channel title / publish date so no card renders blank
+ *    lines. Items with no title at all (deleted/private uploads) are
+ *    dropped rather than shown as ghosts.
+ *  - The rail has exactly one entry because this app follows exactly
+ *    one channel — real data, honestly shown. (Round 1 gave the rail
+ *    name two lines; the round-2 reference shows one truncated line,
+ *    so it is one line now — screenshot wins.)
+ * Round 2: mobile is a 2-column compact grid per ref-2 (the ref's
+ * horizontal 'Most relevant' carousel and its Shorts shelf are NOT
+ * reproduced — the tasking specifies the grid, and Shorts are banned).
  * There is NO Shorts shelf (user decision).
  */
 export function SubscriptionsScreen({ navigation }: Props) {
@@ -126,7 +127,11 @@ export function SubscriptionsScreen({ navigation }: Props) {
     return sorted;
   }, [uploads, filter, sort]);
 
-  const columns = width >= 1024 ? 3 : width >= 640 ? 2 : 1;
+  // Round-2 headline fix: the reference Subscriptions layout is a
+  // 2-COLUMN grid of compact cards ON MOBILE (cur-4 showed a single
+  // column of full-width shelf cards). Wider surfaces get more
+  // columns of the same compact card.
+  const columns = width >= 1024 ? 4 : width >= 640 ? 3 : 2;
 
   const renderItem = useCallback(
     ({ item }: { item: YouTubeVideoMetadata }) => {
@@ -137,23 +142,21 @@ export function SubscriptionsScreen({ navigation }: Props) {
         metaLine: base.metaLine || formatDateLine(item.publishedAt),
       };
       return (
-        <View style={columns > 1 ? styles.gridCell : undefined}>
-          <ShelfCard
-            data={data}
-            onPress={() => navigation.navigate('Watch', { youtubeVideoId: item.youtubeVideoId })}
-            menuActions={[
-              {
-                key: 'share',
-                label: 'Share',
-                icon: 'share',
-                onPress: () => shareVideo(item.title, item.youtubeVideoId),
-              },
-            ]}
-          />
-        </View>
+        <GridCard
+          data={data}
+          onPress={() => navigation.navigate('Watch', { youtubeVideoId: item.youtubeVideoId })}
+          menuActions={[
+            {
+              key: 'share',
+              label: 'Share',
+              icon: 'share',
+              onPress: () => shareVideo(item.title, item.youtubeVideoId),
+            },
+          ]}
+        />
       );
     },
-    [channel, navigation, columns, shareVideo],
+    [channel, navigation, shareVideo],
   );
 
   const keyExtractor = useCallback((item: YouTubeVideoMetadata) => item.youtubeVideoId, []);
@@ -179,7 +182,7 @@ export function SubscriptionsScreen({ navigation }: Props) {
             )}
             {isLiveNow ? <View style={styles.liveDot} /> : null}
           </View>
-          <Text style={styles.railName} numberOfLines={2}>
+          <Text style={styles.railName} numberOfLines={1}>
             {channel?.title ?? ''}
           </Text>
         </Pressable>
@@ -235,9 +238,13 @@ export function SubscriptionsScreen({ navigation }: Props) {
       {/* QA44: SecondaryTabs removed — it duplicated the bottom nav. */}
 
       {loading ? (
-        <View style={styles.listPad}>
-          <SkeletonCard variant="shelf" />
-          <SkeletonCard variant="shelf" />
+        <View style={[styles.listPad, styles.skeletonRow]}>
+          <View style={styles.skeletonCell}>
+            <SkeletonCard variant="shelf" />
+          </View>
+          <View style={styles.skeletonCell}>
+            <SkeletonCard variant="shelf" />
+          </View>
         </View>
       ) : error || !channel ? (
         <EmptyState
@@ -297,7 +304,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     gap: spacing.lg,
   },
-  railItem: { width: 96, alignItems: 'center' },
+  railItem: { width: 76, alignItems: 'center' },
   railAvatarWrap: { position: 'relative' },
   railAvatar: {
     width: nativeApp.avatarRail.avatarSize,
@@ -327,6 +334,7 @@ const styles = StyleSheet.create({
     color: lightColors.text,
     marginTop: spacing.xs,
     textAlign: 'center',
+    width: '100%',
   },
   railAll: { marginLeft: 'auto', paddingTop: 22 },
   railAllText: { fontSize: 15, fontWeight: '600', color: '#065FD4' },
@@ -362,6 +370,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
   },
   sortText: { fontSize: 14, fontWeight: '600', color: lightColors.text },
-  columnWrapper: { gap: spacing.lg },
-  gridCell: { flex: 1 },
+  columnWrapper: { gap: spacing.md },
+  skeletonRow: { flexDirection: 'row', gap: spacing.md },
+  skeletonCell: { flex: 1 },
 });

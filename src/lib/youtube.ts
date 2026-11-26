@@ -216,8 +216,28 @@ interface ChannelsListResponse {
       viewCount?: string;
     };
     contentDetails: { relatedPlaylists: { uploads?: string } };
-    brandingSettings?: { image?: { bannerExternalUrl?: string } };
+    brandingSettings?: { image?: { bannerExternalUrl?: string; bannerMobileImageUrl?: string } };
   }[];
+}
+
+/**
+ * Banner display URL (round-2 letterbox fix, verified live against
+ * the official channel's real banner on 2026-11-26):
+ * bannerExternalUrl serves the full 2560x1440 TV banner, whose actual
+ * artwork is only a thin centre band — the rest is background pattern,
+ * so rendering it directly leaves big empty bands above/below the art
+ * (screenshot cur-3). The API no longer returns bannerMobileImageUrl,
+ * but the yt3.googleusercontent.com URL accepts YouTube's own banner
+ * crop parameters: appending
+ * "=w1546-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj" returns
+ * the 1546x256 centre crop containing ONLY the artwork band (the same
+ * crop YouTube serves for channel banners). Non-googleusercontent
+ * URLs and URLs that already carry parameters pass through unchanged.
+ */
+export function bannerDisplayUrl(raw: string | null): string | null {
+  if (!raw) return null;
+  if (!raw.includes('googleusercontent.com') || raw.includes('=')) return raw;
+  return `${raw}=w1546-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj`;
 }
 
 function toChannelInfo(item: NonNullable<ChannelsListResponse['items']>[number]): YouTubeChannelInfo {
@@ -228,7 +248,11 @@ function toChannelInfo(item: NonNullable<ChannelsListResponse['items']>[number])
     handle: item.snippet.customUrl ?? null,
     description: item.snippet.description,
     avatarUrl: bestThumbnail(item.snippet.thumbnails),
-    bannerUrl: item.brandingSettings?.image?.bannerExternalUrl ?? null,
+    bannerUrl: bannerDisplayUrl(
+      item.brandingSettings?.image?.bannerMobileImageUrl ??
+        item.brandingSettings?.image?.bannerExternalUrl ??
+        null,
+    ),
     subscriberCount:
       stats.hiddenSubscriberCount || stats.subscriberCount == null
         ? null
