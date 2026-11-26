@@ -35,6 +35,9 @@
     "plugins": [
       "expo-image",
       "./plugins/withPictureInPicture.js"
-    ]
+    ],
+    "experiments": {
+      "baseUrl": "/haftawari-samagam"
+    }
   }
 }
