@@ -1,0 +1,400 @@
+import React, { useCallback, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
+import { lightColors, nativeApp, radii, spacing, typography } from '../../../theme';
+import { useSessionChat, type ChatUser } from '../useSessionChat';
+import type { ChatMessageWithAuthor } from '../types';
+import { ChatMessageRow } from './ChatMessageRow';
+
+export interface SessionChatProps {
+  sessionId: string;
+  /**
+   * Real participant count from the host (e.g. Realtime Presence).
+   * If omitted, derived from `session_participants` when the caller
+   * may read the roster; hidden when not knowable — never fabricated.
+   */
+  participantCount?: number;
+  /** Signed-in user from the host app; omit to resolve from Supabase Auth. */
+  currentUser?: ChatUser | null;
+  /** Join state from the host; omit to check `session_participants`. */
+  hasJoined?: boolean;
+  /** Extra real author names (e.g. Presence roster): userId → name. */
+  authorNames?: Record<string, string | null>;
+  /** Close (×) handler — the sheet is hosted by the watch/session screen. */
+  onClose?: () => void;
+  /** Tapping the sign-in prompt (signed-out state). */
+  onSignInPress?: () => void;
+  /** Tapping "Join session" (signed-in, not-joined state). */
+  onJoinPress?: () => void;
+  /** Passed to KeyboardAvoidingView when hosted below a header/player. */
+  keyboardVerticalOffset?: number;
+}
+
+const MAX_MESSAGE_LENGTH = 1000;
+
+/**
+ * Session live chat — the bottom-sheet UI of screenshot 07, built on
+ * real data only:
+ *
+ * - Sheet chrome: drag handle (90×5, measured), "Live chat" header
+ *   (≈24px bold) with a functional close button, and a sub-line with
+ *   the REAL participant count when it is knowable.
+ * - Messages arrive via Supabase Realtime and history paginates on
+ *   scroll-up; rows are memoised on an inverted FlatList.
+ * - The crown (top-fans) and sliders (chat-settings) icons of the
+ *   reference are deliberately NOT rendered: this app has no
+ *   leaderboard or chat-mode feature behind them, and a button that
+ *   does nothing would be fake functionality. The same applies to the
+ *   reference's Super Chat ($) button and floating heart reaction.
+ * - States are honest: signed-out → sign-in prompt; signed-in but not
+ *   joined → join-first notice (RLS also blocks reading/posting);
+ *   empty chat → an explicit "no messages yet" state.
+ */
+export function SessionChat({
+  sessionId,
+  participantCount,
+  currentUser,
+  hasJoined,
+  authorNames,
+  onClose,
+  onSignInPress,
+  onJoinPress,
+  keyboardVerticalOffset = 0,
+}: SessionChatProps) {
+  const chat = useSessionChat(sessionId, {
+    participantCount,
+    currentUser,
+    hasJoined,
+    authorNames,
+  });
+  const [draft, setDraft] = useState('');
+
+  // Inverted list: newest message first in data, rendered at the bottom.
+  const invertedMessages = useMemo(() => chat.messages.slice().reverse(), [chat.messages]);
+
+  const renderItem = useCallback(
+    ({ item }: { item: ChatMessageWithAuthor }) => <ChatMessageRow message={item} />,
+    [],
+  );
+  const keyExtractor = useCallback((item: ChatMessageWithAuthor) => item.id, []);
+
+  const handleSend = useCallback(async () => {
+    const sent = await chat.send(draft);
+    if (sent) setDraft('');
+  }, [chat, draft]);
+
+  const canChat = Boolean(chat.user) && chat.hasJoined === true;
+  const identityName = chat.user?.displayName?.trim() ? chat.user.displayName : null;
+
+  let body: React.ReactNode;
+  if (!chat.configured) {
+    body = (
+      <View style={styles.centerState}>
+        <Text style={styles.stateTitle}>Chat is not available yet</Text>
+        <Text style={styles.stateMessage}>
+          The session backend is not configured, so chat cannot load.
+        </Text>
+      </View>
+    );
+  } else if (chat.authLoading || chat.hasJoined === null) {
+    body = (
+      <View style={styles.centerState}>
+        <ActivityIndicator color={lightColors.textSecondary} />
+      </View>
+    );
+  } else if (!chat.user) {
+    body = (
+      <View style={styles.centerState}>
+        <Text style={styles.stateTitle}>Sign in to chat</Text>
+        <Text style={styles.stateMessage}>
+          Only signed-in sangat who have joined this session can read and post messages.
+        </Text>
+        {onSignInPress ? (
+          <Pressable style={styles.stateButton} onPress={onSignInPress} accessibilityRole="button">
+            <Text style={styles.stateButtonText}>Sign in</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    );
+  } else if (!canChat) {
+    body = (
+      <View style={styles.centerState}>
+        <Text style={styles.stateTitle}>Join this session to chat</Text>
+        <Text style={styles.stateMessage}>
+          Chat opens once you have joined the session — joining is what lets you read and post.
+        </Text>
+        {onJoinPress ? (
+          <Pressable style={styles.stateButton} onPress={onJoinPress} accessibilityRole="button">
+            <Text style={styles.stateButtonText}>Join session</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    );
+  } else if (chat.loading) {
+    body = (
+      <View style={styles.centerState}>
+        <ActivityIndicator color={lightColors.textSecondary} />
+      </View>
+    );
+  } else if (chat.messages.length === 0) {
+    body = (
+      <View style={styles.centerState}>
+        <Text style={styles.stateTitle}>No messages yet</Text>
+        <Text style={styles.stateMessage}>
+          Be the first to share in this session&rsquo;s chat.
+        </Text>
+        {chat.listError ? <Text style={styles.errorText}>{chat.listError}</Text> : null}
+      </View>
+    );
+  } else {
+    body = (
+      <FlatList
+        data={invertedMessages}
+        inverted
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
+        onEndReached={chat.hasMore ? chat.loadMore : undefined}
+        onEndReachedThreshold={0.4}
+        ListFooterComponent={
+          chat.loadingMore ? (
+            <View style={styles.loadingMore}>
+              <ActivityIndicator size="small" color={lightColors.textSecondary} />
+            </View>
+          ) : undefined
+        }
+        contentContainerStyle={styles.listContent}
+        keyboardShouldPersistTaps="handled"
+        initialNumToRender={20}
+        maxToRenderPerBatch={20}
+        windowSize={11}
+      />
+    );
+  }
+
+  return (
+    <KeyboardAvoidingView
+      style={styles.sheet}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={keyboardVerticalOffset}
+    >
+      <View style={styles.handleRow}>
+        <View style={styles.dragHandle} />
+      </View>
+
+      <View style={styles.headerRow}>
+        <Text style={styles.title}>Live chat</Text>
+        {onClose ? (
+          <Pressable
+            onPress={onClose}
+            accessibilityRole="button"
+            accessibilityLabel="Close chat"
+            hitSlop={8}
+          >
+            <MaterialIcons name="close" size={24} color={lightColors.text} />
+          </Pressable>
+        ) : null}
+      </View>
+      <View style={styles.subRow}>
+        <Text style={styles.subLabel}>All messages</Text>
+        {chat.participantCount !== null ? (
+          <View style={styles.countWrap}>
+            <MaterialIcons name="person" size={16} color={lightColors.textSecondary} />
+            <Text style={styles.subLabel}>{chat.participantCount}</Text>
+          </View>
+        ) : null}
+      </View>
+
+      <View style={styles.listArea}>{body}</View>
+
+      {canChat ? (
+        <>
+          <View style={styles.noticeBox}>
+            <Text style={styles.noticeText}>
+              Chat is open to sangat who have joined this session. Please keep messages
+              respectful — moderators may remove messages.
+            </Text>
+          </View>
+          {identityName ? (
+            <Text style={styles.identityLine}>Chat publicly as {identityName}</Text>
+          ) : null}
+          {chat.sendError ? <Text style={styles.errorText}>{chat.sendError}</Text> : null}
+          <View style={styles.inputRow}>
+            <View style={styles.inputPill}>
+              <TextInput
+                style={styles.input}
+                value={draft}
+                onChangeText={setDraft}
+                placeholder="Chat…"
+                placeholderTextColor={lightColors.textSecondary}
+                maxLength={MAX_MESSAGE_LENGTH}
+                multiline
+                returnKeyType="send"
+                onSubmitEditing={() => void handleSend()}
+                blurOnSubmit={false}
+              />
+              {draft.trim().length > 0 ? (
+                <Pressable
+                  onPress={() => void handleSend()}
+                  disabled={chat.sending}
+                  accessibilityRole="button"
+                  accessibilityLabel="Send message"
+                  hitSlop={6}
+                >
+                  {chat.sending ? (
+                    <ActivityIndicator size="small" color={lightColors.accent} />
+                  ) : (
+                    <MaterialIcons name="send" size={22} color={lightColors.accent} />
+                  )}
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+        </>
+      ) : null}
+    </KeyboardAvoidingView>
+  );
+}
+
+const styles = StyleSheet.create({
+  sheet: {
+    flex: 1,
+    backgroundColor: lightColors.surface,
+    borderTopLeftRadius: nativeApp.watchSheet.topRadius,
+    borderTopRightRadius: nativeApp.watchSheet.topRadius,
+    overflow: 'hidden',
+  },
+  handleRow: {
+    alignItems: 'center',
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
+  },
+  dragHandle: {
+    width: nativeApp.watchSheet.dragHandleWidth,
+    height: nativeApp.watchSheet.dragHandleHeight,
+    borderRadius: radii.pill,
+    backgroundColor: lightColors.border,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+  },
+  title: {
+    fontSize: 24,
+    lineHeight: 30,
+    fontWeight: '700',
+    color: lightColors.text,
+  },
+  subRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.sm,
+    gap: spacing.lg,
+  },
+  subLabel: {
+    ...typography.body,
+    color: lightColors.textSecondary,
+  },
+  countWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  listArea: {
+    flex: 1,
+  },
+  listContent: {
+    paddingVertical: spacing.sm,
+  },
+  loadingMore: {
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+  },
+  centerState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+  },
+  stateTitle: {
+    ...typography.sectionTitle,
+    color: lightColors.text,
+    textAlign: 'center',
+  },
+  stateMessage: {
+    ...typography.body,
+    color: lightColors.textSecondary,
+    textAlign: 'center',
+    marginTop: spacing.sm,
+  },
+  stateButton: {
+    marginTop: spacing.lg,
+    backgroundColor: lightColors.subscribeBackground,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+  },
+  stateButtonText: {
+    ...typography.chip,
+    color: lightColors.subscribeText,
+  },
+  noticeBox: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.sm,
+    backgroundColor: lightColors.surfaceVariant,
+    borderRadius: nativeApp.chatSheet.noticeRadius,
+    padding: spacing.md,
+  },
+  noticeText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: lightColors.text,
+  },
+  identityLine: {
+    ...typography.metadata,
+    color: lightColors.textSecondary,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.sm,
+  },
+  errorText: {
+    ...typography.metadata,
+    color: lightColors.accent,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.sm,
+  },
+  inputRow: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+  },
+  inputPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: lightColors.surfaceVariant,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+  },
+  input: {
+    flex: 1,
+    ...typography.body,
+    color: lightColors.text,
+    maxHeight: 100,
+    paddingVertical: 2,
+  },
+});
