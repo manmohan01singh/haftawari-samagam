@@ -1,8 +1,9 @@
 import { requireSupabase } from '../../lib/supabase';
-import { validateVideoUrlOrId } from '../../lib/youtube';
+import { fetchChannelById, validateVideoUrlOrId, type YouTubeChannelInfo } from '../../lib/youtube';
 import type {
   AuditLog,
   Category,
+  ChannelRecord,
   ChatMessage,
   Profile,
   PublishState,
@@ -83,12 +84,14 @@ export interface OverviewCounts {
   sessionsByStatus: Record<SessionStatus, number>;
   members: number;
   categories: number;
+  channelsTotal: number;
+  channelsActive: number;
   chatMessages: number;
   chatRemoved: number;
 }
 
 async function headCount(
-  table: 'profiles' | 'categories' | 'chat_messages',
+  table: 'profiles' | 'categories' | 'chat_messages' | 'channels',
   filter?: { column: string; value: string | boolean },
 ): Promise<number> {
   const supabase = requireSupabase();
@@ -102,7 +105,7 @@ async function headCount(
 export async function fetchOverviewCounts(): Promise<OverviewCounts> {
   const supabase = requireSupabase();
 
-  const [videoStates, sessionStates, members, categories, chatMessages, chatRemoved] =
+  const [videoStates, sessionStates, members, categories, chatMessages, chatRemoved, channelsTotal, channelsActive] =
     await Promise.all([
       supabase.from('videos').select('publish_state'),
       supabase.from('sessions').select('status'),
@@ -110,6 +113,8 @@ export async function fetchOverviewCounts(): Promise<OverviewCounts> {
       headCount('categories'),
       headCount('chat_messages'),
       headCount('chat_messages', { column: 'is_removed', value: true }),
+      headCount('channels').catch(() => 0),
+      headCount('channels', { column: 'is_active', value: true }).catch(() => 0),
     ]);
   if (videoStates.error) throw videoStates.error;
   if (sessionStates.error) throw sessionStates.error;
@@ -147,6 +152,8 @@ export async function fetchOverviewCounts(): Promise<OverviewCounts> {
     categories,
     chatMessages,
     chatRemoved,
+    channelsTotal,
+    channelsActive,
   };
 }
 
@@ -516,6 +523,153 @@ export async function setChatMessageRemoved(
     message.id,
     { session_id: message.session_id, user_id: message.user_id },
   );
+}
+
+// ── Channels (multi-channel panel, migration 0003) ───────────────────
+
+/** All panel channels (active + inactive), in admin-chosen order. */
+export async function listAllChannels(): Promise<ChannelRecord[]> {
+  const supabase = requireSupabase();
+  const { data, error } = await supabase
+    .from('channels')
+    .select('*')
+    .order('sort_order', { ascending: true })
+    .order('title', { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as ChannelRecord[];
+}
+
+/**
+ * Add a channel the admin resolved through the YouTube API (the panel
+ * shows the resolved title/avatar/counts BEFORE this runs — nothing is
+ * saved from typed-in text). Title/avatar/handle saved here are the
+ * API's own values from that resolution.
+ */
+export async function addChannel(
+  info: YouTubeChannelInfo,
+  aliases: string[],
+  actorId: string,
+): Promise<ChannelRecord> {
+  const existing = await listAllChannels();
+  const nextOrder = existing.reduce((max, c) => Math.max(max, c.sort_order), -1) + 1;
+  const supabase = requireSupabase();
+  const { data, error } = await supabase
+    .from('channels')
+    .insert({
+      youtube_channel_id: info.channelId,
+      handle: info.handle,
+      title: info.title,
+      avatar_url: info.avatarUrl,
+      aliases,
+      is_active: true,
+      sort_order: nextOrder,
+      created_by: actorId,
+    })
+    .select('*')
+    .single();
+  if (error) {
+    if (error.code === '23505') {
+      throw new Error(`"${info.title}" is already in the panel.`);
+    }
+    throw error;
+  }
+  const channel = data as ChannelRecord;
+  await writeAuditLog(actorId, 'channel.add', 'channel', channel.id, {
+    youtube_channel_id: channel.youtube_channel_id,
+    handle: channel.handle,
+    title: channel.title,
+  });
+  return channel;
+}
+
+export async function setChannelActive(
+  channel: ChannelRecord,
+  active: boolean,
+  actorId: string,
+): Promise<ChannelRecord> {
+  const supabase = requireSupabase();
+  const { data, error } = await supabase
+    .from('channels')
+    .update({ is_active: active, updated_at: new Date().toISOString() })
+    .eq('id', channel.id)
+    .select('*')
+    .single();
+  if (error) throw error;
+  const updated = data as ChannelRecord;
+  await writeAuditLog(
+    actorId,
+    active ? 'channel.activate' : 'channel.deactivate',
+    'channel',
+    updated.id,
+    { youtube_channel_id: updated.youtube_channel_id, title: updated.title },
+  );
+  return updated;
+}
+
+/** Swap sort_order with the neighbour in the given direction. */
+export async function moveChannel(
+  channel: ChannelRecord,
+  neighbour: ChannelRecord,
+  actorId: string,
+): Promise<void> {
+  const supabase = requireSupabase();
+  const first = await supabase
+    .from('channels')
+    .update({ sort_order: neighbour.sort_order, updated_at: new Date().toISOString() })
+    .eq('id', channel.id);
+  if (first.error) throw first.error;
+  const second = await supabase
+    .from('channels')
+    .update({ sort_order: channel.sort_order, updated_at: new Date().toISOString() })
+    .eq('id', neighbour.id);
+  if (second.error) throw second.error;
+  await writeAuditLog(actorId, 'channel.reorder', 'channel', channel.id, {
+    youtube_channel_id: channel.youtube_channel_id,
+    from_order: channel.sort_order,
+    to_order: neighbour.sort_order,
+    swapped_with: neighbour.youtube_channel_id,
+  });
+}
+
+/** Re-read title/handle/avatar from the YouTube API and save the fresh snapshot. */
+export async function refreshChannel(
+  channel: ChannelRecord,
+  actorId: string,
+): Promise<ChannelRecord> {
+  const info = await fetchChannelById(channel.youtube_channel_id);
+  if (!info) {
+    throw new Error('YouTube did not return this channel — it may have been removed or made private.');
+  }
+  const supabase = requireSupabase();
+  const { data, error } = await supabase
+    .from('channels')
+    .update({
+      title: info.title,
+      handle: info.handle,
+      avatar_url: info.avatarUrl,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', channel.id)
+    .select('*')
+    .single();
+  if (error) throw error;
+  const updated = data as ChannelRecord;
+  await writeAuditLog(actorId, 'channel.refresh', 'channel', updated.id, {
+    youtube_channel_id: updated.youtube_channel_id,
+    title: updated.title,
+  });
+  return updated;
+}
+
+export async function deleteChannel(channel: ChannelRecord, actorId: string): Promise<void> {
+  const supabase = requireSupabase();
+  const { error } = await supabase.from('channels').delete().eq('id', channel.id);
+  if (error) throw error;
+  await writeAuditLog(actorId, 'channel.remove', 'channel', channel.id, {
+    youtube_channel_id: channel.youtube_channel_id,
+    handle: channel.handle,
+    title: channel.title,
+  });
 }
 
 // ── Audit logs ───────────────────────────────────────────────────────

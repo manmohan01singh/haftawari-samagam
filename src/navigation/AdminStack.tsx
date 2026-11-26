@@ -3,6 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import {
   AdminAuditLogsScreen,
   AdminCategoriesScreen,
+  AdminChannelsScreen,
   AdminChatModerationScreen,
   AdminMembersScreen,
   AdminOverviewScreen,
@@ -23,6 +24,7 @@ export function AdminStack() {
     <Stack.Navigator>
       <Stack.Screen name="AdminOverview" component={AdminOverviewScreen} options={{ title: 'Admin' }} />
       <Stack.Screen name="AdminVideos" component={AdminVideosScreen} options={{ title: 'Videos' }} />
+      <Stack.Screen name="AdminChannels" component={AdminChannelsScreen} options={{ title: 'Channels' }} />
       <Stack.Screen name="AdminSessions" component={AdminSessionsScreen} options={{ title: 'Sessions' }} />
       <Stack.Screen name="AdminCategories" component={AdminCategoriesScreen} options={{ title: 'Categories' }} />
       <Stack.Screen name="AdminMembers" component={AdminMembersScreen} options={{ title: 'Members' }} />

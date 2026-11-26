@@ -291,6 +291,88 @@ export async function fetchChannelById(
   return item ? toChannelInfo(item) : null;
 }
 
+/** Fetch several channels in ONE channels.list call (1 unit per 50 ids). */
+export async function fetchChannelsByIds(
+  channelIds: string[],
+  fetchImpl: typeof fetch = fetch,
+): Promise<YouTubeChannelInfo[]> {
+  if (channelIds.length === 0) return [];
+  const out: YouTubeChannelInfo[] = [];
+  for (let i = 0; i < channelIds.length; i += 50) {
+    const chunk = channelIds.slice(i, i + 50);
+    const data = await apiGet<ChannelsListResponse>(
+      `channels?part=${CHANNEL_PARTS}&id=${chunk.map(encodeURIComponent).join(',')}`,
+      fetchImpl,
+    );
+    for (const item of data.items ?? []) out.push(toChannelInfo(item));
+  }
+  const byId = new Map(out.map((c) => [c.channelId, c]));
+  return channelIds.map((id) => byId.get(id)).filter((c): c is YouTubeChannelInfo => Boolean(c));
+}
+
+/** Legacy username lookup (channels without a @handle). May return null. */
+export async function fetchChannelByUsername(
+  username: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<YouTubeChannelInfo | null> {
+  const data = await apiGet<ChannelsListResponse>(
+    `channels?part=${CHANNEL_PARTS}&forUsername=${encodeURIComponent(username)}`,
+    fetchImpl,
+  );
+  const item = data.items?.[0];
+  return item ? toChannelInfo(item) : null;
+}
+
+// ── Admin channel input parsing ──────────────────────────────────────
+
+export type ChannelInputRef =
+  | { kind: 'id'; value: string }
+  | { kind: 'handle'; value: string }
+  | { kind: 'username'; value: string };
+
+/**
+ * Parse what an admin pasted into the Channels panel: a UC… channel id,
+ * an @handle (with or without the @), or a youtube.com URL —
+ * /channel/UC…, /@handle, /c/<name> or /user/<name>. Returns null when
+ * the input is none of those (the panel then says so, honestly).
+ */
+export function parseChannelInput(input: string): ChannelInputRef | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+  if (/^UC[A-Za-z0-9_-]{22}$/.test(trimmed)) return { kind: 'id', value: trimmed };
+  if (/^@[A-Za-z0-9._-]{3,30}$/.test(trimmed)) return { kind: 'handle', value: trimmed };
+  const urlMatch = trimmed.match(
+    /(?:youtube\.com|www\.youtube\.com|m\.youtube\.com)\/(?:channel\/(UC[A-Za-z0-9_-]{22})|(@[A-Za-z0-9._-]{3,30})|c\/([A-Za-z0-9._-]{1,60})|user\/([A-Za-z0-9._-]{1,60}))/i,
+  );
+  if (urlMatch) {
+    if (urlMatch[1]) return { kind: 'id', value: urlMatch[1] };
+    if (urlMatch[2]) return { kind: 'handle', value: urlMatch[2] };
+    return { kind: 'username', value: urlMatch[3] ?? urlMatch[4] };
+  }
+  // A bare handle typed without the @ (letters/dots/underscores only).
+  if (/^[A-Za-z0-9._-]{3,30}$/.test(trimmed)) return { kind: 'handle', value: `@${trimmed}` };
+  return null;
+}
+
+/**
+ * Resolve an admin's channel input to REAL API data via channels.list.
+ * A /c/<name> or /user/<name> input first tries forUsername; when that
+ * legacy lookup finds nothing it falls back to treating the name as a
+ * handle. Returns null when YouTube reports no such channel.
+ */
+export async function resolveChannelInput(
+  input: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<YouTubeChannelInfo | null> {
+  const ref = parseChannelInput(input);
+  if (!ref) return null;
+  if (ref.kind === 'id') return fetchChannelById(ref.value, fetchImpl);
+  if (ref.kind === 'handle') return fetchChannelByHandle(ref.value, fetchImpl);
+  const byUsername = await fetchChannelByUsername(ref.value, fetchImpl).catch(() => null);
+  if (byUsername) return byUsername;
+  return fetchChannelByHandle(`@${ref.value}`, fetchImpl).catch(() => null);
+}
+
 // ── Uploads + search ─────────────────────────────────────────────────
 
 interface PlaylistItemsResponse {

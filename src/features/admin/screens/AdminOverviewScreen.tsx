@@ -20,6 +20,7 @@ type Props = NativeStackScreenProps<AdminStackParamList, 'AdminOverview'>;
 
 const LINKS: { route: keyof AdminStackParamList; label: string; hint: string }[] = [
   { route: 'AdminVideos', label: 'Videos', hint: 'Add samagams from YouTube, publish or unpublish' },
+  { route: 'AdminChannels', label: 'Channels', hint: 'Choose which YouTube channels appear in the app' },
   { route: 'AdminSessions', label: 'Sessions', hint: 'Schedule synchronized Samagam sessions' },
   { route: 'AdminCategories', label: 'Categories', hint: 'Organise the archive shelves' },
   { route: 'AdminMembers', label: 'Members', hint: 'See who has joined and their roles' },
@@ -64,6 +65,8 @@ function OverviewContent({ navigation }: { navigation: Props['navigation'] }) {
           <StatCard label="Videos — drafts" value={counts.videosDraft} />
           <StatCard label="Videos — unpublished" value={counts.videosUnpublished} />
           <StatCard label="Categories" value={counts.categories} />
+          <StatCard label="Channels — active" value={counts.channelsActive} />
+          <StatCard label="Channels — total" value={counts.channelsTotal} />
         </View>
       </View>
 

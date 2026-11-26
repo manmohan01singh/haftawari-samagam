@@ -1,13 +1,15 @@
 /**
  * Search engine — merges the three legs into one ranked result set:
  *
- *   1. Channel card   — when the query names the official channel
- *      ("bgsj", "bhai gursharan singh ji", the handle). Decided locally;
- *      card data from channels.list (1 unit, cached 6h).
+ *   1. Channel card   — when the query names ANY active panel channel
+ *      ("bgsj", "amritvela trust live", a handle). Identities come from
+ *      the admin `channels` table (channelRegistry); matching is local;
+ *      card data from channels.list (1 unit, cached 6h per channel).
  *   2. Local catalogue — the app's published videos, fuzzy-ranked.
  *      Zero quota; always runs.
- *   3. Channel uploads — YouTube search.list scoped to the official
- *      channel (100 units, cached 10 min per query).
+ *   3. Channel uploads — YouTube search.list scoped to each active
+ *      channel (100 units per channel, capped at
+ *      MAX_YOUTUBE_SEARCH_CHANNELS, cached 10 min per channel+query).
  *
  * Ranking contract (see docs/SEARCH.md):
  *   exact/phrase local  >  acronym local  >  fuzzy local  >  YouTube leg,
@@ -16,15 +18,15 @@
  *   app needs for history/saves). Shorts never appear (both legs filter).
  */
 
-import { OFFICIAL_CHANNEL } from './config';
 import { normalizeText, tokenize } from './normalize';
 import { tokenSimilarity } from './fuzzy';
 import { fetchPublishedVideos, searchLocalCatalogue } from './localCatalogue';
+import { loadSearchChannels, MAX_YOUTUBE_SEARCH_CHANNELS } from './channelRegistry';
 import {
-  fetchChannelTitles,
-  fetchOfficialChannel,
-  matchOfficialChannel,
-  searchChannelVideos,
+  fetchChannelCard,
+  fetchChannelTitlesFor,
+  matchChannel,
+  searchChannelVideosFor,
 } from './youtubeSearch';
 import type { SearchOptions, SearchResults, VideoResult } from './types';
 
@@ -67,18 +69,23 @@ export async function deriveCorrection(queryText: string): Promise<string | null
   const addTitle = (title: string) => {
     for (const token of tokenize(title)) if (token.length >= 3) vocabulary.add(token);
   };
+  const channels = await loadSearchChannels().catch(() => []);
   try {
-    const [videos, channelTitles] = await Promise.all([
+    const [videos, ...titleLists] = await Promise.all([
       fetchPublishedVideos().catch(() => []),
-      fetchChannelTitles().catch(() => [] as string[]),
+      ...channels
+        .slice(0, MAX_YOUTUBE_SEARCH_CHANNELS)
+        .map((c) => fetchChannelTitlesFor(c.id).catch(() => [] as string[])),
     ]);
     for (const video of videos) addTitle(video.title);
-    for (const title of channelTitles) addTitle(title);
+    for (const titles of titleLists) for (const title of titles) addTitle(title);
   } catch {
     // Vocabulary sources are best-effort; aliases below still apply.
   }
-  addTitle(OFFICIAL_CHANNEL.title);
-  for (const alias of OFFICIAL_CHANNEL.aliases) addTitle(alias);
+  for (const channel of channels) {
+    addTitle(channel.title);
+    for (const alias of channel.aliases) addTitle(alias);
+  }
   addTitle('haftawari samagam kirtan'); // the app's own domain words (branding, not data)
 
   let changed = false;
@@ -118,25 +125,49 @@ async function runLegs(
   query: string,
   options: SearchOptions,
 ): Promise<{ channel: SearchResults['channel']; videos: VideoResult[]; youtubeSkipped: boolean }> {
+  const channels = await loadSearchChannels().catch(() => []);
   const localPromise = searchLocalCatalogue(query, options.signal).catch(() => [] as VideoResult[]);
-  const channelMatch = matchOfficialChannel(query);
-  const channelPromise = channelMatch
-    ? fetchOfficialChannel(options.signal)
+
+  // Channel card: the BEST-matching active channel wins the single
+  // ref-3 card slot. Matching is local (zero quota); only the winner's
+  // card data costs a (cached) channels.list call.
+  let bestMatch: { channelId: string; score: number; kind: NonNullable<SearchResults['channel']>['matchKind'] } | null = null;
+  for (const identity of channels) {
+    const match = matchChannel(query, identity);
+    if (match && (!bestMatch || match.score > bestMatch.score)) {
+      bestMatch = { channelId: identity.id, score: match.score, kind: match.kind };
+    }
+  }
+  const channelPromise = bestMatch
+    ? fetchChannelCard(bestMatch.channelId, options.signal)
         .then((channel) =>
-          channel ? { ...channel, score: channelMatch.score, matchKind: channelMatch.kind } : null,
+          channel ? { ...channel, score: bestMatch!.score, matchKind: bestMatch!.kind } : null,
         )
         .catch(() => null)
     : Promise.resolve(null);
+
   let youtubeSkipped = false;
   let youtubePromise: Promise<VideoResult[]>;
   if (options.localOnly) {
     youtubeSkipped = true;
     youtubePromise = Promise.resolve([]);
   } else {
-    youtubePromise = searchChannelVideos(query, options.signal).catch((error: unknown) => {
-      if (error instanceof Error && error.name === 'AbortError') throw error;
-      youtubeSkipped = true;
-      return [] as VideoResult[];
+    // Fan out per channel (capped for quota), merging every leg. The
+    // leg counts as skipped only when EVERY channel's search failed.
+    const targets = channels.slice(0, MAX_YOUTUBE_SEARCH_CHANNELS);
+    youtubePromise = Promise.all(
+      targets.map((identity) =>
+        searchChannelVideosFor(identity.id, query, options.signal).then(
+          (results) => ({ ok: true as const, results }),
+          (error: unknown) => {
+            if (error instanceof Error && error.name === 'AbortError') throw error;
+            return { ok: false as const, results: [] as VideoResult[] };
+          },
+        ),
+      ),
+    ).then((legs) => {
+      if (targets.length > 0 && legs.every((leg) => !leg.ok)) youtubeSkipped = true;
+      return legs.flatMap((leg) => leg.results);
     });
   }
   const [local, channel, youtube] = await Promise.all([localPromise, channelPromise, youtubePromise]);

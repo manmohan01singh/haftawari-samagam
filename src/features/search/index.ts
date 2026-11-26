@@ -23,11 +23,17 @@ export {
 } from './localCatalogue';
 export {
   fetchOfficialChannel,
+  fetchChannelCard,
   fetchChannelTitles,
+  fetchChannelTitlesFor,
   matchOfficialChannel,
+  matchChannel,
   parseIso8601Duration,
   searchChannelVideos,
+  searchChannelVideosFor,
+  type ChannelIdentity,
 } from './youtubeSearch';
+export { loadSearchChannels, MAX_YOUTUBE_SEARCH_CHANNELS } from './channelRegistry';
 export { searchAll, createSearchController, queryKey, deriveCorrection, type SearchController } from './engine';
 export { getSuggestions } from './suggestions';
 export {

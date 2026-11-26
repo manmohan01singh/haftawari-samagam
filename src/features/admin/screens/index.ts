@@ -1,4 +1,5 @@
 export { AdminOverviewScreen } from './AdminOverviewScreen';
+export { AdminChannelsScreen } from './AdminChannelsScreen';
 export { AdminVideosScreen } from './AdminVideosScreen';
 export { AdminSessionsScreen } from './AdminSessionsScreen';
 export { AdminCategoriesScreen } from './AdminCategoriesScreen';

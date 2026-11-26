@@ -33,6 +33,9 @@ export interface VideoResult {
   publishedAt: string | null;
   /** From YouTube snippet.liveBroadcastContent; 'none' for local rows. */
   liveBroadcastContent: 'none' | 'live' | 'upcoming';
+  /** Owning channel for YouTube-leg results (multi-channel panel). */
+  channelId?: string;
+  channelTitle?: string;
   score: number;
   matchKind: MatchKind;
 }

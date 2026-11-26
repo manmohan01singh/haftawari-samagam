@@ -90,12 +90,23 @@ interface ChannelsResponse {
   }[];
 }
 
+/** A panel channel's identity for matching (table-driven, migration 0003). */
+export interface ChannelIdentity {
+  id: string;
+  title: string;
+  handle: string;
+  aliases: readonly string[];
+}
+
 /**
- * Decide — locally, at zero quota cost — whether the query names the
- * official channel (full name, alias, handle, or acronym like "bgsj").
+ * Decide — locally, at zero quota cost — whether the query names a
+ * channel (full name, alias, handle, or acronym like "bgsj").
  */
-export function matchOfficialChannel(queryText: string): { score: number; kind: ChannelResult['matchKind'] } | null {
-  const candidates = [OFFICIAL_CHANNEL.title, OFFICIAL_CHANNEL.handle.replace(/^@/, ''), ...OFFICIAL_CHANNEL.aliases];
+export function matchChannel(
+  queryText: string,
+  channel: ChannelIdentity,
+): { score: number; kind: ChannelResult['matchKind'] } | null {
+  const candidates = [channel.title, channel.handle.replace(/^@/, ''), ...channel.aliases];
   let best: { score: number; kind: ChannelResult['matchKind'] } | null = null;
   for (const candidate of candidates) {
     const { score, kind } = scoreTitle(queryText, candidate);
@@ -106,14 +117,20 @@ export function matchOfficialChannel(queryText: string): { score: number; kind: 
   return best;
 }
 
-/** Live channel data for the card (channels.list = 1 unit, cached 6h). */
-export async function fetchOfficialChannel(signal?: AbortSignal): Promise<ChannelResult | null> {
+/** Back-compat wrapper: match against the original official channel. */
+export function matchOfficialChannel(queryText: string): { score: number; kind: ChannelResult['matchKind'] } | null {
+  return matchChannel(queryText, OFFICIAL_CHANNEL);
+}
+
+/** Live channel data for ANY panel channel's card (channels.list = 1 unit, cached 6h per channel). */
+export async function fetchChannelCard(channelId: string, signal?: AbortSignal): Promise<ChannelResult | null> {
   if (!isYouTubeConfigured) return null;
-  const cached = await readCache<ChannelResult>(CHANNEL_CACHE_KEY, CHANNEL_CACHE_TTL_MS);
+  const cacheKey = channelId === OFFICIAL_CHANNEL.id ? CHANNEL_CACHE_KEY : `${CHANNEL_CACHE_KEY}:${channelId}`;
+  const cached = await readCache<ChannelResult>(cacheKey, CHANNEL_CACHE_TTL_MS);
   if (cached) return cached;
 
   const data = await apiGet<ChannelsResponse>(
-    `channels?part=snippet,statistics&id=${OFFICIAL_CHANNEL.id}`,
+    `channels?part=snippet,statistics&id=${encodeURIComponent(channelId)}`,
     signal,
   );
   const item = data.items?.[0];
@@ -123,15 +140,21 @@ export async function fetchOfficialChannel(signal?: AbortSignal): Promise<Channe
     kind: 'channel',
     channelId: item.id,
     title: item.snippet.title,
-    handle: item.snippet.customUrl ?? OFFICIAL_CHANNEL.handle,
+    handle: item.snippet.customUrl ?? '',
     avatarUrl: (thumbs.high ?? thumbs.medium ?? thumbs.default)?.url ?? null,
     subscriberCount: item.statistics.subscriberCount ? Number(item.statistics.subscriberCount) : null,
     videoCount: item.statistics.videoCount ? Number(item.statistics.videoCount) : null,
     matchKind: 'exact',
     score: 1,
   };
-  await writeCache(CHANNEL_CACHE_KEY, channel);
+  await writeCache(cacheKey, channel);
   return channel;
+}
+
+/** Back-compat wrapper for the original official channel. */
+export async function fetchOfficialChannel(signal?: AbortSignal): Promise<ChannelResult | null> {
+  const channel = await fetchChannelCard(OFFICIAL_CHANNEL.id, signal);
+  return channel ? { ...channel, handle: channel.handle || OFFICIAL_CHANNEL.handle } : null;
 }
 
 // ── Channel-scoped video search ──────────────────────────────────────
@@ -142,6 +165,8 @@ interface SearchResponse {
     snippet: {
       title: string;
       description: string;
+      channelId: string;
+      channelTitle: string;
       publishedAt: string;
       liveBroadcastContent: 'none' | 'live' | 'upcoming';
       thumbnails: Record<string, { url: string } | undefined>;
@@ -155,10 +180,10 @@ interface VideosDetailsResponse {
 
 const inFlight = new Map<string, Promise<VideoResult[]>>();
 
-async function searchChannelUncached(queryText: string, signal?: AbortSignal): Promise<VideoResult[]> {
+async function searchChannelUncached(channelId: string, queryText: string, signal?: AbortSignal): Promise<VideoResult[]> {
   const params = new URLSearchParams({
     part: 'snippet',
-    channelId: OFFICIAL_CHANNEL.id,
+    channelId,
     q: queryText,
     type: 'video',
     maxResults: '25',
@@ -197,6 +222,8 @@ async function searchChannelUncached(queryText: string, signal?: AbortSignal): P
       durationSeconds,
       publishedAt: item.snippet.publishedAt,
       liveBroadcastContent: item.snippet.liveBroadcastContent,
+      channelId: item.snippet.channelId,
+      channelTitle: item.snippet.channelTitle,
       score,
       matchKind: kind,
     });
@@ -204,17 +231,17 @@ async function searchChannelUncached(queryText: string, signal?: AbortSignal): P
   return results;
 }
 
-/** Channel-scoped search with 10-minute cache + in-flight de-duping. */
-export async function searchChannelVideos(queryText: string, signal?: AbortSignal): Promise<VideoResult[]> {
+/** Channel-scoped search with 10-minute cache + in-flight de-duping, for ANY panel channel. */
+export async function searchChannelVideosFor(channelId: string, queryText: string, signal?: AbortSignal): Promise<VideoResult[]> {
   if (!isYouTubeConfigured) return [];
-  const cacheKey = `${SEARCH_CACHE_PREFIX}${queryText.trim().toLowerCase()}`;
+  const cacheKey = `${SEARCH_CACHE_PREFIX}${channelId}:${queryText.trim().toLowerCase()}`;
   const cached = await readCache<VideoResult[]>(cacheKey, SEARCH_CACHE_TTL_MS);
   if (cached) return cached;
 
   const existing = inFlight.get(cacheKey);
   if (existing) return existing;
 
-  const promise = searchChannelUncached(queryText, signal)
+  const promise = searchChannelUncached(channelId, queryText, signal)
     .then(async (results) => {
       await writeCache(cacheKey, results);
       return results;
@@ -224,6 +251,11 @@ export async function searchChannelVideos(queryText: string, signal?: AbortSigna
   return promise;
 }
 
+/** Back-compat wrapper scoped to the original official channel. */
+export async function searchChannelVideos(queryText: string, signal?: AbortSignal): Promise<VideoResult[]> {
+  return searchChannelVideosFor(OFFICIAL_CHANNEL.id, queryText, signal);
+}
+
 // ── Channel titles for suggestions ───────────────────────────────────
 
 interface PlaylistItemsResponse {
@@ -231,16 +263,17 @@ interface PlaylistItemsResponse {
 }
 
 /**
- * Recent upload titles of the official channel (uploads playlist,
+ * Recent upload titles of ANY panel channel (uploads playlist,
  * playlistItems.list = 1 unit per page), cached 24h. Feeds suggestions
  * only — titles are real API data, never invented.
  */
-export async function fetchChannelTitles(signal?: AbortSignal): Promise<string[]> {
+export async function fetchChannelTitlesFor(channelId: string, signal?: AbortSignal): Promise<string[]> {
   if (!isYouTubeConfigured) return [];
-  const cached = await readCache<string[]>(TITLES_CACHE_KEY, TITLES_CACHE_TTL_MS);
+  const cacheKey = channelId === OFFICIAL_CHANNEL.id ? TITLES_CACHE_KEY : `${TITLES_CACHE_KEY}:${channelId}`;
+  const cached = await readCache<string[]>(cacheKey, TITLES_CACHE_TTL_MS);
   if (cached) return cached;
 
-  const playlistId = uploadsPlaylistId(OFFICIAL_CHANNEL.id);
+  const playlistId = uploadsPlaylistId(channelId);
   const data = await apiGet<PlaylistItemsResponse>(
     `playlistItems?part=snippet&playlistId=${playlistId}&maxResults=50`,
     signal,
@@ -248,6 +281,11 @@ export async function fetchChannelTitles(signal?: AbortSignal): Promise<string[]
   const titles = (data.items ?? [])
     .map((item) => item.snippet.title)
     .filter((title) => !title.toLowerCase().includes('#shorts'));
-  await writeCache(TITLES_CACHE_KEY, titles);
+  await writeCache(cacheKey, titles);
   return titles;
+}
+
+/** Back-compat wrapper for the original official channel. */
+export async function fetchChannelTitles(signal?: AbortSignal): Promise<string[]> {
+  return fetchChannelTitlesFor(OFFICIAL_CHANNEL.id, signal);
 }
