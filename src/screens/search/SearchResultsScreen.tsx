@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -8,46 +8,40 @@ import { ShelfCard } from '../../components/video/ShelfCard';
 import { SkeletonCard } from '../../components/video/SkeletonCard';
 import {
   apiCardData,
-  supabaseCardData,
+  formatDateLine,
+  listThumbnailUrl,
   type CardVideoData,
 } from '../../components/video/cardData';
 import { useOfficialChannel } from '../../features/channel';
-import { formatCount } from '../../lib/format';
-import { isSupabaseConfigured } from '../../lib/supabase';
 import {
-  OFFICIAL_CHANNEL_ID,
+  createSearchController,
+  type SearchResults,
+  type VideoResult,
+} from '../../features/search';
+import { formatCount } from '../../lib/format';
+import {
+  OFFICIAL_CHANNEL_HANDLE,
   fetchChannelUploads,
-  searchChannelVideos,
   type YouTubeVideoMetadata,
 } from '../../lib/youtube';
-import { searchPublishedVideos } from '../../lib/videos';
 import { lightColors, radii, spacing, typography } from '../../theme';
-import type { Video } from '../../types/database';
 import type { RootStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SearchResults'>;
 
-type ResultItem =
-  | { kind: 'local'; video: Video }
-  | { kind: 'api'; meta: YouTubeVideoMetadata };
-
-/** Does the query plausibly ask for the channel itself (name, handle, initials like "bgsj")? */
-function queryMatchesChannel(query: string, title: string, handle: string | null): boolean {
-  const q = query.toLowerCase().replace(/[^a-z0-9]/g, '');
-  if (!q) return false;
-  const titleKey = title.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const handleKey = (handle ?? '').toLowerCase().replace(/[^a-z@0-9]/g, '').replace('@', '');
-  if (titleKey.includes(q) || handleKey.includes(q)) return true;
-  const initials = title
-    .split(/\s+/)
-    .map((w) => w.replace(/[^A-Za-z]/g, '').charAt(0))
-    .join('')
-    .toLowerCase();
-  if (initials.startsWith(q)) return true;
-  return title
-    .toLowerCase()
-    .split(/\s+/)
-    .some((w) => w.replace(/[^a-z]/g, '').startsWith(q) && q.length >= 3);
+/** Map an engine VideoResult onto the shared card display shape. */
+function searchResultCardData(v: VideoResult, channelAvatarUrl: string | null): CardVideoData {
+  return {
+    key: v.videoRowId ? `sb-${v.videoRowId}` : `yt-${v.youtubeVideoId}`,
+    title: v.title,
+    thumbnailUrl: listThumbnailUrl(v.youtubeVideoId, v.thumbnailUrl),
+    durationSeconds: v.liveBroadcastContent === 'live' ? null : v.durationSeconds,
+    broadcastState: v.liveBroadcastContent,
+    channelLine: OFFICIAL_CHANNEL_HANDLE,
+    metaLine:
+      v.liveBroadcastContent === 'live' ? 'Live now' : formatDateLine(v.publishedAt),
+    channelAvatarUrl,
+  };
 }
 
 /**
@@ -61,55 +55,57 @@ function queryMatchesChannel(query: string, title: string, handle: string | null
 export function SearchResultsScreen({ route, navigation }: Props) {
   const { query } = route.params;
   const channel = useOfficialChannel();
-  // Results are stored keyed by their query; loading/error are derived
-  // from whether the stored result matches the current query (no
-  // synchronous setState in the fetch effect).
+  // Data layer: the search engine (features/search) via its controller
+  // — fuzzy local catalogue + official-channel match + YouTube leg,
+  // merged, ranked and de-duplicated. Results are stored keyed by
+  // their query; loading/error derive from whether the stored result
+  // matches the current query (no synchronous setState in the effect).
+  const controllerRef = useRef<ReturnType<typeof createSearchController> | null>(null);
+  if (controllerRef.current === null) {
+    controllerRef.current = createSearchController(300);
+  }
   const [result, setResult] = useState<{
     query: string;
-    local: Video[];
-    api: YouTubeVideoMetadata[];
+    data: SearchResults | null;
     error: string | null;
   } | null>(null);
   const [latest, setLatest] = useState<YouTubeVideoMetadata[]>([]);
   const loading = result?.query !== query;
   const error = result?.query === query ? result.error : null;
+  const data = result?.query === query ? result.data : null;
 
   useEffect(() => {
+    const controller = controllerRef.current;
+    if (!controller) return;
     let active = true;
-    (async () => {
-      try {
-        const [localRows, apiRows] = await Promise.all([
-          isSupabaseConfigured ? searchPublishedVideos(query).catch(() => []) : Promise.resolve([]),
-          searchChannelVideos(OFFICIAL_CHANNEL_ID, query).catch(() => []),
-        ]);
-        if (!active) return;
-        const localIds = new Set(localRows.map((v) => v.youtube_video_id));
-        setResult({
-          query,
-          local: localRows,
-          api: apiRows.filter((m) => !localIds.has(m.youtubeVideoId)),
-          error: null,
-        });
-      } catch (e) {
+    controller
+      .search(query)
+      .then((data) => {
+        if (active) setResult({ query, data, error: null });
+      })
+      .catch((e) => {
         if (active) {
           setResult({
             query,
-            local: [],
-            api: [],
+            data: null,
             error: e instanceof Error ? e.message : 'Search failed.',
           });
         }
-      }
-    })();
+      });
     return () => {
       active = false;
     };
   }, [query]);
 
-  const channelMatches = useMemo(
-    () => (channel ? queryMatchesChannel(query, channel.title, channel.handle) : false),
-    [channel, query],
-  );
+  // Cancel any pending/in-flight search when the screen unmounts.
+  useEffect(() => {
+    const controller = controllerRef.current;
+    return () => controller?.cancel();
+  }, []);
+
+  const channelResult = data?.channel ?? null;
+  const channelMatches = channelResult != null;
+  const youtubeSkipped = data?.youtubeSkipped ?? false;
 
   // "Latest videos" carousel content, only when the channel block shows.
   useEffect(() => {
@@ -125,31 +121,20 @@ export function SearchResultsScreen({ route, navigation }: Props) {
     };
   }, [channelMatches, channel]);
 
-  const items = useMemo<ResultItem[]>(() => {
-    if (!result || result.query !== query) return [];
-    return [
-      ...result.local.map((video) => ({ kind: 'local', video }) as ResultItem),
-      ...result.api.map((meta) => ({ kind: 'api', meta }) as ResultItem),
-    ];
-  }, [result, query]);
+  const items = useMemo<VideoResult[]>(() => data?.videos ?? [], [data]);
 
   const renderItem = useCallback(
-    ({ item }: { item: ResultItem }) => {
-      if (item.kind === 'local') {
-        const data = supabaseCardData(item.video, channel?.avatarUrl ?? null);
-        return (
-          <ShelfCard
-            data={data}
-            onPress={() => navigation.navigate('Watch', { videoRowId: item.video.id })}
-          />
-        );
-      }
-      const data = apiCardData(item.meta, channel?.avatarUrl ?? null);
+    ({ item }: { item: VideoResult }) => {
+      const cardData = searchResultCardData(item, channel?.avatarUrl ?? null);
       return (
         <ShelfCard
-          data={data}
-          showAvatar={item.meta.liveBroadcastContent === 'live'}
-          onPress={() => navigation.navigate('Watch', { youtubeVideoId: item.meta.youtubeVideoId })}
+          data={cardData}
+          showAvatar={item.liveBroadcastContent === 'live'}
+          onPress={() =>
+            item.videoRowId
+              ? navigation.navigate('Watch', { videoRowId: item.videoRowId })
+              : navigation.navigate('Watch', { youtubeVideoId: item.youtubeVideoId })
+          }
         />
       );
     },
@@ -157,39 +142,48 @@ export function SearchResultsScreen({ route, navigation }: Props) {
   );
 
   const keyExtractor = useCallback(
-    (item: ResultItem) => (item.kind === 'local' ? `sb-${item.video.id}` : `yt-${item.meta.youtubeVideoId}`),
+    (item: VideoResult) => (item.videoRowId ? `sb-${item.videoRowId}` : `yt-${item.youtubeVideoId}`),
     [],
   );
 
-  const header = channelMatches && channel ? (
+  const header = channelResult || youtubeSkipped ? (
     <View>
-      <View style={styles.channelBlock}>
-        {channel.avatarUrl ? (
-          <Image source={{ uri: channel.avatarUrl }} style={styles.channelAvatar} contentFit="cover" cachePolicy="memory-disk" />
-        ) : (
-          <View style={[styles.channelAvatar, styles.avatarFallback]}>
-            <Text style={styles.avatarInitial}>{channel.title.charAt(0)}</Text>
+      {youtubeSkipped ? (
+        <Text style={styles.skippedNote}>
+          Showing the published archive only — channel results are unavailable right now.
+        </Text>
+      ) : null}
+      {channelResult ? (
+        <>
+          <View style={styles.channelBlock}>
+            {channelResult.avatarUrl ? (
+              <Image source={{ uri: channelResult.avatarUrl }} style={styles.channelAvatar} contentFit="cover" cachePolicy="memory-disk" />
+            ) : (
+              <View style={[styles.channelAvatar, styles.avatarFallback]}>
+                <Text style={styles.avatarInitial}>{channelResult.title.charAt(0)}</Text>
+              </View>
+            )}
+            <View style={styles.channelLines}>
+              <Text style={styles.channelName} numberOfLines={2}>
+                {channelResult.title}
+              </Text>
+              {channelResult.handle ? <Text style={styles.channelHandle}>{channelResult.handle}</Text> : null}
+              <Text style={styles.channelMeta} numberOfLines={1}>
+                {channelResult.subscriberCount != null ? `${formatCount(channelResult.subscriberCount)} subscribers` : ''}
+                {channelResult.subscriberCount != null && channelResult.videoCount != null ? '  •  ' : ''}
+                {channelResult.videoCount != null ? `${formatCount(channelResult.videoCount)} videos` : ''}
+              </Text>
+            </View>
           </View>
-        )}
-        <View style={styles.channelLines}>
-          <Text style={styles.channelName} numberOfLines={2}>
-            {channel.title}
-          </Text>
-          {channel.handle ? <Text style={styles.channelHandle}>{channel.handle}</Text> : null}
-          <Text style={styles.channelMeta} numberOfLines={1}>
-            {channel.subscriberCount != null ? `${formatCount(channel.subscriberCount)} subscribers` : ''}
-            {channel.subscriberCount != null && channel.videoCount != null ? '  •  ' : ''}
-            {channel.videoCount != null ? `${formatCount(channel.videoCount)} videos` : ''}
-          </Text>
-        </View>
-      </View>
-      <Pressable
-        style={styles.viewChannelPill}
-        onPress={() => navigation.navigate('Channel', { channelId: channel.channelId })}
-        accessibilityRole="button"
-      >
-        <Text style={styles.viewChannelText}>View Channel</Text>
-      </Pressable>
+          <Pressable
+            style={styles.viewChannelPill}
+            onPress={() => navigation.navigate('Channel', { channelId: channelResult.channelId })}
+            accessibilityRole="button"
+          >
+            <Text style={styles.viewChannelText}>View Channel</Text>
+          </Pressable>
+        </>
+      ) : null}
       {latest.length > 0 ? (
         <View>
           <Text style={styles.latestHeading}>Latest videos</Text>
@@ -200,7 +194,7 @@ export function SearchResultsScreen({ route, navigation }: Props) {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.carouselContent}
             renderItem={({ item }) => {
-              const data: CardVideoData = apiCardData(item, channel.avatarUrl);
+              const data: CardVideoData = apiCardData(item, channel?.avatarUrl ?? null);
               return (
                 <View style={styles.carouselCard}>
                   <ShelfCard
@@ -285,6 +279,11 @@ const styles = StyleSheet.create({
   },
   fieldText: { ...typography.body, fontSize: 16, color: lightColors.text, flex: 1 },
   listPad: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
+  skippedNote: {
+    ...typography.metadata,
+    color: lightColors.textSecondary,
+    marginTop: spacing.sm,
+  },
   channelBlock: { flexDirection: 'row', gap: spacing.lg, marginTop: spacing.sm },
   channelAvatar: { width: 88, height: 88, borderRadius: 44 },
   avatarFallback: {

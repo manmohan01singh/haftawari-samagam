@@ -1,8 +1,17 @@
-import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { lightColors, radii, spacing, typography } from '../../theme';
+import { useAuth } from '../../features/auth';
+import {
+  addSearchHistory,
+  clearSearchHistory,
+  getSuggestions,
+  listSearchHistory,
+  removeSearchHistory,
+  type Suggestion,
+} from '../../features/search';
 import type { RootStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Search'>;
@@ -10,15 +19,78 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Search'>;
 /**
  * Search entry (reference §3 search bar): back arrow, a light pill
  * field holding the query with a × clear inside its right end.
- * Submitting runs the real search (archive + official channel).
+ *
+ * Below the bar, the search engine (features/search, docs/SEARCH.md)
+ * drives the list: while the field is empty it shows the user's REAL
+ * recent searches (on-device, per user — removable, clearable); while
+ * typing it shows quota-free suggestions from history, the published
+ * catalogue and the official channel. Submitting records the query in
+ * history and runs the full search on the results screen.
  */
 export function SearchScreen({ navigation }: Props) {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
   const [query, setQuery] = useState('');
+  const [history, setHistory] = useState<string[]>([]);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const suggestSeq = useRef(0);
 
-  const submit = () => {
-    const q = query.trim();
-    if (q) navigation.navigate('SearchResults', { query: q });
-  };
+  // Load this user's recent searches (guest bucket when signed out).
+  useEffect(() => {
+    let active = true;
+    listSearchHistory(userId)
+      .then((entries) => {
+        if (active) setHistory(entries);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [userId]);
+
+  // Debounced suggestions while typing; stale responses are dropped
+  // by sequence number so a slow earlier reply can never overwrite a
+  // newer list.
+  useEffect(() => {
+    const text = query.trim();
+    if (!text) return;
+    const seq = ++suggestSeq.current;
+    const t = setTimeout(() => {
+      getSuggestions(text, { userId })
+        .then((rows) => {
+          if (suggestSeq.current === seq) setSuggestions(rows);
+        })
+        .catch(() => undefined);
+    }, 200);
+    return () => clearTimeout(t);
+  }, [query, userId]);
+
+  const submit = useCallback(
+    (raw?: string) => {
+      const q = (raw ?? query).trim();
+      if (!q) return;
+      void addSearchHistory(q, userId).then(setHistory).catch(() => undefined);
+      navigation.navigate('SearchResults', { query: q });
+    },
+    [navigation, query, userId],
+  );
+
+  const onRemoveHistory = useCallback(
+    (entry: string) => {
+      void removeSearchHistory(entry, userId).then(setHistory).catch(() => undefined);
+    },
+    [userId],
+  );
+
+  const onClearHistory = useCallback(() => {
+    void clearSearchHistory(userId)
+      .then(() => setHistory([]))
+      .catch(() => undefined);
+  }, [userId]);
+
+  const typing = query.trim().length > 0;
+  const showHistory = !typing && history.length > 0;
+  const showSuggestions = typing && suggestions.length > 0;
 
   return (
     <View style={styles.container}>
@@ -33,7 +105,7 @@ export function SearchScreen({ navigation }: Props) {
             placeholderTextColor={lightColors.textSecondary}
             value={query}
             onChangeText={setQuery}
-            onSubmitEditing={submit}
+            onSubmitEditing={() => submit()}
             returnKeyType="search"
             autoFocus
           />
@@ -44,9 +116,66 @@ export function SearchScreen({ navigation }: Props) {
           ) : null}
         </View>
       </View>
-      <Text style={styles.hint}>
-        Search the published archive and the official channel of Bhai Gursharan Singh Ji.
-      </Text>
+
+      {showHistory ? (
+        <FlatList
+          data={history}
+          keyExtractor={(entry) => `hist-${entry}`}
+          keyboardShouldPersistTaps="handled"
+          renderItem={({ item }) => (
+            <View style={styles.row}>
+              <Pressable
+                style={styles.rowMain}
+                onPress={() => submit(item)}
+                accessibilityRole="button"
+              >
+                <MaterialIcons name="history" size={22} color={lightColors.textSecondary} />
+                <Text style={styles.rowText} numberOfLines={1}>
+                  {item}
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => onRemoveHistory(item)}
+                hitSlop={8}
+                accessibilityLabel={`Remove "${item}" from search history`}
+              >
+                <MaterialIcons name="close" size={20} color={lightColors.textSecondary} />
+              </Pressable>
+            </View>
+          )}
+          ListFooterComponent={
+            <Pressable onPress={onClearHistory} style={styles.clearRow} accessibilityRole="button">
+              <Text style={styles.clearText}>Clear all search history</Text>
+            </Pressable>
+          }
+        />
+      ) : showSuggestions ? (
+        <FlatList
+          data={suggestions}
+          keyExtractor={(s, i) => `sug-${s.source}-${s.text}-${i}`}
+          keyboardShouldPersistTaps="handled"
+          renderItem={({ item }) => (
+            <Pressable
+              style={styles.row}
+              onPress={() => submit(item.text)}
+              accessibilityRole="button"
+            >
+              <MaterialIcons
+                name={item.source === 'history' ? 'history' : 'search'}
+                size={22}
+                color={lightColors.textSecondary}
+              />
+              <Text style={styles.rowText} numberOfLines={1}>
+                {item.text}
+              </Text>
+            </Pressable>
+          )}
+        />
+      ) : (
+        <Text style={styles.hint}>
+          Search the published archive and the official channel of Bhai Gursharan Singh Ji.
+        </Text>
+      )}
     </View>
   );
 }
@@ -77,4 +206,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     marginTop: spacing.md,
   },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  rowMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  rowText: { ...typography.body, fontSize: 16, color: lightColors.text, flex: 1 },
+  clearRow: { paddingHorizontal: spacing.lg, paddingVertical: spacing.lg },
+  clearText: { ...typography.body, fontWeight: '600', color: lightColors.text },
 });
