@@ -133,6 +133,15 @@ export function SessionsListScreen({ navigation }: Props) {
       if (effective === 'cancelled') continue;
       grouped[effective].push(item);
     }
+    // Deterministic in-section order: playing/upcoming soonest first
+    // (the server query order is not relied on after grouping),
+    // completed most-recent first.
+    grouped.now_playing.sort((a, b) =>
+      a.session.scheduled_start_at.localeCompare(b.session.scheduled_start_at),
+    );
+    grouped.upcoming.sort((a, b) =>
+      a.session.scheduled_start_at.localeCompare(b.session.scheduled_start_at),
+    );
     grouped.completed.sort((a, b) =>
       b.session.scheduled_start_at.localeCompare(a.session.scheduled_start_at),
     );
@@ -170,6 +179,9 @@ export function SessionsListScreen({ navigation }: Props) {
         >
           {section.title}
         </Text>
+        {/* Real section size — a count of the rows actually in this
+            group, never a stored or invented number. */}
+        <Text style={styles.sectionCount}>{section.data.length}</Text>
       </View>
     ),
     [],
@@ -310,9 +322,22 @@ const styles = StyleSheet.create({
   loadingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingBottom: spacing.lg },
   loadingLabel: { ...typography.body, color: lightColors.textSecondary },
   sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: spacing.md,
+  },
+  sectionCount: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: lightColors.textSecondary,
+    backgroundColor: lightColors.surfaceVariant,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 1,
+    overflow: 'hidden',
   },
   sectionTitle: {
     ...typography.sectionTitle,
