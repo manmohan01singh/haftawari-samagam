@@ -1,5 +1,6 @@
-import React from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import React, { memo } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
 import type { Video } from '../../types/database';
 import { layout, lightColors, radii, spacing, typography } from '../../theme';
 
@@ -16,12 +17,12 @@ interface VideoCardProps {
  * grey channel + metadata lines. Renders only the real `Video` row it
  * is given.
  */
-export function VideoCard({ video, metadataLine }: VideoCardProps) {
+export const VideoCard = memo(function VideoCard({ video, metadataLine }: VideoCardProps) {
   return (
     <View style={styles.card}>
       <View style={styles.thumbnailWrap}>
         {video.thumbnail_url ? (
-          <Image source={{ uri: video.thumbnail_url }} style={styles.thumbnail} resizeMode="cover" />
+          <Image source={{ uri: video.thumbnail_url }} style={styles.thumbnail} contentFit="cover" cachePolicy="memory-disk" recyclingKey={video.id} />
         ) : (
           <View style={[styles.thumbnail, styles.thumbnailEmpty]} />
         )}
@@ -46,7 +47,7 @@ export function VideoCard({ video, metadataLine }: VideoCardProps) {
       </View>
     </View>
   );
-}
+});
 
 export function formatDuration(totalSeconds: number): string {
   const s = Math.max(0, Math.floor(totalSeconds));

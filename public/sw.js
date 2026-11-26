@@ -9,7 +9,11 @@
  *  - No video is ever cached: playback is the official YouTube embed,
  *    online only.
  */
-const CACHE_VERSION = 'haftawari-shell-v2';
+/* v3 (UX perf pass, 26 Nov 2026): the bump itself matters — the worker
+ * is cache-first, so without a version change existing users would
+ * keep running the OLD cached bundle indefinitely after a redeploy,
+ * including every jank fix. Old caches are deleted on activate. */
+const CACHE_VERSION = 'haftawari-shell-v3';
 /* The web build is served under a base path (experiments.baseUrl, e.g.
  * GitHub Pages /haftawari-samagam/). All shell paths are therefore
  * relative to this worker's own URL, and bundle detection uses the
@@ -58,6 +62,16 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (url.origin !== self.location.origin) return;
+
+  // Fast path (UX perf pass): only navigations and the _expo JS/CSS
+  // bundles belong to the shell cache. Everything else same-origin
+  // (icon fonts, images) was never stored by the put() guard below,
+  // so running a cache lookup for every such request was pure
+  // overhead on the fetch path — let those requests go straight to
+  // the network/browser cache.
+  const isShellRequest =
+    request.mode === 'navigate' || url.pathname.startsWith(BASE_PATH + '_expo/');
+  if (!isShellRequest) return;
 
   event.respondWith(
     caches.match(request, { ignoreSearch: true }).then((cached) => {

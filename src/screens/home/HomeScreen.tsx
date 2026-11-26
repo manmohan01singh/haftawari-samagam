@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, Share, StyleSheet, Text, View } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -20,6 +20,7 @@ import {
   fetchSavedVideoIds,
   setVideoSaved,
 } from '../../lib/videos';
+import { FEED_LIST_PERF } from '../../lib/listPerf';
 import { lightColors, spacing, typography } from '../../theme';
 import type { Category, Video } from '../../types/database';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
@@ -31,6 +32,46 @@ type Props = CompositeScreenProps<
 
 const PAGE_SIZE = 25;
 const ALL_CHIP = 'All';
+
+interface HomeFeedItemProps {
+  video: Video;
+  data: CardVideoData;
+  saved: boolean;
+  canSave: boolean;
+  onPressVideo: (video: Video) => void;
+  onToggleSaveVideo: (video: Video) => void;
+  onShareVideo: (video: Video) => void;
+}
+
+/**
+ * Memoised feed-cell wrapper (UX perf pass). The previous renderItem
+ * built a fresh onPress/onToggleSave/onShare closure AND a fresh
+ * CardVideoData object for every card on every render, and its
+ * identity changed whenever ANY card's saved state changed — so
+ * FeedCard's memo never held and one bookmark tap re-rendered every
+ * visible card. Here the card receives only stable handler props plus
+ * per-item primitives; the per-item closures are created inside this
+ * wrapper, which re-renders only when its own item's props change.
+ */
+const HomeFeedItem = memo(function HomeFeedItem({
+  video,
+  data,
+  saved,
+  canSave,
+  onPressVideo,
+  onToggleSaveVideo,
+  onShareVideo,
+}: HomeFeedItemProps) {
+  return (
+    <FeedCard
+      data={data}
+      saved={saved}
+      onPress={() => onPressVideo(video)}
+      onToggleSave={canSave ? () => onToggleSaveVideo(video) : undefined}
+      onShare={() => onShareVideo(video)}
+    />
+  );
+});
 
 /**
  * Home feed — real data only: published rows from the Supabase
@@ -132,45 +173,78 @@ export function HomeScreen({ navigation }: Props) {
 
   const avatarUrl = channel?.avatarUrl ?? null;
 
-  const renderItem = useCallback(
-    ({ item }: { item: Video }) => {
-      const data: CardVideoData = supabaseCardData(item, avatarUrl);
-      return (
-        <FeedCard
-          data={data}
-          onPress={() => navigation.navigate('Watch', { videoRowId: item.id })}
-          saved={savedIds.has(item.id)}
-          onToggleSave={
-            user
-              ? () => {
-                  const next = !savedIds.has(item.id);
-                  setSavedIds((prev) => {
-                    const copy = new Set(prev);
-                    if (next) copy.add(item.id);
-                    else copy.delete(item.id);
-                    return copy;
-                  });
-                  void setVideoSaved(user.id, item.id, next).catch(() => {
-                    // Roll back the optimistic toggle on failure.
-                    setSavedIds((prev) => {
-                      const copy = new Set(prev);
-                      if (next) copy.delete(item.id);
-                      else copy.add(item.id);
-                      return copy;
-                    });
-                  });
-                }
-              : undefined
-          }
-          onShare={() => {
-            void Share.share({
-              message: `${item.title} — https://www.youtube.com/watch?v=${item.youtube_video_id}`,
-            });
-          }}
-        />
-      );
+  // Stable per-card display data: one CardVideoData object per video,
+  // rebuilt only when the feed or the channel avatar changes — never
+  // on a saved-state toggle.
+  const cardDataById = useMemo(() => {
+    const map = new Map<string, CardVideoData>();
+    for (const v of videos) map.set(v.id, supabaseCardData(v, avatarUrl));
+    return map;
+  }, [videos, avatarUrl]);
+
+  // Mirror of savedIds for the stable toggle handler below.
+  const savedIdsRef = useRef(savedIds);
+  useEffect(() => {
+    savedIdsRef.current = savedIds;
+  }, [savedIds]);
+
+  const handlePressVideo = useCallback(
+    (video: Video) => {
+      navigation.navigate('Watch', { videoRowId: video.id });
     },
-    [avatarUrl, navigation, savedIds, user],
+    [navigation],
+  );
+
+  const handleShareVideo = useCallback((video: Video) => {
+    void Share.share({
+      message: `${video.title} — https://www.youtube.com/watch?v=${video.youtube_video_id}`,
+    });
+  }, []);
+
+  const handleToggleSaveVideo = useCallback(
+    (video: Video) => {
+      if (!user) return;
+      const next = !savedIdsRef.current.has(video.id);
+      setSavedIds((prev) => {
+        const copy = new Set(prev);
+        if (next) copy.add(video.id);
+        else copy.delete(video.id);
+        return copy;
+      });
+      void setVideoSaved(user.id, video.id, next).catch(() => {
+        // Roll back the optimistic toggle on failure.
+        setSavedIds((prev) => {
+          const copy = new Set(prev);
+          if (next) copy.delete(video.id);
+          else copy.add(video.id);
+          return copy;
+        });
+      });
+    },
+    [user],
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: Video }) => (
+      <HomeFeedItem
+        video={item}
+        data={cardDataById.get(item.id) ?? supabaseCardData(item, avatarUrl)}
+        saved={savedIds.has(item.id)}
+        canSave={!!user}
+        onPressVideo={handlePressVideo}
+        onToggleSaveVideo={handleToggleSaveVideo}
+        onShareVideo={handleShareVideo}
+      />
+    ),
+    [
+      cardDataById,
+      avatarUrl,
+      savedIds,
+      user,
+      handlePressVideo,
+      handleToggleSaveVideo,
+      handleShareVideo,
+    ],
   );
 
   const keyExtractor = useCallback((item: Video) => item.id, []);
@@ -254,9 +328,7 @@ export function HomeScreen({ navigation }: Props) {
               <ActivityIndicator style={styles.footerSpinner} color={lightColors.textSecondary} />
             ) : undefined
           }
-          removeClippedSubviews
-          initialNumToRender={4}
-          windowSize={7}
+          {...FEED_LIST_PERF}
         />
       )}
       {error && videos.length > 0 ? <Text style={styles.inlineError}>{error}</Text> : null}

@@ -2,7 +2,6 @@ import React, { useCallback, useState } from 'react';
 import {
   Dimensions,
   FlatList,
-  Image,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -10,7 +9,8 @@ import {
   Text,
   View,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { Image } from 'expo-image';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -29,8 +29,10 @@ import { resumeRatio } from '../../features/library/format';
 import type { HistoryItem, PlaylistSummary } from '../../features/library/types';
 import type { LibraryRootStackParamList } from '../../features/library/screenTypes';
 import { CreatePlaylistSheet } from '../../features/library/components/CreatePlaylistSheet';
+import { listThumbnailUrl } from '../../components/video/cardData';
 import { PlaylistRow } from '../../features/library/components/PlaylistRow';
 import { VideoListRow } from '../../features/library/components/VideoListRow';
+import { H_LIST_PERF } from '../../lib/listPerf';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'Library'>,
@@ -88,6 +90,7 @@ export function LibraryScreen({ navigation }: Props) {
   const renderHistoryCard = useCallback(
     ({ item }: { item: HistoryItem }) => {
       const ratio = resumeRatio(item.entry.last_position_seconds, item.video.duration_seconds);
+      const thumbUrl = listThumbnailUrl(item.video.youtube_video_id, item.video.thumbnail_url);
       return (
         <Pressable
           style={styles.historyCard}
@@ -96,8 +99,14 @@ export function LibraryScreen({ navigation }: Props) {
           accessibilityLabel={item.video.title}
         >
           <View style={styles.historyThumbWrap}>
-            {item.video.thumbnail_url ? (
-              <Image source={{ uri: item.video.thumbnail_url }} style={styles.historyThumb} resizeMode="cover" />
+            {thumbUrl ? (
+              <Image
+                source={{ uri: thumbUrl }}
+                style={styles.historyThumb}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+                recyclingKey={item.video.id}
+              />
             ) : (
               <View style={[styles.historyThumb, styles.thumbEmpty]} />
             )}
@@ -221,6 +230,7 @@ export function LibraryScreen({ navigation }: Props) {
             renderItem={renderHistoryCard}
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.historyContent}
+            {...H_LIST_PERF}
           />
         ) : (
           <Text style={styles.emptyLine}>

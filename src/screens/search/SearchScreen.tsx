@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { lightColors, radii, spacing, typography } from '../../theme';
 import { useAuth } from '../../features/auth';
@@ -13,6 +13,7 @@ import {
   type Suggestion,
 } from '../../features/search';
 import type { RootStackParamList } from '../../navigation/types';
+import { ROW_LIST_PERF } from '../../lib/listPerf';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Search'>;
 
@@ -119,6 +120,7 @@ export function SearchScreen({ navigation }: Props) {
 
       {showHistory ? (
         <FlatList
+          {...ROW_LIST_PERF}
           data={history}
           keyExtractor={(entry) => `hist-${entry}`}
           keyboardShouldPersistTaps="handled"
@@ -151,6 +153,7 @@ export function SearchScreen({ navigation }: Props) {
         />
       ) : showSuggestions ? (
         <FlatList
+          {...ROW_LIST_PERF}
           data={suggestions}
           keyExtractor={(s, i) => `sug-${s.source}-${s.text}-${i}`}
           keyboardShouldPersistTaps="handled"

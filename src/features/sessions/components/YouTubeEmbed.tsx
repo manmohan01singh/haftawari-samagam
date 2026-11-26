@@ -1,8 +1,10 @@
 import React, {
   forwardRef,
+  memo,
   useCallback,
   useImperativeHandle,
   useRef,
+  useState,
 } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
@@ -48,11 +50,21 @@ interface YouTubeEmbedProps {
  * app adds no PiP button, and playback outside PiP still pauses when
  * the app is left, per YouTube policy.
  */
-export const YouTubeEmbed = forwardRef<YouTubeEmbedHandle, YouTubeEmbedProps>(
+export const YouTubeEmbed = memo(
+  forwardRef<YouTubeEmbedHandle, YouTubeEmbedProps>(
   function YouTubeEmbed(
     { youtubeVideoId, startSeconds, autoplay = false, onTimeUpdate, onReady },
     ref,
   ) {
+    // Freeze the start offset at mount (UX perf pass): the caller
+    // passes a LIVE session offset that changes on every clock tick,
+    // and the WebView source html is built from it — without freezing,
+    // the source changed every tick and the WebView reloaded. The
+    // parent remounts this component (key = video + playing/replay)
+    // when a new start is needed; drift is corrected via seekTo.
+    const [initialStartSeconds] = useState(() =>
+      Math.max(0, Math.floor(startSeconds)),
+    );
     const webViewRef = useRef<WebViewHandle | null>(null);
     const setWebViewRef = (instance: WebViewHandle | null): void => {
       webViewRef.current = instance;
@@ -69,7 +81,7 @@ export const YouTubeEmbed = forwardRef<YouTubeEmbedHandle, YouTubeEmbedProps>(
       pause: () => run('window.__sessionPlayer && window.__sessionPlayer.pauseVideo()'),
     }));
 
-    const html = buildEmbedHtml(youtubeVideoId, Math.max(0, Math.floor(startSeconds)), autoplay);
+    const html = buildEmbedHtml(youtubeVideoId, initialStartSeconds, autoplay);
 
     const onMessage = (event: WebViewMessageEvent): void => {
       const msg = event.nativeEvent.data;
@@ -97,7 +109,7 @@ export const YouTubeEmbed = forwardRef<YouTubeEmbedHandle, YouTubeEmbedProps>(
         />
       </View>
     );
-  },
+  }),
 );
 
 function buildEmbedHtml(videoId: string, startSeconds: number, autoplay: boolean): string {

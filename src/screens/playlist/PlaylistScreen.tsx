@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { FlatList, Image, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { isSupabaseConfigured } from '../../lib/supabase';
@@ -13,6 +14,7 @@ import type { LibraryRootStackParamList } from '../../features/library/screenTyp
 import { ScreenLoading, ScreenMessage } from '../../features/library/components/ScreenMessage';
 import { SwipeableRow } from '../../features/library/components/SwipeableRow';
 import { VideoListRow } from '../../features/library/components/VideoListRow';
+import { ROW_LIST_PERF } from '../../lib/listPerf';
 
 type Props = NativeStackScreenProps<LibraryRootStackParamList, 'Playlist'>;
 
@@ -93,7 +95,8 @@ export function PlaylistScreen({ navigation, route }: Props) {
         <Image
           source={{ uri: detail.items[0].video.thumbnail_url }}
           style={styles.cover}
-          resizeMode="cover"
+          contentFit="cover"
+          cachePolicy="memory-disk"
         />
       ) : (
         <View style={[styles.cover, styles.coverEmpty]}>
@@ -153,9 +156,7 @@ export function PlaylistScreen({ navigation, route }: Props) {
               message="This playlist is empty. Add recordings to it from any samagam's save menu."
             />
           }
-          removeClippedSubviews
-          initialNumToRender={8}
-          windowSize={7}
+          {...ROW_LIST_PERF}
         />
       )}
     </View>

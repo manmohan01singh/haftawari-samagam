@@ -8,7 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { lightColors, nativeApp, radii, spacing } from '../../../theme';
 import {
   addVideoToPlaylist,
@@ -18,6 +18,7 @@ import {
 } from '../libraryService';
 import type { PlaylistMembership } from '../types';
 import { CreatePlaylistSheet } from './CreatePlaylistSheet';
+import { ROW_LIST_PERF } from '../../../lib/listPerf';
 
 interface AddToPlaylistSheetProps {
   visible: boolean;
@@ -123,6 +124,7 @@ export function AddToPlaylistSheet({ visible, userId, videoId, onClose, onChange
             <Text style={styles.emptyText}>You have no playlists yet. Create one above.</Text>
           ) : (
             <FlatList
+              {...ROW_LIST_PERF}
               data={rows}
               keyExtractor={(r) => r.playlist.id}
               style={styles.list}

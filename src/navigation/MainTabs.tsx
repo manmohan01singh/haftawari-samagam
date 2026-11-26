@@ -59,7 +59,18 @@ export function MainTabs() {
   );
 
   return (
-    <Tab.Navigator screenOptions={{ headerShown: false }} tabBar={renderTabBar}>
+    <Tab.Navigator
+      screenOptions={{
+        headerShown: false,
+        // Freeze inactive tabs (react-native-screens): a backgrounded
+        // tab stops re-rendering on shared state changes (auth, channel
+        // load) instead of doing invisible work — part of the UX perf
+        // pass against the "everything feels heavy" reports.
+        freezeOnBlur: true,
+        lazy: true,
+      }}
+      tabBar={renderTabBar}
+    >
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Subscriptions" component={SubscriptionsScreen} />
       <Tab.Screen name="Library" component={LibraryScreen} />

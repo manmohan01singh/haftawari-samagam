@@ -10,7 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { lightColors, nativeApp, radii, spacing, typography } from '../../../theme';
 import { useSessionChat, type ChatUser } from '../useSessionChat';
 import type { ChatMessageWithAuthor } from '../types';

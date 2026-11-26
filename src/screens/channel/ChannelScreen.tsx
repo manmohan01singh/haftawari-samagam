@@ -8,7 +8,7 @@ import {
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { EmptyState } from '../../components/common/EmptyState';
 import { ShelfCard } from '../../components/video/ShelfCard';
@@ -26,6 +26,7 @@ import {
 } from '../../lib/youtube';
 import { lightColors, spacing } from '../../theme';
 import type { RootStackParamList } from '../../navigation/types';
+import { FEED_LIST_PERF } from '../../lib/listPerf';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Channel'>;
 
@@ -240,9 +241,7 @@ export function ChannelScreen({ route, navigation }: Props) {
             <EmptyState title="No videos found" message="This channel's uploads could not be listed." />
           )
         }
-        removeClippedSubviews
-        initialNumToRender={5}
-        windowSize={7}
+        {...FEED_LIST_PERF}
       />
     </View>
   );

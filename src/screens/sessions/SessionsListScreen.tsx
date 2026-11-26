@@ -59,7 +59,10 @@ const SECTION_TITLES: Record<VisibleStatus, string> = {
  * Cancelled sessions are not promoted in the list.
  */
 export function SessionsListScreen({ navigation }: Props) {
-  const { nowMs } = useServerClock();
+  // 30s tick, not the 1s default: every label on this screen
+  // (countdowns, "started … ago") is minute-granularity, and the 1s
+  // tick re-rendered the whole list every second for no visible gain.
+  const { nowMs } = useServerClock(30_000);
   const [items, setItems] = useState<SessionWithVideo[]>([]);
   // When the backend is not configured there is nothing to load.
   const [loading, setLoading] = useState(isSupabaseConfigured);
@@ -134,6 +137,39 @@ export function SessionsListScreen({ navigation }: Props) {
       .map((status) => ({ status, title: SECTION_TITLES[status], data: grouped[status] }));
   }, [items, nowMs]);
 
+  const handlePressSession = useCallback(
+    (sessionId: string) => navigation.navigate('SessionWatch', { sessionId }),
+    [navigation],
+  );
+
+  const renderItem = useCallback(
+    ({ item, section }: { item: SessionWithVideo; section: Section }) => (
+      <SessionCard
+        item={item}
+        effectiveStatus={section.status}
+        nowMs={nowMs}
+        onPress={handlePressSession}
+      />
+    ),
+    [nowMs, handlePressSession],
+  );
+
+  const renderSectionHeader = useCallback(
+    ({ section }: { section: Section }) => (
+      <View style={styles.sectionHeader}>
+        <Text
+          style={[
+            styles.sectionTitle,
+            section.status === 'now_playing' && styles.sectionTitlePlaying,
+          ]}
+        >
+          {section.title}
+        </Text>
+      </View>
+    ),
+    [],
+  );
+
   if (!isSupabaseConfigured) {
     return (
       <EmptyState
@@ -175,26 +211,13 @@ export function SessionsListScreen({ navigation }: Props) {
           }}
         />
       }
-      renderSectionHeader={({ section }) => (
-        <View style={styles.sectionHeader}>
-          <Text
-            style={[
-              styles.sectionTitle,
-              section.status === 'now_playing' && styles.sectionTitlePlaying,
-            ]}
-          >
-            {section.title}
-          </Text>
-        </View>
-      )}
-      renderItem={({ item, section }) => (
-        <SessionCard
-          item={item}
-          effectiveStatus={section.status}
-          nowMs={nowMs}
-          onPress={(sessionId) => navigation.navigate('SessionWatch', { sessionId })}
-        />
-      )}
+      renderSectionHeader={renderSectionHeader}
+      renderItem={renderItem}
+      windowSize={7}
+      initialNumToRender={6}
+      maxToRenderPerBatch={6}
+      updateCellsBatchingPeriod={50}
+      removeClippedSubviews
       ListEmptyComponent={
         <EmptyState
           title="No Samagams scheduled"

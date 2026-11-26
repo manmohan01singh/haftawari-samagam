@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { EmptyState } from '../../components/common/EmptyState';
 import { ShelfCard } from '../../components/video/ShelfCard';
@@ -26,6 +26,7 @@ import {
 } from '../../lib/youtube';
 import { lightColors, radii, spacing, typography } from '../../theme';
 import type { RootStackParamList } from '../../navigation/types';
+import { FEED_LIST_PERF, H_LIST_PERF } from '../../lib/listPerf';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SearchResults'>;
 
@@ -193,6 +194,7 @@ export function SearchResultsScreen({ route, navigation }: Props) {
             keyExtractor={(m) => m.youtubeVideoId}
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.carouselContent}
+            {...H_LIST_PERF}
             renderItem={({ item }) => {
               const data: CardVideoData = apiCardData(item, channel?.avatarUrl ?? null);
               return (
@@ -248,9 +250,7 @@ export function SearchResultsScreen({ route, navigation }: Props) {
               />
             )
           }
-          removeClippedSubviews
-          initialNumToRender={5}
-          windowSize={7}
+          {...FEED_LIST_PERF}
         />
       )}
     </View>

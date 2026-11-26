@@ -1,6 +1,8 @@
-import React from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { memo } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
 import { formatDuration } from '../../../components/video/VideoCard';
+import { listThumbnailUrl } from '../../../components/video/cardData';
 import { layout, lightColors, nativeApp, radii, spacing, typography } from '../../../theme';
 import type { SessionStatus } from '../../../types/database';
 import { formatCountdown, formatSessionDateTime, formatStartedAgo } from '../format';
@@ -20,12 +22,14 @@ interface SessionCardProps {
  * (radius 12), status badge bottom-right, 2-line title, one grey
  * schedule line. All text comes from the real session + video rows.
  */
-export function SessionCard({ item, effectiveStatus, nowMs, onPress }: SessionCardProps) {
+export const SessionCard = memo(function SessionCard({ item, effectiveStatus, nowMs, onPress }: SessionCardProps) {
   const { session, video } = item;
   const title = session.title ?? video?.title ?? 'Samagam';
-  const thumbnailUrl =
-    video?.thumbnail_url ??
-    (video ? `https://i.ytimg.com/vi/${video.youtube_video_id}/hqdefault.jpg` : null);
+  // List-sized thumbnail (hqdefault) — the stored URL is the full-res
+  // original and was being loaded for every card in the list.
+  const thumbnailUrl = video
+    ? listThumbnailUrl(video.youtube_video_id, video.thumbnail_url)
+    : null;
 
   const scheduleLine =
     effectiveStatus === 'now_playing'
@@ -43,7 +47,7 @@ export function SessionCard({ item, effectiveStatus, nowMs, onPress }: SessionCa
     >
       <View style={styles.thumbnailWrap}>
         {thumbnailUrl ? (
-          <Image source={{ uri: thumbnailUrl }} style={styles.thumbnail} resizeMode="cover" />
+          <Image source={{ uri: thumbnailUrl }} style={styles.thumbnail} contentFit="cover" cachePolicy="memory-disk" recyclingKey={session.id} />
         ) : (
           <View style={[styles.thumbnail, styles.thumbnailEmpty]} />
         )}
@@ -71,7 +75,7 @@ export function SessionCard({ item, effectiveStatus, nowMs, onPress }: SessionCa
       </View>
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: {

@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { layout, lightColors, radii, spacing } from '../../theme';
 import { formatDuration } from './VideoCard';
 import type { CardVideoData } from './cardData';
@@ -30,11 +30,11 @@ export const ShelfCard = memo(function ShelfCard({ data, onPress, showAvatar = f
       <View style={styles.thumbnailWrap}>
         {data.thumbnailUrl ? (
           <Image
+            recyclingKey={data.key}
             source={{ uri: data.thumbnailUrl }}
             style={styles.thumbnail}
             contentFit="cover"
             cachePolicy="memory-disk"
-            transition={150}
           />
         ) : (
           <View style={[styles.thumbnail, styles.thumbnailEmpty]} />

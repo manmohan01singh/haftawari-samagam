@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Dimensions, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Dimensions, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
@@ -17,6 +17,7 @@ import {
   fetchChannelUploads,
   type YouTubeVideoMetadata,
 } from '../../lib/youtube';
+import { FEED_LIST_PERF, H_LIST_PERF } from '../../lib/listPerf';
 import { lightColors, nativeApp, spacing } from '../../theme';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
 
@@ -73,16 +74,84 @@ export function SubscriptionsScreen({ navigation }: Props) {
     ({ item }: { item: YouTubeVideoMetadata }) => {
       const data = apiCardData(item, channel?.avatarUrl ?? null);
       return (
-        <ShelfCard
-          data={data}
-          onPress={() => navigation.navigate('Watch', { youtubeVideoId: item.youtubeVideoId })}
-        />
+        <View style={styles.listPad}>
+          <ShelfCard
+            data={data}
+            onPress={() => navigation.navigate('Watch', { youtubeVideoId: item.youtubeVideoId })}
+          />
+        </View>
+      );
+    },
+    [channel, navigation],
+  );
+
+  const renderCarouselItem = useCallback(
+    ({ item }: { item: YouTubeVideoMetadata }) => {
+      const data = apiCardData(item, channel?.avatarUrl ?? null);
+      return (
+        <View style={styles.carouselCard}>
+          <ShelfCard
+            data={data}
+            onPress={() => navigation.navigate('Watch', { youtubeVideoId: item.youtubeVideoId })}
+          />
+        </View>
       );
     },
     [channel, navigation],
   );
 
   const keyExtractor = useCallback((item: YouTubeVideoMetadata) => item.youtubeVideoId, []);
+
+  // Everything above the main list (avatar rail, heading, carousel)
+  // lives in the list's header so the screen has ONE virtualised
+  // scroll container (UX perf pass — see the return comment).
+  const listHeader = useMemo(() => {
+    if (!channel) return null;
+    return (
+      <View>
+        {/* Avatar rail — the one channel this app follows. */}
+        <View style={styles.rail}>
+          <Pressable
+            style={styles.railItem}
+            onPress={() => navigation.navigate('Channel', { channelId: channel.channelId })}
+            accessibilityRole="button"
+          >
+            <View style={styles.railAvatarWrap}>
+              {channel.avatarUrl ? (
+                <Image source={{ uri: channel.avatarUrl }} style={styles.railAvatar} contentFit="cover" cachePolicy="memory-disk" />
+              ) : (
+                <View style={[styles.railAvatar, styles.avatarFallback]}>
+                  <Text style={styles.avatarInitial}>{channel.title.charAt(0)}</Text>
+                </View>
+              )}
+              {isLiveNow ? <View style={styles.liveDot} /> : null}
+            </View>
+            <Text style={styles.railName} numberOfLines={1}>
+              {channel.title}
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => navigation.navigate('Channel', { channelId: channel.channelId })}
+            accessibilityRole="button"
+            style={styles.railAll}
+          >
+            <Text style={styles.railAllText}>All</Text>
+          </Pressable>
+        </View>
+
+        <Text style={styles.heading}>Most relevant</Text>
+        <FlatList
+          horizontal
+          data={carousel}
+          keyExtractor={keyExtractor}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.carouselContent}
+          renderItem={renderCarouselItem}
+          {...H_LIST_PERF}
+        />
+      </View>
+    );
+  }, [channel, isLiveNow, carousel, keyExtractor, navigation, renderCarouselItem]);
   const initial = profile?.display_name?.charAt(0)?.toUpperCase() ?? user?.email?.charAt(0)?.toUpperCase() ?? null;
 
   return (
@@ -111,70 +180,24 @@ export function SubscriptionsScreen({ navigation }: Props) {
       ) : error || !channel ? (
         <EmptyState title="Could not load subscriptions" message={error ?? 'The official channel could not be loaded.'} />
       ) : (
-        <ScrollView>
-          {/* Avatar rail — the one channel this app follows. */}
-          <View style={styles.rail}>
-            <Pressable
-              style={styles.railItem}
-              onPress={() => navigation.navigate('Channel', { channelId: channel.channelId })}
-              accessibilityRole="button"
-            >
-              <View style={styles.railAvatarWrap}>
-                {channel.avatarUrl ? (
-                  <Image source={{ uri: channel.avatarUrl }} style={styles.railAvatar} contentFit="cover" cachePolicy="memory-disk" />
-                ) : (
-                  <View style={[styles.railAvatar, styles.avatarFallback]}>
-                    <Text style={styles.avatarInitial}>{channel.title.charAt(0)}</Text>
-                  </View>
-                )}
-                {isLiveNow ? <View style={styles.liveDot} /> : null}
-              </View>
-              <Text style={styles.railName} numberOfLines={1}>
-                {channel.title}
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => navigation.navigate('Channel', { channelId: channel.channelId })}
-              accessibilityRole="button"
-              style={styles.railAll}
-            >
-              <Text style={styles.railAllText}>All</Text>
-            </Pressable>
-          </View>
-
-          <Text style={styles.heading}>Most relevant</Text>
-          <FlatList
-            horizontal
-            data={carousel}
-            keyExtractor={keyExtractor}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.carouselContent}
-            renderItem={({ item }) => {
-              const data = apiCardData(item, channel.avatarUrl);
-              return (
-                <View style={styles.carouselCard}>
-                  <ShelfCard
-                    data={data}
-                    onPress={() => navigation.navigate('Watch', { youtubeVideoId: item.youtubeVideoId })}
-                  />
-                </View>
-              );
-            }}
-          />
-          <View style={styles.listPad}>
-            <FlatList
-              data={rest}
-              keyExtractor={keyExtractor}
-              renderItem={renderRest}
-              scrollEnabled={false}
-              ListEmptyComponent={
-                uploads.length === 0 ? (
-                  <EmptyState title="No uploads yet" message="The channel's uploads will appear here." />
-                ) : undefined
-              }
-            />
-          </View>
-        </ScrollView>
+        /* UX perf pass: this was a ScrollView wrapping a second,
+           scroll-disabled FlatList for `rest` — with scrolling off,
+           virtualisation is disabled and EVERY remaining upload card
+           mounted at once (the screen's main jank source). It is now a
+           single virtualised FlatList; the rail/heading/carousel moved
+           into ListHeaderComponent above with identical layout. */
+        <FlatList
+          data={rest}
+          keyExtractor={keyExtractor}
+          renderItem={renderRest}
+          ListHeaderComponent={listHeader ?? undefined}
+          ListEmptyComponent={
+            uploads.length === 0 ? (
+              <EmptyState title="No uploads yet" message="The channel's uploads will appear here." />
+            ) : undefined
+          }
+          {...FEED_LIST_PERF}
+        />
       )}
     </View>
   );

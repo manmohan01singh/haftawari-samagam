@@ -30,7 +30,21 @@ export interface CardVideoData {
  */
 export function listThumbnailUrl(youtubeVideoId: string | null, storedUrl: string | null): string | null {
   if (youtubeVideoId) return `https://i.ytimg.com/vi/${youtubeVideoId}/hqdefault.jpg`;
-  return storedUrl;
+  return storedUrl ? downgradeYouTubeThumbnailUrl(storedUrl) : null;
+}
+
+/**
+ * Rewrite a stored YouTube thumbnail URL to its list-sized hqdefault
+ * (480×360) variant. Stored URLs are often maxresdefault (1280×720,
+ * several× the bytes) — loading those in list rows was a real image-
+ * weight problem (VideoListRow / PlaylistRow / SessionCard used the
+ * stored URL directly). Non-YouTube URLs pass through unchanged.
+ */
+export function downgradeYouTubeThumbnailUrl(url: string): string {
+  return url.replace(
+    /(i\.ytimg\.com\/vi\/[^/]+\/)(?:maxresdefault|sddefault|hqdefault|mqdefault|default)(\.(?:jpg|webp))/,
+    '$1hqdefault$2',
+  );
 }
 
 export function formatDateLine(iso: string | null): string {

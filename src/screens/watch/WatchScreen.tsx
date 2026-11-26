@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { EmptyState } from '../../components/common/EmptyState';
 import { FeedCard } from '../../components/video/FeedCard';
@@ -19,6 +19,7 @@ import { useAuth } from '../../features/auth';
 import { useOfficialChannel } from '../../features/channel';
 import { AddToPlaylistSheet } from '../../features/library';
 import { formatCount } from '../../lib/format';
+import { FEED_LIST_PERF } from '../../lib/listPerf';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import {
   fetchChannelById,
@@ -376,9 +377,7 @@ export function WatchScreen({ route, navigation }: Props) {
         ListEmptyComponent={
           <Text style={styles.upNextEmpty}>No other published recordings yet.</Text>
         }
-        removeClippedSubviews
-        initialNumToRender={4}
-        windowSize={7}
+        {...FEED_LIST_PERF}
       />
       {/* "Save to playlist" sheet (library stream) — archive rows and
           signed-in users only, matching the action button's gating. */}

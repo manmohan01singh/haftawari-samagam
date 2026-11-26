@@ -1,8 +1,10 @@
 import React, {
   forwardRef,
+  memo,
   useEffect,
   useImperativeHandle,
   useRef,
+  useState,
 } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { layout, lightColors } from '../../../theme';
@@ -25,11 +27,22 @@ interface YouTubeEmbedProps {
 // infoDelivery currentTime reports, seekTo/playVideo/pauseVideo commands.
 const Iframe = 'iframe' as unknown as React.ElementType;
 
-export const YouTubeEmbed = forwardRef<YouTubeEmbedHandle, YouTubeEmbedProps>(
+export const YouTubeEmbed = memo(
+  forwardRef<YouTubeEmbedHandle, YouTubeEmbedProps>(
   function YouTubeEmbed(
     { youtubeVideoId, startSeconds, autoplay = false, onTimeUpdate, onReady },
     ref,
   ) {
+    // Freeze the start offset at mount (UX perf pass): the caller
+    // passes a LIVE session offset that changes on every clock tick,
+    // and the iframe src is built from it — without freezing, the src
+    // changed every tick and the iframe reloaded, restarting playback.
+    // The parent remounts this component (key = video + playing/
+    // replay) whenever a genuinely new start is needed; drift after
+    // mount is corrected through the seekTo handle, not the src.
+    const [initialStartSeconds] = useState(() =>
+      Math.max(0, Math.floor(startSeconds)),
+    );
     const frameRef = useRef<{ contentWindow: Window | null } | null>(null);
     const callbacks = useRef({ onTimeUpdate, onReady });
     callbacks.current = { onTimeUpdate, onReady };
@@ -71,7 +84,7 @@ export const YouTubeEmbed = forwardRef<YouTubeEmbedHandle, YouTubeEmbedProps>(
 
     const src =
       `https://www.youtube.com/embed/${encodeURIComponent(youtubeVideoId)}` +
-      `?start=${Math.max(0, Math.floor(startSeconds))}` +
+      `?start=${initialStartSeconds}` +
       `&autoplay=${autoplay ? 1 : 0}&rel=0&enablejsapi=1&playsinline=1`;
 
     return (
@@ -92,7 +105,7 @@ export const YouTubeEmbed = forwardRef<YouTubeEmbedHandle, YouTubeEmbedProps>(
         />
       </View>
     );
-  },
+  }),
 );
 
 const styles = StyleSheet.create({

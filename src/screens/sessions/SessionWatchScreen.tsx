@@ -4,7 +4,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   AppState,
-  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -12,6 +11,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { EmptyState } from '../../components/common/EmptyState';
 import { ChatPreviewCard, SessionChat } from '../../features/chat/components';
 import { joinPresence, leavePresence } from '../../features/presence/presenceService';
@@ -71,7 +71,10 @@ const DRIFT_TOLERANCE_SECONDS = 5;
  */
 export function SessionWatchScreen({ route }: Props) {
   const { sessionId } = route.params;
-  const { nowMs } = useServerClock();
+  // 5s tick (not the 1s default): this screen's labels are
+  // minute-granularity and drift correction reads serverClock
+  // directly, so a 1s tick only bought 5x whole-screen re-renders.
+  const { nowMs } = useServerClock(5_000);
 
   const [item, setItem] = useState<SessionWithVideo | null>(null);
   // When the backend is not configured there is nothing to load.
@@ -83,6 +86,11 @@ export function SessionWatchScreen({ route }: Props) {
   const [joinedCount, setJoinedCount] = useState<number | null>(null);
   const [presenceCount, setPresenceCount] = useState<number | null>(null);
   const [playerReady, setPlayerReady] = useState(false);
+  // NOTE (UX perf pass): this screen passes the live offsetSeconds as
+  // the embed's startSeconds, which changes on every clock tick. The
+  // embed components freeze that value at mount (see YouTubeEmbed),
+  // so the iframe/WebView source never changes after first render —
+  // ongoing sync is the drift-correction seek's job, not the src's.
   const [chatOpen, setChatOpen] = useState(false);
 
   const embedRef = useRef<YouTubeEmbedHandle>(null);
@@ -228,6 +236,11 @@ export function SessionWatchScreen({ route }: Props) {
     return () => clearInterval(timer);
   }, [status, playerReady, session, durationSeconds]);
 
+  const handlePlayerReady = useCallback(() => setPlayerReady(true), []);
+  const handleTimeUpdate = useCallback((seconds: number) => {
+    playerTimeRef.current = seconds;
+  }, []);
+
   const onToggleJoin = useCallback(async () => {
     if (!user || joinBusy) return;
     setJoinBusy(true);
@@ -310,15 +323,13 @@ export function SessionWatchScreen({ route }: Props) {
             youtubeVideoId={video.youtube_video_id}
             startSeconds={isPlaying ? offsetSeconds : 0}
             autoplay={isPlaying}
-            onReady={() => setPlayerReady(true)}
-            onTimeUpdate={(seconds) => {
-              playerTimeRef.current = seconds;
-            }}
+            onReady={handlePlayerReady}
+            onTimeUpdate={handleTimeUpdate}
           />
         ) : (
           <View style={styles.thumbnailWrap}>
             {thumbnailUrl ? (
-              <Image source={{ uri: thumbnailUrl }} style={styles.thumbnail} resizeMode="cover" />
+              <Image source={{ uri: thumbnailUrl }} style={styles.thumbnail} contentFit="cover" cachePolicy="memory-disk" />
             ) : (
               <View style={[styles.thumbnail, styles.thumbnailEmpty]} />
             )}

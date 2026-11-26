@@ -1,9 +1,11 @@
-import React from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import React, { memo } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { layout, lightColors, radii, spacing, typography } from '../../../theme';
 import type { Video } from '../../../types/database';
 import { formatClock, resumeRatio } from '../format';
+import { listThumbnailUrl } from '../../../components/video/cardData';
 
 interface VideoListRowProps {
   video: Video;
@@ -24,7 +26,7 @@ interface VideoListRowProps {
  * progress bar at its bottom edge), title + meta at right — the
  * stacked-row geometry of reference §4, generalised to a video row.
  */
-export function VideoListRow({
+export const VideoListRow = memo(function VideoListRow({
   video,
   metaLine,
   resumePositionSeconds,
@@ -34,6 +36,7 @@ export function VideoListRow({
   onAction,
 }: VideoListRowProps) {
   const ratio = resumePositionSeconds != null ? resumeRatio(resumePositionSeconds, video.duration_seconds) : null;
+  const thumbUrl = listThumbnailUrl(video.youtube_video_id, video.thumbnail_url);
   const metaParts: string[] = [];
   if (metaLine) metaParts.push(metaLine);
   if (resumePositionSeconds != null && resumePositionSeconds > 0) {
@@ -48,8 +51,14 @@ export function VideoListRow({
       accessibilityLabel={video.title}
     >
       <View style={styles.thumbWrap}>
-        {video.thumbnail_url ? (
-          <Image source={{ uri: video.thumbnail_url }} style={styles.thumb} resizeMode="cover" />
+        {thumbUrl ? (
+          <Image
+            source={{ uri: thumbUrl }}
+            style={styles.thumb}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            recyclingKey={video.id}
+          />
         ) : (
           <View style={[styles.thumb, styles.thumbEmpty]} />
         )}
@@ -91,7 +100,7 @@ export function VideoListRow({
       ) : null}
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   row: {

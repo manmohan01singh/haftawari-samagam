@@ -1,8 +1,10 @@
-import React from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import React, { memo } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { layout, lightColors, nativeApp, radii, spacing } from '../../../theme';
 import type { PlaylistSummary } from '../types';
+import { downgradeYouTubeThumbnailUrl } from '../../../components/video/cardData';
 
 interface PlaylistRowProps {
   summary: PlaylistSummary;
@@ -16,7 +18,7 @@ interface PlaylistRowProps {
  * the first item's real YouTube thumbnail; an empty playlist shows a
  * plain surface with a playlist glyph — never a fabricated image.
  */
-export function PlaylistRow({ summary, onPress }: PlaylistRowProps) {
+export const PlaylistRow = memo(function PlaylistRow({ summary, onPress }: PlaylistRowProps) {
   const { playlist, itemCount, coverThumbnailUrl, isOwn } = summary;
   const metaParts = [
     playlist.is_public ? 'Public' : 'Private',
@@ -34,7 +36,13 @@ export function PlaylistRow({ summary, onPress }: PlaylistRowProps) {
       <View style={styles.thumbWrap}>
         <View style={styles.stackEdge} />
         {coverThumbnailUrl ? (
-          <Image source={{ uri: coverThumbnailUrl }} style={styles.thumb} resizeMode="cover" />
+          <Image
+            source={{ uri: downgradeYouTubeThumbnailUrl(coverThumbnailUrl) }}
+            style={styles.thumb}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            recyclingKey={playlist.id}
+          />
         ) : (
           <View style={[styles.thumb, styles.thumbEmpty]}>
             <MaterialIcons name="playlist-play" size={30} color={lightColors.textSecondary} />
@@ -56,7 +64,7 @@ export function PlaylistRow({ summary, onPress }: PlaylistRowProps) {
       <MaterialIcons name="more-vert" size={20} color={lightColors.textSecondary} />
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   row: {
