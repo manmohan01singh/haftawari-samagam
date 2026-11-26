@@ -152,6 +152,104 @@ hiding UI is convenience only — RLS is the enforcement.
 | All screens incl. admin | **Stubs** with honest empty states |
 | Video playback, search behaviour, auth UI, push | **Not implemented** (later phases) |
 
+## 9. Phase 2 — core screens on the live backend (26 Nov 2026)
+
+Backend is live: Supabase project (Mumbai) with migration 0001 applied
+(11 tables, RLS verified — an anonymous INSERT into `videos` with the
+publishable key is rejected, Postgres 42501 / HTTP 401, exactly as the
+admin-only write policy intends) and a YouTube Data API v3 key
+restricted to that API. `.env` carries the three public values locally
+(gitignored, never committed).
+
+Built in Phase 2 (status per area in §10):
+
+- **Auth** — `src/features/auth/AuthContext.tsx` (session + profile +
+  isAdmin from `profiles.role`), SignIn/SignUp screens. Sign-up passes
+  the display name as user metadata for the auto-profile trigger. The
+  project's auth settings require email confirmation
+  (`mailer_autoconfirm=false`, read live from `/auth/v1/settings`), so
+  sign-up honestly shows a "check your email" state when no session is
+  returned. Admin routes are registered only when `isAdmin`; RLS is
+  the enforcement.
+- **Home feed** — published `videos` rows only, paginated 25/page,
+  category chips from the real `categories` table, `FeedCard` per
+  reference §1 (full-bleed thumbnail, title full-width, avatar row,
+  engagement row with the actions that have a real backend: Save via
+  `saved_videos`, Share via the system sheet).
+- **Watch** — official YouTube embed only (`react-native-webview`
+  iframe embed on native, iframe on web; branding/controls untouched),
+  mounted lazily after the navigation transition; white sheet with
+  20px rounded top corners overlapping the player (reference §5);
+  real metadata from Supabase/API incl. statistics; Up Next from the
+  published catalogue; `watch_history` recorded for signed-in users
+  (position stays 0 — the embed does not expose it, and the UI never
+  claims otherwise).
+- **Search** — pill search bar (reference §3); results = published
+  archive matches (Supabase) + official-channel matches (Data API
+  search), de-duplicated; a channel result block with real counts and
+  a "Latest videos" carousel leads when the query matches the channel
+  (name, handle, or initials such as "bgsj").
+- **Channel** — official channel resolved via `channels?forHandle`
+  (UC id `UCu7xpk9fOQRs4AvYEOakBfg`); banner/avatar/counts/description
+  from the API; uploads paginated via the uploads playlist; **Videos /
+  Live tabs only — no Shorts tab**.
+- **Subscriptions** — reference §2 layout for the one channel this app
+  follows: avatar rail (red dot only when the API reports the channel
+  genuinely live), "Most relevant", 78%-width carousel.
+- **Library ("You") + Account + History** — reference §4 layout over
+  real `watch_history` / `saved_videos` data; honest sign-in states.
+- **PWA** — icons generated from `assets/icon.png`; `public/index.html`
+  links the manifest; `public/sw.js` (offline shell only, network-only
+  for Supabase/YouTube) registered in production web builds. Verified
+  in `dist/` after `expo export --platform web`.
+- **NO SHORTS (user decision, 26 Nov 2026)** — overrides Master Prompt
+  §7 and the reference: Shorts screen/route deleted, bottom-nav slot 2
+  is Subscriptions, sidebar item removed, no channel Shorts tab, no
+  Shorts shelves. The circled + slot is retained (reference geometry);
+  having no user uploads, it opens the official channel.
+- **First-content seed: BLOCKED BY DESIGN, not worked around.** The
+  one verified real samagam ("Kal Taaran Gur Nanak Aaya (30/11/20)",
+  YouTube id `G0enZ06AnF0`, 3:00:35) cannot be inserted with the
+  publishable key — RLS admin-only write rejects it (see above). The
+  legitimate path is provided as `supabase/admin-seed-verified-samagam.sql`
+  for the project owner to run once in the dashboard SQL Editor. Until
+  then the home feed honestly shows its empty state.
+
+### Performance (hard requirement — "app seamless and smooth")
+
+Implemented: FlatList everywhere with stable `keyExtractor`s,
+`removeClippedSubviews`, tuned `initialNumToRender`/`windowSize`;
+incremental pagination (Supabase range pages, YouTube page tokens);
+memoized cards (`React.memo`) with stable `useCallback` renderers;
+list thumbnails are 480×360 `hqdefault` derivatives (full-res only on
+hero/watch surfaces); `expo-image` with memory-disk caching and short
+transitions; geometry-matched skeleton cards so loading never shifts
+layout; the player embed mounts only on the Watch screen and only
+after the transition settles (thumbnail + spinner before that); all
+data work is async (no JS-thread blocking); native-stack + bottom-tab
+navigators keep transitions native. NOT IMPLEMENTED: `getItemLayout`
+(feed/shelf cards have variable-height text, so fixed offsets would
+be wrong), image blurhash placeholders, and any on-device profiling
+(no device build was run in this phase).
+
+## 10. Phase 2 honesty table
+
+| Area | State |
+|---|---|
+| Auth (sign-up/in/out, profile, admin route guard) | **Implemented** (email confirmation required by project settings) |
+| Home feed (real published rows, pagination, categories) | **Implemented** — empty until the owner runs the admin seed or publishes via the future admin UI |
+| Watch (official embed, sheet, Up Next, history) | **Implemented** |
+| Search (archive + channel, channel block) | **Implemented** |
+| Channel (Videos/Live tabs, uploads pagination) | **Implemented** |
+| Subscriptions / Library / Account / History | **Implemented** |
+| PWA (icons, manifest link, service worker) | **Implemented + verified in dist** |
+| Like / Dislike / per-video comments | **Not implemented** — no backend in the schema; not shown as dead buttons |
+| Cast / notification bell in the top bar | **Not implemented** — no casting/notifications exist; omitted rather than faked |
+| "Subscribed" pill state | **Not implemented** — no subscriptions table; channel rows offer View Channel instead |
+| Session playback + live chat (chat card/sheet) | **Phase 3** — geometry catalogued from screenshots 05–07, not built here |
+| Admin dashboard build-out | **Phase 3** (stub screens + route guard in place) |
+| Shorts | **Removed by user decision** — will not be built |
+
 ## 8. Next steps requiring the user (guided, free, no paid services)
 
 1. **Supabase (free):** create an account at supabase.com → New project

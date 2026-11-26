@@ -1,11 +1,19 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { layout, lightColors, spacing, typography } from '../../theme';
+import { Image } from 'expo-image';
+import { MaterialIcons } from '@expo/vector-icons';
+import { layout, lightColors } from '../../theme';
 
 export interface BottomNavItem {
   key: string;
+  /** Kept for accessibility; NOT rendered — the native reference bar is icon-only. */
   label: string;
-  icon: string; // text glyph placeholder until the icon set lands in Phase 2
+  /** MaterialIcons glyph name for icon slots. */
+  icon?: string;
+  /** 'create' renders the circled + ; 'avatar' renders the profile slot. */
+  kind?: 'icon' | 'create' | 'avatar';
+  avatarUrl?: string | null;
+  avatarInitial?: string | null;
 }
 
 interface BottomNavProps {
@@ -15,12 +23,13 @@ interface BottomNavProps {
 }
 
 /**
- * Mobile bottom navigation (native-app pattern from the audit):
- * Home · Shorts · Create · Subscriptions · You/Library.
- * Rendered by the tab navigator; safe-area padding is applied by the
- * navigator container.
+ * Bottom navigation (native-app reference §1 + the user's 26 Nov 2026
+ * decision): 4 ICON-ONLY slots, no text labels — Home, Subscriptions,
+ * circled +, profile avatar. There is deliberately NO Shorts slot:
+ * the user decided the app has no Shorts anywhere. Bar is white with
+ * a faint top hairline; safe-area padding is applied by the caller.
  */
-export function BottomNav({ items, activeKey, onPress }: BottomNavProps) {
+export const BottomNav = memo(function BottomNav({ items, activeKey, onPress }: BottomNavProps) {
   return (
     <View style={styles.bar}>
       {items.map((item) => {
@@ -31,16 +40,39 @@ export function BottomNav({ items, activeKey, onPress }: BottomNavProps) {
             style={styles.item}
             onPress={() => onPress(item.key)}
             accessibilityRole="button"
+            accessibilityLabel={item.label}
             accessibilityState={{ selected: active }}
           >
-            <Text style={[styles.icon, active && styles.iconActive]}>{item.icon}</Text>
-            <Text style={[styles.label, active && styles.labelActive]}>{item.label}</Text>
+            {item.kind === 'create' ? (
+              <View style={styles.createCircle}>
+                <MaterialIcons name="add" size={22} color={lightColors.text} />
+              </View>
+            ) : item.kind === 'avatar' ? (
+              item.avatarUrl ? (
+                <Image
+                  source={{ uri: item.avatarUrl }}
+                  style={styles.avatar}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                />
+              ) : (
+                <View style={[styles.avatar, styles.avatarFallback]}>
+                  <Text style={styles.avatarInitial}>{item.avatarInitial ?? '?'}</Text>
+                </View>
+              )
+            ) : (
+              <MaterialIcons
+                name={(item.icon ?? 'home') as keyof typeof MaterialIcons.glyphMap}
+                size={26}
+                color={active ? lightColors.text : lightColors.textSecondary}
+              />
+            )}
           </Pressable>
         );
       })}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   bar: {
@@ -49,11 +81,22 @@ const styles = StyleSheet.create({
     backgroundColor: lightColors.surface,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: lightColors.border,
-    paddingBottom: spacing.xs,
   },
   item: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  icon: { fontSize: 20, color: lightColors.textSecondary },
-  iconActive: { color: lightColors.text },
-  label: { ...typography.metadata, color: lightColors.textSecondary },
-  labelActive: { color: lightColors.text, fontWeight: '600' },
+  createCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1.5,
+    borderColor: lightColors.text,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatar: { width: 28, height: 28, borderRadius: 14 },
+  avatarFallback: {
+    backgroundColor: lightColors.surfaceVariant,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitial: { fontSize: 13, fontWeight: '600', color: lightColors.textSecondary },
 });

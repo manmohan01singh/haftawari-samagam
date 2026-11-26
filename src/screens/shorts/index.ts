@@ -1,1 +1,0 @@
-export { ShortsScreen } from './ShortsScreen';

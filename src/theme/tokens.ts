@@ -124,10 +124,15 @@ export const darkColors: ThemeColors = {
  * the PWA keeps the mobile-web values in `layout`/`radii` above.
  */
 export const nativeApp = {
-  /** Bottom nav: 4 icon-only slots (Home, Shorts, circled +, avatar), no labels. */
+  /**
+   * Bottom nav: 4 icon-only slots, no labels. Slot 2 is Subscriptions —
+   * NOT Shorts: the user decided (26 Nov 2026) the app has no Shorts
+   * anywhere, overriding the reference screenshots on this point.
+   */
   bottomNav: {
     showLabels: false,
     slotCount: 4,
+    slots: ['Home', 'Subscriptions', 'Create', 'Avatar'] as const,
     createIcon: 'circledPlus' as const,
     profileSlot: 'avatar' as const,
   },
@@ -159,8 +164,12 @@ export const nativeApp = {
     thumbnailWidthRatio: 0.4,
     stackOffset: 6, // offset layer peeking behind the thumbnail's top edge
   },
-  /** Watch page sheet + live chat (screenshots 05–07). */
-  watchSheet: { topRadius: 16, dragHandleWidth: 48, dragHandleHeight: 4 },
+  /**
+   * Watch page sheet + live chat (screenshots 05–07). Drag handle
+   * corrected to ≈90×5 by direct screenshot measurement (the earlier
+   * catalogue estimate of 48×4 was wrong — screenshot wins).
+   */
+  watchSheet: { topRadius: 20, dragHandleWidth: 90, dragHandleHeight: 5 },
   chatCard: { radius: 16, padding: spacing.md },
   chatSheet: {
     avatarSize: 36,

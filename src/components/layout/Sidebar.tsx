@@ -2,10 +2,13 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { layout, lightColors, spacing, typography } from '../../theme';
 
-/** Desktop sidebar items, in the audited order. */
+/**
+ * Desktop sidebar items, in the audited order — minus Shorts: the user
+ * decided (26 Nov 2026) the app has no Shorts anywhere, which overrides
+ * the reference/desktop audit.
+ */
 export const SIDEBAR_ITEMS = [
   'Home',
-  'Shorts',
   'Subscriptions',
   'History',
   'Playlists',

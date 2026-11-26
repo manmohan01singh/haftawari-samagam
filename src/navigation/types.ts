@@ -1,9 +1,12 @@
 import type { NavigatorScreenParams } from '@react-navigation/native';
 
-/** Main bottom-tab routes (mobile app pattern from the audit). */
+/**
+ * Main bottom-tab routes. There is NO Shorts route: the user decided
+ * (26 Nov 2026) the app has no Shorts anywhere — this overrides the
+ * Master Prompt §7 and the reference screenshots.
+ */
 export type MainTabParamList = {
   Home: undefined;
-  Shorts: undefined;
   Subscriptions: undefined;
   Library: undefined;
 };
@@ -21,13 +24,17 @@ export type AdminStackParamList = {
 
 export type RootStackParamList = {
   MainTabs: NavigatorScreenParams<MainTabParamList>;
-  Watch: { videoId: string; sessionId?: string };
+  /** videoRowId = Supabase `videos` row id; youtubeVideoId = a YouTube id (API-sourced items). */
+  Watch: { videoRowId?: string; youtubeVideoId?: string; sessionId?: string };
   Search: undefined;
   SearchResults: { query: string };
-  Channel: { channelId: string };
+  /** Defaults to the official channel when no id is passed. */
+  Channel: { channelId?: string };
   Playlist: { playlistId: string };
   History: undefined;
   Settings: undefined;
   Account: undefined;
+  SignIn: undefined;
+  SignUp: undefined;
   Admin: NavigatorScreenParams<AdminStackParamList>;
 };

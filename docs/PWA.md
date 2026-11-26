@@ -1,19 +1,24 @@
 # PWA plan — Haftawari Samagam
 
-## What exists in Phase 1
+## Status: Phase 2 — implemented and verified in the web export
 
 - `app.json → web`: name/short name, description, theme/background
   colours, `display: "standalone"`, Metro bundler.
-- `public/manifest.webmanifest`: install manifest. The referenced
-  `/icon-192.png` and `/icon-512.png` still need to be exported from
-  `assets/icon.png` and placed in `public/` (Phase 2 task) — until
-  then the manifest is present but installability is incomplete.
-  This is stated plainly rather than shipping placeholder icons.
+- `public/manifest.webmanifest`: install manifest. `/icon-192.png`
+  and `/icon-512.png` were generated from the real `assets/icon.png`
+  (1024×1024) in Phase 2 and are exported to `dist/`.
+- `public/index.html` (created via `npx expo customize
+  public/index.html`, per the Expo PWA guide) links the manifest and
+  the apple-touch icon; the exported `dist/index.html` was verified
+  to contain `<link rel="manifest" href="/manifest.webmanifest" />`.
+- `public/sw.js` is exported to `dist/` and registered in production
+  web builds from `src/lib/registerServiceWorker.web.ts` (called from
+  App.tsx). Verified present in the exported bundle.
 
-## Service worker — registration plan (Phase 2)
+## Service worker — as implemented (was: registration plan)
 
 Expo's web output does not register a service worker for this
-template by default. The plan, to implement in Phase 2:
+template by default. The plan, implemented in Phase 2:
 
 1. Author a small `public/sw.js` (Workbox is optional, not required)
    with a **cache-first app shell** strategy: the HTML shell, JS/CSS

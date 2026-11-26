@@ -1,1 +1,39 @@
-{"expo":{"android":{"adaptiveIcon":{"backgroundColor":"#FFFFFF","backgroundImage":"./assets/android-icon-background.png","foregroundImage":"./assets/android-icon-foreground.png","monochromeImage":"./assets/android-icon-monochrome.png"},"package":"com.haftawarisamagam.app","predictiveBackGestureEnabled":false},"description":"Haftawari and Amritvela kirtan samagams, scheduled and shared.","icon":"./assets/icon.png","ios":{"bundleIdentifier":"com.haftawarisamagam.app","supportsTablet":true},"name":"Haftawari Samagam","orientation":"portrait","slug":"haftawari-samagam","userInterfaceStyle":"automatic","version":"1.0.0","web":{"backgroundColor":"#FFFFFF","bundler":"metro","description":"Haftawari and Amritvela kirtan samagams, scheduled and shared.","display":"standalone","favicon":"./assets/favicon.png","lang":"en","name":"Haftawari Samagam","shortName":"Haftawari","themeColor":"#FFFFFF"}}}
+{
+  "expo": {
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#FFFFFF",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "package": "com.haftawarisamagam.app",
+      "predictiveBackGestureEnabled": false
+    },
+    "description": "Haftawari and Amritvela kirtan samagams, scheduled and shared.",
+    "icon": "./assets/icon.png",
+    "ios": {
+      "bundleIdentifier": "com.haftawarisamagam.app",
+      "supportsTablet": true
+    },
+    "name": "Haftawari Samagam",
+    "orientation": "portrait",
+    "slug": "haftawari-samagam",
+    "userInterfaceStyle": "automatic",
+    "version": "1.0.0",
+    "web": {
+      "backgroundColor": "#FFFFFF",
+      "bundler": "metro",
+      "description": "Haftawari and Amritvela kirtan samagams, scheduled and shared.",
+      "display": "standalone",
+      "favicon": "./assets/favicon.png",
+      "lang": "en",
+      "name": "Haftawari Samagam",
+      "shortName": "Haftawari",
+      "themeColor": "#FFFFFF"
+    },
+    "plugins": [
+      "expo-image"
+    ]
+  }
+}

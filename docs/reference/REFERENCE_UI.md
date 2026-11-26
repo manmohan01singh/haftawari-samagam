@@ -341,3 +341,37 @@ visible at the sheet's top edge).
       sessions use UPCOMING / NOW PLAYING / COMPLETED; the ((•)) LIVE pill
       and "watching" language in this document describe the *reference*
       UI of genuinely live YouTube streams.
+
+---
+
+## Corrections from direct screenshot study (Phase 2 — screenshot wins)
+
+The 7 JPGs were re-studied directly during Phase 2. Where the catalogue
+above and a screenshot disagreed, the screenshot governed and the code
+follows the screenshot:
+
+1. **§1 Home feed card:** the title is **full-width ABOVE the avatar
+   row** (title block first, then avatar + @handle/watching lines +
+   engagement row). Any reading of §1 as "title beside the avatar" is
+   wrong; FeedCard implements title-full-width.
+2. **§6 Chat sheet drag handle:** ≈**90×5px**, not 48×4. Token
+   `nativeApp.watchSheet.dragHandleWidth/Height` corrected to 90/5.
+3. **§5 Watch sheet top radius:** reads ≈**20px** in screenshot 06;
+   token `nativeApp.watchSheet.topRadius` corrected 16 → 20.
+4. **§1/§2 metadata lines** begin views with a "▷" glyph
+   ("▷ 12K · 21 hr ago", "▷332 watching") — implemented in card data
+   formatting for API-sourced items.
+5. **§3 channel counts** are Indian-format ("4.65 lakh subscribers •
+   7.2K videos") — implemented via `formatCount` in src/lib/format.ts.
+
+## User decision overriding this reference (26 Nov 2026): NO SHORTS
+
+The user decided the app has **no Shorts anywhere** ("Shorts nhi hone
+chahide"). This overrides Master Prompt §7 and this reference (which
+documents YouTube, Shorts included, for layout evidence only):
+
+- No Shorts screen or route; `src/screens/shorts/` deleted.
+- Bottom nav slot 2 is **Subscriptions** (icon-only, same geometry);
+  Home, circled + and avatar slots unchanged.
+- No Shorts item in the desktop sidebar; no Shorts tab on the channel
+  page (Videos / Live only); no Shorts shelf on Home or Subscriptions.
