@@ -5,7 +5,6 @@ import {
   Linking,
   Modal,
   Pressable,
-  Share,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -14,9 +13,13 @@ import {
 import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { EmptyState } from '../../components/common/EmptyState';
 import { goBackOrTab } from '../../navigation/safeBack';
 import { StackTabBar } from '../../components/layout/StackTabBar';
+import { LinkedText } from '../../components/common/LinkedText';
+import { Toast, useToast } from '../../components/common/Toast';
+import { shareContent, shareFeedback } from '../../lib/share';
 import { ShelfCard } from '../../components/video/ShelfCard';
 import { SkeletonCard } from '../../components/video/SkeletonCard';
 import { useOfficialChannel } from '../../features/channel';
@@ -31,7 +34,7 @@ import {
   type YouTubeVideoMetadata,
 } from '../../lib/youtube';
 import { apiCardData as baseApiCardData, formatDateLine } from '../../components/video/cardData';
-import { lightColors, spacing } from '../../theme';
+import { lightColors, radii, spacing } from '../../theme';
 import type { RootStackParamList } from '../../navigation/types';
 import { FEED_LIST_PERF } from '../../lib/listPerf';
 
@@ -67,6 +70,40 @@ export function ChannelScreen({ route, navigation }: Props) {
   const [liveLoaded, setLiveLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [descExpanded, setDescExpanded] = useState(false);
+  // QA33: there is NO subscriptions backend table, so Subscribe here is
+  // an honest DEVICE-LOCAL follow: it persists in AsyncStorage on this
+  // device only (labelled as such under the button) and drives nothing
+  // fake — no counts change, no bell, no notifications are promised.
+  const [following, setFollowing] = useState(false);
+  const { toast, showToast } = useToast();
+  const followKey = `channel-follow:${channelId}`;
+  useEffect(() => {
+    let active = true;
+    AsyncStorage.getItem(followKey)
+      .then((value) => {
+        if (active) setFollowing(value === '1');
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [followKey]);
+  const toggleFollow = useCallback(() => {
+    setFollowing((prev) => {
+      const next = !prev;
+      void AsyncStorage.setItem(followKey, next ? '1' : '0').catch(() => undefined);
+      return next;
+    });
+  }, [followKey]);
+  const shareVideo = useCallback(
+    (title: string, youtubeVideoId: string) => {
+      void shareContent(title, `https://www.youtube.com/watch?v=${youtubeVideoId}`).then((outcome) => {
+        const feedback = shareFeedback(outcome);
+        if (feedback) showToast(feedback);
+      });
+    },
+    [showToast],
+  );
 
   useEffect(() => {
     let active = true;
@@ -136,11 +173,19 @@ export function ChannelScreen({ route, navigation }: Props) {
           <ShelfCard
             data={data}
             onPress={() => navigation.navigate('Watch', { youtubeVideoId: item.youtubeVideoId })}
+            menuActions={[
+              {
+                key: 'share',
+                label: 'Share',
+                icon: 'share',
+                onPress: () => shareVideo(item.title, item.youtubeVideoId),
+              },
+            ]}
           />
         </View>
       );
     },
-    [channel, navigation, columns],
+    [channel, navigation, columns, shareVideo],
   );
 
   const keyExtractor = useCallback((item: YouTubeVideoMetadata) => item.youtubeVideoId, []);
@@ -183,15 +228,35 @@ export function ChannelScreen({ route, navigation }: Props) {
           {channel.subscriberCount != null ? `  •  ${formatCount(channel.subscriberCount)} subscribers` : ''}
           {channel.videoCount != null ? `  •  ${formatCount(channel.videoCount)} videos` : ''}
         </Text>
+        <Pressable
+          style={[styles.subscribePill, following && styles.subscribePillActive]}
+          onPress={toggleFollow}
+          accessibilityRole="button"
+          accessibilityState={{ selected: following }}
+        >
+          <Text style={[styles.subscribeText, following && styles.subscribeTextActive]}>
+            {following ? 'Subscribed' : 'Subscribe'}
+          </Text>
+        </Pressable>
+        <Text style={styles.followNote}>Saved on this device only</Text>
         {channel.description ? (
-          <Pressable onPress={() => setDescExpanded((v) => !v)} accessibilityRole="button">
-            <Text style={styles.description} numberOfLines={descExpanded ? undefined : 3}>
-              {channel.description}
-            </Text>
+          <View style={styles.descriptionWrap}>
+            <LinkedText
+              text={channel.description}
+              style={styles.description}
+              numberOfLines={descExpanded ? undefined : 3}
+            />
             {channel.description.length > 180 ? (
-              <Text style={styles.moreToggle}>{descExpanded ? 'Show less' : '…more'}</Text>
+              <Pressable
+                onPress={() => setDescExpanded((v) => !v)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                accessibilityRole="button"
+                accessibilityLabel={descExpanded ? 'Show less' : 'Show more'}
+              >
+                <Text style={styles.moreText}>{descExpanded ? 'Show less' : '…more'}</Text>
+              </Pressable>
             ) : null}
-          </Pressable>
+          </View>
         ) : null}
       </View>
       <View style={styles.tabs}>
@@ -207,6 +272,7 @@ export function ChannelScreen({ route, navigation }: Props) {
               key={t.key}
               style={[styles.tab, active && styles.tabActive]}
               onPress={() => setTab(t.key)}
+              hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
               accessibilityRole="button"
               accessibilityState={{ selected: active }}
             >
@@ -326,8 +392,12 @@ export function ChannelScreen({ route, navigation }: Props) {
               accessibilityRole="button"
               onPress={() => {
                 setMenuOpen(false);
-                void Share.share({
-                  message: `${channel.title} — https://www.youtube.com/channel/${channelId}`,
+                void shareContent(
+                  channel.title,
+                  `https://www.youtube.com/channel/${channelId}`,
+                ).then((outcome) => {
+                  const feedback = shareFeedback(outcome);
+                  if (feedback) showToast(feedback);
                 });
               }}
             >
@@ -356,6 +426,7 @@ export function ChannelScreen({ route, navigation }: Props) {
           </Pressable>
         </Pressable>
       </Modal>
+      <Toast message={toast} />
     </View>
   );
 }
@@ -408,15 +479,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: spacing.sm,
   },
-  moreToggle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: lightColors.text,
-    textAlign: 'center',
-    marginTop: 2,
-  },
   gridCell: { flex: 1 },
   columnWrapper: { gap: spacing.lg },
+  descriptionWrap: { alignItems: 'center', marginTop: spacing.sm },
+  moreText: { fontSize: 14, fontWeight: '600', color: lightColors.text, marginTop: spacing.xs },
+  subscribePill: {
+    marginTop: spacing.lg,
+    backgroundColor: lightColors.subscribeBackground,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.xl,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  subscribePillActive: { backgroundColor: lightColors.surfaceVariant },
+  subscribeText: { fontSize: 15, fontWeight: '600', color: lightColors.subscribeText },
+  subscribeTextActive: { color: lightColors.text },
+  followNote: { fontSize: 12, color: lightColors.textSecondary, marginTop: spacing.xs },
   tabs: {
     flexDirection: 'row',
     gap: spacing.xl,

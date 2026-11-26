@@ -53,8 +53,14 @@ export function SwipeableRow({ onRemove, removeLabel = 'Remove', children }: Swi
 
   const panResponder = useRef(
     PanResponder.create({
+      // Never claim a tap or a vertical scroll: only a clearly
+      // horizontal left-drag becomes the swipe. Claiming taps here
+      // (onStartShouldSet / capture) is what made row taps feel dead
+      // on web, where the PanResponder view wraps the row Pressable.
+      onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_evt, gesture) =>
         gesture.dx < -8 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.5,
+      onPanResponderTerminationRequest: () => true,
       onPanResponderMove: (_evt, gesture) => {
         const next = Math.max(-ACTION_WIDTH, Math.min(0, offsetRef.current + gesture.dx));
         translateX.setValue(next);

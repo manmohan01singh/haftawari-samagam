@@ -4,6 +4,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { branding } from '../../config/branding';
 import { useAuth } from '../../features/auth';
+
 import { goBackOrTab } from '../../navigation/safeBack';
 import { StackTabBar } from '../../components/layout/StackTabBar';
 import type { RootStackParamList } from '../../navigation/types';
@@ -16,10 +17,12 @@ type MaterialIconName = keyof typeof MaterialIcons.glyphMap;
 interface SettingsRow {
   icon: MaterialIconName;
   label: string;
+
   onPress: () => void;
 }
 
 /**
+
  * Settings — previously a Phase-1 stub ("Settings will appear here")
  * with the app Header, NO back button and no bottom nav: a complete
  * dead end reachable from the Library tab's gear icon. It is now a
@@ -28,7 +31,7 @@ interface SettingsRow {
  * contains no fake toggles — every row goes somewhere real.
  */
 export function SettingsScreen({ navigation }: Props) {
-  const { user, isAdmin } = useAuth();
+  const { user, profile, isAdmin, signOut } = useAuth();
 
   const rows: SettingsRow[] = [
     {
@@ -65,11 +68,14 @@ export function SettingsScreen({ navigation }: Props) {
     });
   }
 
+
   return (
     <View style={styles.container}>
       <View style={styles.topBar}>
         <Pressable
+
           onPress={() => goBackOrTab(navigation, 'Library')}
+
           hitSlop={10}
           accessibilityLabel="Back"
           accessibilityRole="button"
@@ -79,19 +85,47 @@ export function SettingsScreen({ navigation }: Props) {
         <Text style={styles.topBarTitle}>Settings</Text>
         <View style={styles.topBarSpacer} />
       </View>
+
       <ScrollView contentContainerStyle={styles.content}>
+        {user ? (
+          <View style={styles.profileBlock}>
+            <Text style={styles.profileName} numberOfLines={1}>
+              {profile?.display_name ?? 'Sangat member'}
+            </Text>
+            <Text style={styles.profileMeta} numberOfLines={1}>
+              {user.email ?? ''}
+            </Text>
+          </View>
+        ) : null}
+
         {rows.map((row) => (
           <Pressable
             key={row.label}
+
             style={styles.row}
             onPress={row.onPress}
             accessibilityRole="button"
           >
+
             <MaterialIcons name={row.icon} size={24} color={lightColors.text} />
+
             <Text style={styles.rowText}>{row.label}</Text>
             <MaterialIcons name="chevron-right" size={22} color={lightColors.textSecondary} />
           </Pressable>
         ))}
+
+        {user ? (
+          <Pressable
+            style={styles.signOutButton}
+            onPress={() => {
+              void signOut();
+            }}
+            accessibilityRole="button"
+          >
+            <Text style={styles.signOutText}>Sign out</Text>
+          </Pressable>
+        ) : null}
+
         <Text style={styles.footer}>
           {branding.appName} · Playback uses the official YouTube player. Samagam
           Sessions are scheduled group playbacks of recordings, labelled
@@ -99,6 +133,7 @@ export function SettingsScreen({ navigation }: Props) {
         </Text>
       </ScrollView>
       <StackTabBar navigation={navigation} activeTab="Library" />
+
     </View>
   );
 }
@@ -114,20 +149,37 @@ const styles = StyleSheet.create({
   },
   topBarTitle: { fontSize: 17, fontWeight: '600', color: lightColors.text },
   topBarSpacer: { width: 24 },
+
   content: { padding: spacing.lg },
+  profileBlock: { paddingBottom: spacing.lg },
+  profileName: { fontSize: 18, fontWeight: '700', color: lightColors.text },
+  profileMeta: { fontSize: 14, color: lightColors.textSecondary, marginTop: 2 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.lg,
+    minHeight: 56,
     paddingVertical: spacing.lg,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: lightColors.border,
   },
+  signOutButton: {
+    borderWidth: 1,
+    borderColor: lightColors.border,
+    borderRadius: 999,
+    minHeight: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: spacing.xxl,
+  },
+  signOutText: { fontSize: 15, fontWeight: '600', color: lightColors.text },
   rowText: { flex: 1, fontSize: 16, color: lightColors.text },
+
   footer: {
     fontSize: 13,
     lineHeight: 19,
     color: lightColors.textSecondary,
+
     marginTop: spacing.xxl,
   },
 });

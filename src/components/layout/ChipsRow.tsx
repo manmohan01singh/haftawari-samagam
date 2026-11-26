@@ -17,6 +17,7 @@ export function ChipsRow({ chips, selected, onSelect }: ChipsRowProps) {
       showsHorizontalScrollIndicator={false}
       style={styles.scroll}
       contentContainerStyle={styles.row}
+      keyboardShouldPersistTaps="handled"
     >
       {chips.map((chip) => {
         const isSelected = chip === selected;
@@ -24,6 +25,7 @@ export function ChipsRow({ chips, selected, onSelect }: ChipsRowProps) {
           <Pressable
             key={chip}
             onPress={() => onSelect?.(chip)}
+            hitSlop={{ top: 6, bottom: 6, left: 2, right: 2 }}
             style={[styles.chip, isSelected && styles.chipSelected]}
             accessibilityRole="button"
             accessibilityState={{ selected: isSelected }}

@@ -13,6 +13,7 @@ import {
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { lightColors, nativeApp, radii, spacing, typography } from '../../../theme';
 import { useSessionChat, type ChatUser } from '../useSessionChat';
+import { ICON_HIT_SLOP, SMALL_ICON_HIT_SLOP } from '../../../lib/touch';
 import type { ChatMessageWithAuthor } from '../types';
 import { ChatMessageRow } from './ChatMessageRow';
 
@@ -222,7 +223,7 @@ export function SessionChat({
             onPress={onClose}
             accessibilityRole="button"
             accessibilityLabel="Close chat"
-            hitSlop={8}
+            hitSlop={ICON_HIT_SLOP}
           >
             <MaterialIcons name="close" size={24} color={lightColors.text} />
           </Pressable>
@@ -282,7 +283,7 @@ export function SessionChat({
                 accessibilityRole="button"
                 accessibilityLabel="Send message"
                 accessibilityState={{ disabled: !draft.trim() || chat.sending }}
-                hitSlop={6}
+                hitSlop={SMALL_ICON_HIT_SLOP}
                 style={!draft.trim() ? styles.sendDisabled : undefined}
               >
                 {chat.sending ? (

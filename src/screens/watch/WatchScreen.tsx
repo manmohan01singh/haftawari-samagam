@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   FlatList,
   Pressable,
-  Share,
   StyleSheet,
   Text,
   View,
@@ -12,6 +11,9 @@ import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { EmptyState } from '../../components/common/EmptyState';
+import { LinkedText } from '../../components/common/LinkedText';
+import { Toast, useToast } from '../../components/common/Toast';
+import { shareContent, shareFeedback } from '../../lib/share';
 import { FeedCard } from '../../components/video/FeedCard';
 import { YouTubePlayer } from '../../components/video/YouTubePlayer';
 import {
@@ -43,6 +45,7 @@ import {
 import { layout, lightColors, nativeApp, radii, spacing, typography } from '../../theme';
 import { goBackOrTab } from '../../navigation/safeBack';
 import { recordLocalWatch } from '../../features/library/localHistory';
+import { ICON_HIT_SLOP } from '../../lib/touch';
 import type { Video } from '../../types/database';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -106,6 +109,7 @@ export function WatchScreen({ route, navigation }: Props) {
   // or stored from these toggles.
   const [reaction, setReaction] = useState<'like' | 'dislike' | null>(null);
   const [playlistSheetOpen, setPlaylistSheetOpen] = useState(false);
+  const { toast, showToast } = useToast();
   const saved =
     resolved?.row && savedState?.rowId === resolved.row.id ? savedState.saved : false;
   const historyRecordedFor = useRef<string | null>(null);
@@ -284,10 +288,14 @@ export function WatchScreen({ route, navigation }: Props) {
 
   const onShare = useCallback(() => {
     if (!resolved) return;
-    void Share.share({
-      message: `${resolved.title} — https://www.youtube.com/watch?v=${resolved.youtubeVideoId}`,
+    void shareContent(
+      resolved.title,
+      `https://www.youtube.com/watch?v=${resolved.youtubeVideoId}`,
+    ).then((outcome) => {
+      const feedback = shareFeedback(outcome);
+      if (feedback) showToast(feedback);
     });
-  }, [resolved]);
+  }, [resolved, showToast]);
 
   const onToggleSave = useCallback(() => {
     if (!user || !resolved?.row) return;
@@ -301,6 +309,14 @@ export function WatchScreen({ route, navigation }: Props) {
 
   const renderUpNext = useCallback(
     ({ item }: { item: UpNextItem }) => {
+      const shareItem = (title: string, youtubeVideoId: string) => {
+        void shareContent(title, `https://www.youtube.com/watch?v=${youtubeVideoId}`).then(
+          (outcome) => {
+            const feedback = shareFeedback(outcome);
+            if (feedback) showToast(feedback);
+          },
+        );
+      };
       if (item.kind === 'api') {
         const data: CardVideoData = apiCardData(item.meta, officialChannel?.avatarUrl ?? null);
         return (
@@ -308,11 +324,18 @@ export function WatchScreen({ route, navigation }: Props) {
             variant="upNext"
             data={data}
             onPress={() => navigation.push('Watch', { youtubeVideoId: item.meta.youtubeVideoId })}
-            onShare={() => {
-              void Share.share({
-                message: `${item.meta.title} — https://www.youtube.com/watch?v=${item.meta.youtubeVideoId}`,
-              });
-            }}
+            onShare={() => shareItem(item.meta.title, item.meta.youtubeVideoId)}
+            onChannelPress={() =>
+              navigation.navigate('Channel', { channelId: officialChannel?.channelId })
+            }
+            menuActions={[
+              {
+                key: 'share',
+                label: 'Share',
+                icon: 'share',
+                onPress: () => shareItem(item.meta.title, item.meta.youtubeVideoId),
+              },
+            ]}
           />
         );
       }
@@ -322,15 +345,22 @@ export function WatchScreen({ route, navigation }: Props) {
           variant="upNext"
           data={data}
           onPress={() => navigation.push('Watch', { videoRowId: item.video.id })}
-          onShare={() => {
-            void Share.share({
-              message: `${item.video.title} — https://www.youtube.com/watch?v=${item.video.youtube_video_id}`,
-            });
-          }}
+          onShare={() => shareItem(item.video.title, item.video.youtube_video_id)}
+          onChannelPress={() =>
+            navigation.navigate('Channel', { channelId: officialChannel?.channelId })
+          }
+          menuActions={[
+            {
+              key: 'share',
+              label: 'Share',
+              icon: 'share',
+              onPress: () => shareItem(item.video.title, item.video.youtube_video_id),
+            },
+          ]}
         />
       );
     },
-    [navigation, officialChannel],
+    [navigation, officialChannel, showToast],
   );
 
   const keyExtractor = useCallback(
@@ -388,6 +418,10 @@ export function WatchScreen({ route, navigation }: Props) {
     </View>
   ) : null;
 
+  // QA26: Watch had NO back affordance at all — the browser Back button
+  // exits the SPA, stranding phone users. The back target floats over
+  // the pinned player's top-left (see the player element above); the
+  // error state offers its own "Go back" action.
   const header = useMemo(() => {
     if (!resolved) return null;
     const channelName = channel?.title ?? resolved.channelTitle;
@@ -402,7 +436,12 @@ export function WatchScreen({ route, navigation }: Props) {
           <Text style={styles.title} numberOfLines={expanded ? undefined : 1}>
             {resolved.title}
           </Text>
-          <Pressable onPress={() => setExpanded((v) => !v)}>
+          <Pressable
+            onPress={() => setExpanded((v) => !v)}
+            hitSlop={{ top: 10, bottom: 10, left: 0, right: 0 }}
+            accessibilityRole="button"
+            accessibilityLabel={expanded ? 'Show less' : 'Show more'}
+          >
             <Text style={styles.metaLine} numberOfLines={1}>
               {metaText}
               {metaText ? '  ' : ''}
@@ -463,8 +502,9 @@ export function WatchScreen({ route, navigation }: Props) {
             <View style={styles.actions}>
               <Pressable
                 onPress={() => setReaction((r) => (r === 'like' ? null : 'like'))}
-                hitSlop={6}
+                hitSlop={ICON_HIT_SLOP}
                 accessibilityLabel="Like"
+                accessibilityRole="button"
                 accessibilityState={{ selected: reaction === 'like' }}
               >
                 <MaterialIcons
@@ -475,8 +515,9 @@ export function WatchScreen({ route, navigation }: Props) {
               </Pressable>
               <Pressable
                 onPress={() => setReaction((r) => (r === 'dislike' ? null : 'dislike'))}
-                hitSlop={6}
+                hitSlop={ICON_HIT_SLOP}
                 accessibilityLabel="Dislike"
+                accessibilityRole="button"
                 accessibilityState={{ selected: reaction === 'dislike' }}
               >
                 <MaterialIcons
@@ -485,24 +526,28 @@ export function WatchScreen({ route, navigation }: Props) {
                   color={lightColors.text}
                 />
               </Pressable>
-              <Pressable onPress={onShare} hitSlop={6} accessibilityLabel="Share">
+              <Pressable onPress={onShare} hitSlop={ICON_HIT_SLOP} accessibilityLabel="Share" accessibilityRole="button">
                 <MaterialIcons name="share" size={23} color={lightColors.text} />
               </Pressable>
-              {resolved.row && user ? (
+              {resolved.row ? (
                 <Pressable
-                  onPress={onToggleSave}
-                  hitSlop={6}
+                  onPress={user ? onToggleSave : () => navigation.navigate('SignIn')}
+                  hitSlop={ICON_HIT_SLOP}
                   accessibilityLabel={saved ? 'Remove from saved' : 'Save'}
+                  accessibilityRole="button"
                   accessibilityState={{ selected: saved }}
                 >
                   <MaterialIcons name={saved ? 'bookmark' : 'bookmark-border'} size={24} color={lightColors.text} />
                 </Pressable>
               ) : null}
-              {resolved.row && user ? (
+              {resolved.row ? (
                 <Pressable
-                  onPress={() => setPlaylistSheetOpen(true)}
-                  hitSlop={6}
-                  accessibilityLabel="More actions"
+                  onPress={
+                    user ? () => setPlaylistSheetOpen(true) : () => navigation.navigate('SignIn')
+                  }
+                  hitSlop={ICON_HIT_SLOP}
+                  accessibilityLabel="Save to playlist"
+                  accessibilityRole="button"
                 >
                   <MaterialIcons name="more-horiz" size={24} color={lightColors.text} />
                 </Pressable>
@@ -514,11 +559,12 @@ export function WatchScreen({ route, navigation }: Props) {
               the collapsed state (2 lines, tap to expand); in the
               expanded state the box carries its own visible
               "Show less" collapse affordance — previously "less" was
-              hidden inside the meta line only. */}
+              hidden inside the meta line only. Links inside the
+              expanded description are tappable (LinkedText, QA 40). */}
           {resolved.description ? (
             expanded ? (
               <View style={styles.descriptionBox}>
-                <Text style={styles.descriptionText}>{resolved.description}</Text>
+                <LinkedText text={resolved.description} style={styles.descriptionText} />
                 <Pressable
                   onPress={() => setExpanded(false)}
                   hitSlop={8}
@@ -610,6 +656,7 @@ export function WatchScreen({ route, navigation }: Props) {
         videoId={resolved.row?.id ?? null}
         onClose={() => setPlaylistSheetOpen(false)}
       />
+      <Toast message={toast} />
     </View>
   );
 }

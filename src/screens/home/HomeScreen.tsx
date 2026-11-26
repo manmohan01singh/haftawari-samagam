@@ -1,13 +1,16 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import { useScrollToTop } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppHeader } from '../../components/layout/AppHeader';
-import { SecondaryTabs } from '../../components/layout/SecondaryTabs';
 import { ChipsRow } from '../../components/layout/ChipsRow';
+import { Toast, useToast } from '../../components/common/Toast';
+import { AddToPlaylistSheet } from '../../features/library';
+import { shareContent, shareFeedback } from '../../lib/share';
+import { SecondaryTabs } from '../../components/layout/SecondaryTabs';
 import { EmptyState } from '../../components/common/EmptyState';
 import { FeedCard } from '../../components/video/FeedCard';
 import { SkeletonCard } from '../../components/video/SkeletonCard';
@@ -48,6 +51,8 @@ interface HomeFeedItemProps {
   onPressVideo: (video: Video) => void;
   onToggleSaveVideo: (video: Video) => void;
   onShareVideo: (video: Video) => void;
+  onChannelPress: () => void;
+  onOpenPlaylistVideo: (video: Video) => void;
 }
 
 /**
@@ -68,7 +73,39 @@ const HomeFeedItem = memo(function HomeFeedItem({
   onPressVideo,
   onToggleSaveVideo,
   onShareVideo,
+  onChannelPress,
+  onOpenPlaylistVideo,
 }: HomeFeedItemProps) {
+  // Kebab menu actions (QA 31/32): only real actions — share (system
+  // sheet via the share util), save toggle and save-to-playlist for
+  // signed-in users (real saved_videos / playlist backends).
+  const menuActions = useMemo(
+    () => [
+      {
+        key: 'share',
+        label: 'Share',
+        icon: 'share',
+        onPress: () => onShareVideo(video),
+      },
+      ...(canSave
+        ? [
+            {
+              key: 'save-toggle',
+              label: saved ? 'Remove from Saved' : 'Save to Saved',
+              icon: saved ? 'bookmark' : 'bookmark-border',
+              onPress: () => onToggleSaveVideo(video),
+            },
+            {
+              key: 'playlist',
+              label: 'Save to playlist',
+              icon: 'playlist-add',
+              onPress: () => onOpenPlaylistVideo(video),
+            },
+          ]
+        : []),
+    ],
+    [canSave, saved, video, onShareVideo, onToggleSaveVideo, onOpenPlaylistVideo],
+  );
   return (
     <FeedCard
       data={data}
@@ -76,6 +113,8 @@ const HomeFeedItem = memo(function HomeFeedItem({
       onPress={() => onPressVideo(video)}
       onToggleSave={canSave ? () => onToggleSaveVideo(video) : undefined}
       onShare={() => onShareVideo(video)}
+      onChannelPress={onChannelPress}
+      menuActions={menuActions}
     />
   );
 });
@@ -103,6 +142,8 @@ export function HomeScreen({ navigation }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exhausted, setExhausted] = useState(false);
+  const [playlistVideoId, setPlaylistVideoId] = useState<string | null>(null);
+  const { toast, showToast } = useToast();
   const loadingRef = useRef(false);
   // Real live state from the YouTube API (QA 49/68): a map of
   // youtube_video_id → live/upcoming metadata for the official
@@ -237,10 +278,28 @@ export function HomeScreen({ navigation }: Props) {
     [navigation],
   );
 
-  const handleShareVideo = useCallback((video: Video) => {
-    void Share.share({
-      message: `${video.title} — https://www.youtube.com/watch?v=${video.youtube_video_id}`,
-    });
+  // Share goes through the shared share util (QA 30): Web Share API
+  // with a clipboard fallback, and the outcome is surfaced as a toast
+  // so the tap never feels dead.
+  const handleShareVideo = useCallback(
+    (video: Video) => {
+      void shareContent(
+        video.title,
+        `https://www.youtube.com/watch?v=${video.youtube_video_id}`,
+      ).then((outcome) => {
+        const feedback = shareFeedback(outcome);
+        if (feedback) showToast(feedback);
+      });
+    },
+    [showToast],
+  );
+
+  const handleChannelPress = useCallback(() => {
+    navigation.navigate('Channel', { channelId: channel?.channelId ?? OFFICIAL_CHANNEL_ID });
+  }, [navigation, channel]);
+
+  const handleOpenPlaylistVideo = useCallback((video: Video) => {
+    setPlaylistVideoId(video.id);
   }, []);
 
   const handleToggleSaveVideo = useCallback(
@@ -279,6 +338,8 @@ export function HomeScreen({ navigation }: Props) {
         onPressVideo={handlePressVideo}
         onToggleSaveVideo={handleToggleSaveVideo}
         onShareVideo={handleShareVideo}
+        onChannelPress={handleChannelPress}
+        onOpenPlaylistVideo={handleOpenPlaylistVideo}
       />
     ),
     [
@@ -290,6 +351,8 @@ export function HomeScreen({ navigation }: Props) {
       handlePressVideo,
       handleToggleSaveVideo,
       handleShareVideo,
+      handleChannelPress,
+      handleOpenPlaylistVideo,
     ],
   );
 
@@ -408,6 +471,13 @@ export function HomeScreen({ navigation }: Props) {
         />
       )}
       {error && videos.length > 0 ? <Text style={styles.inlineError}>{error}</Text> : null}
+      <AddToPlaylistSheet
+        visible={playlistVideoId != null}
+        userId={user?.id ?? null}
+        videoId={playlistVideoId}
+        onClose={() => setPlaylistVideoId(null)}
+      />
+      <Toast message={toast} />
     </View>
   );
 }

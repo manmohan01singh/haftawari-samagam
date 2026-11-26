@@ -19,6 +19,7 @@ import type { Video } from '../../types/database';
 import { goBackOrTab } from '../../navigation/safeBack';
 import type { RootStackParamList } from '../../navigation/types';
 import { ROW_LIST_PERF } from '../../lib/listPerf';
+import { SMALL_ICON_HIT_SLOP } from '../../lib/touch';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Search'>;
 
@@ -48,6 +49,15 @@ export function SearchScreen({ navigation }: Props) {
     rows: [],
   });
   const [confirmClear, setConfirmClear] = useState(false); // ConfirmModal visibility
+  // QA45: a single history remove can be undone — the removed entry is
+  // held for 5s while the undo bar is visible.
+  const [lastRemoved, setLastRemoved] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!lastRemoved) return;
+    const t = setTimeout(() => setLastRemoved(null), 5000);
+    return () => clearTimeout(t);
+  }, [lastRemoved]);
   const suggestSeq = useRef(0);
   const inputRef = useRef<React.ElementRef<typeof TextInput>>(null);
 
@@ -103,6 +113,7 @@ export function SearchScreen({ navigation }: Props) {
 
   const onRemoveHistory = useCallback(
     (entry: string) => {
+      setLastRemoved(entry);
       void removeSearchHistory(entry, userId).then(() => listSearchHistoryEntries(userId)).then(setHistoryEntries).catch(() => undefined);
     },
     [userId],
@@ -111,6 +122,13 @@ export function SearchScreen({ navigation }: Props) {
   // Clear-all is destructive: it goes through the shared ConfirmModal
   // (same component as Library's clear-all, QA 97 / issue 45) so the
   // confirmation pattern is identical everywhere in the app.
+  const onUndoRemove = useCallback(() => {
+    if (!lastRemoved) return;
+    const entry = lastRemoved;
+    setLastRemoved(null);
+    void addSearchHistory(entry, userId).then(() => listSearchHistoryEntries(userId)).then(setHistoryEntries).catch(() => undefined);
+  }, [lastRemoved, userId]);
+
   const onClearHistory = useCallback(() => {
     setConfirmClear(false);
     void clearSearchHistory(userId)
@@ -151,11 +169,20 @@ export function SearchScreen({ navigation }: Props) {
             enterKeyHint="search"
           />
           {query ? (
-            <Pressable onPress={onClearQuery} hitSlop={8} accessibilityLabel="Clear search">
+            <Pressable onPress={onClearQuery} hitSlop={SMALL_ICON_HIT_SLOP} accessibilityLabel="Clear search" accessibilityRole="button">
               <MaterialIcons name="close" size={20} color={lightColors.text} />
             </Pressable>
           ) : null}
         </View>
+        {/* QA41: a visible submit affordance — search must not be Enter-only. */}
+        <Pressable
+          style={styles.submitButton}
+          onPress={() => submit()}
+          accessibilityLabel="Search"
+          accessibilityRole="button"
+        >
+          <MaterialIcons name="search" size={22} color={lightColors.subscribeText} />
+        </Pressable>
       </View>
 
       {showHistory || (!typing && catalogue.length > 0) ? (
@@ -183,7 +210,7 @@ export function SearchScreen({ navigation }: Props) {
               </Pressable>
               <Pressable
                 onPress={() => onRemoveHistory(item.text)}
-                hitSlop={12}
+                hitSlop={SMALL_ICON_HIT_SLOP}
                 style={styles.removeBtn}
                 accessibilityLabel={`Remove "${item.text}" from search history`}
               >
@@ -274,6 +301,18 @@ export function SearchScreen({ navigation }: Props) {
           shabad title, a word from it, or the channel name.
         </Text>
       )}
+
+      {lastRemoved ? (
+        <View style={styles.undoBar}>
+          <Text style={styles.undoText} numberOfLines={1}>
+            Removed “{lastRemoved}”
+          </Text>
+          <Pressable onPress={onUndoRemove} hitSlop={8} accessibilityRole="button">
+            <Text style={styles.undoAction}>Undo</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
       <ConfirmModal
         visible={confirmClear}
         title="Clear search history?"
@@ -355,4 +394,27 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xs,
     textTransform: 'uppercase',
   },
+  submitButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: lightColors.subscribeBackground,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  undoBar: {
+    position: 'absolute',
+    left: spacing.lg,
+    right: spacing.lg,
+    bottom: spacing.xl,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: lightColors.text,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  undoText: { flex: 1, color: lightColors.subscribeText, fontSize: 14 },
+  undoAction: { color: '#8AB4F8', fontSize: 14, fontWeight: '700' },
 });

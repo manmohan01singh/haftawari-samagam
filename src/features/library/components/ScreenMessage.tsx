@@ -58,6 +58,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     paddingHorizontal: spacing.xl,
     paddingVertical: 11,
+    minHeight: 44,
+    justifyContent: 'center',
     marginTop: spacing.lg,
   },
   buttonText: { fontSize: 15, fontWeight: '600', color: lightColors.subscribeText },

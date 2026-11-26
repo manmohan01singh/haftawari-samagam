@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover" />
     <title>%WEB_TITLE%</title>
     <meta name="theme-color" content="#FFFFFF" />
     <meta name="description" content="Haftawari and Amritvela kirtan samagams, scheduled and shared." />
@@ -40,6 +40,25 @@
         display: flex;
         height: 100%;
         flex: 1;
+      }
+      /* Tap reliability (PWA): `manipulation` removes the double-tap-zoom
+         gesture (and its tap delay / swallowed first taps) on mobile
+         browsers for every element that is not a scroll surface, and the
+         transparent highlight removes the grey flash that made taps feel
+         unregistered. Scroll containers keep their native panning:
+         react-native-web sets its own touch-action on them. */
+      html,
+      body {
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+      }
+      [role='button'],
+      a,
+      button,
+      input,
+      textarea {
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
       }
     </style>
     <style id="app-splash">

@@ -298,7 +298,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   errorText: { ...typography.body, color: '#8B0000' },
-  retryButton: { alignSelf: 'flex-start' },
+  retryButton: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.sm },
   retryText: { ...typography.chip, color: '#8B0000', textDecorationLine: 'underline' },
   sectionTitle: { ...typography.sectionTitle, color: lightColors.text },
   statCard: {
@@ -315,6 +315,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
+    minHeight: 44,
+    justifyContent: 'center',
     backgroundColor: lightColors.surfaceVariant,
     alignItems: 'center',
   },

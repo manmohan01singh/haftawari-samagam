@@ -4,7 +4,9 @@ import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { layout, lightColors, nativeApp, spacing } from '../../theme';
 import { formatDuration } from './VideoCard';
+import { ICON_HIT_SLOP } from '../../lib/touch';
 import type { CardVideoData } from './cardData';
+import { CardActionSheet, type CardMenuAction } from '../common/CardActionSheet';
 
 interface FeedCardProps {
   data: CardVideoData;
@@ -26,6 +28,12 @@ interface FeedCardProps {
    * at left, title + channel/meta at right, ⋮ at the far right.
    */
   variant?: 'feed' | 'upNext';
+  /** Tapping the channel avatar (QA 32) — real channel destination only. */
+  onChannelPress?: () => void;
+  /** Real actions for the ⋮ kebab menu (QA 31/32). When provided, the
+   * engagement-row kebab opens a CardActionSheet with these actions
+   * instead of falling back to opening the recording. */
+  menuActions?: CardMenuAction[];
 }
 
 /**
@@ -46,9 +54,13 @@ export const FeedCard = memo(function FeedCard({
   onToggleSave,
   onShare,
   variant = 'feed',
+  onChannelPress,
+  menuActions,
 }: FeedCardProps) {
   const isLive = data.broadcastState === 'live';
   const isUpNext = variant === 'upNext';
+  const [menuOpen, setMenuOpen] = React.useState(false);
+  const hasMenu = !!menuActions && menuActions.length > 0;
 
   const thumbnail = (
     <View style={styles.thumbnailWrap}>
@@ -60,23 +72,23 @@ export const FeedCard = memo(function FeedCard({
           contentFit="cover"
           cachePolicy="memory-disk"
           transition={200}
+          pointerEvents="none"
         />
       ) : (
         <View style={[styles.thumbnail, styles.thumbnailEmpty]} />
       )}
       {isLive ? (
-        <View style={styles.liveBadge}>
+        <View style={styles.liveBadge} pointerEvents="none">
           <MaterialIcons name="sensors" size={14} color="#FFFFFF" />
           <Text style={styles.liveText}>LIVE</Text>
         </View>
       ) : data.durationSeconds != null ? (
-        <View style={styles.durationBadge}>
+        <View style={styles.durationBadge} pointerEvents="none">
           <Text style={styles.durationText}>{formatDuration(data.durationSeconds)}</Text>
         </View>
       ) : null}
     </View>
   );
-
   const avatar = data.channelAvatarUrl ? (
     <Image
       source={{ uri: data.channelAvatarUrl }}
@@ -89,7 +101,6 @@ export const FeedCard = memo(function FeedCard({
       <Text style={styles.avatarInitial}>{data.channelLine.replace('@', '').charAt(0).toUpperCase()}</Text>
     </View>
   );
-
   if (isUpNext) {
     // QA issue 57: Up Next is a COMPACT HORIZONTAL row — small 16:9
     // thumbnail at left (~40% width, radius 8, duration/LIVE chip on
@@ -97,6 +108,7 @@ export const FeedCard = memo(function FeedCard({
     // (QA issue 61: titles use explicit tail ellipsis.)
     const metaParts = [data.channelLine, data.metaLine].filter(Boolean);
     return (
+      <>
       <Pressable onPress={onPress} style={styles.upNextCard} accessibilityRole="button">
         <View style={styles.upNextThumbWrap}>
           {data.thumbnailUrl ? (
@@ -131,18 +143,24 @@ export const FeedCard = memo(function FeedCard({
           ) : null}
         </View>
         <Pressable
-          onPress={onShare ?? onPress}
+          onPress={hasMenu ? () => setMenuOpen(true) : (onShare ?? onPress)}
           hitSlop={8}
           accessibilityLabel="More actions"
+          accessibilityRole="button"
           style={styles.moreButton}
         >
           <MaterialIcons name="more-vert" size={20} color={lightColors.text} />
         </Pressable>
       </Pressable>
+      {hasMenu ? (
+        <CardActionSheet visible={menuOpen} onClose={() => setMenuOpen(false)} actions={menuActions} />
+      ) : null}
+      </>
     );
   }
 
   return (
+    <>
     <Pressable onPress={onPress} style={styles.card} accessibilityRole="button">
       {thumbnail}
       <View style={styles.body}>
@@ -150,7 +168,18 @@ export const FeedCard = memo(function FeedCard({
           {data.title}
         </Text>
         <View style={styles.row}>
-          {avatar}
+          {onChannelPress ? (
+            <Pressable
+              onPress={onChannelPress}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel={`Open channel ${data.channelLine}`}
+            >
+              {avatar}
+            </Pressable>
+          ) : (
+            avatar
+          )}
           <View style={styles.lines}>
             <Text style={styles.handle} numberOfLines={1} ellipsizeMode="tail">
               {data.channelLine}
@@ -167,22 +196,48 @@ export const FeedCard = memo(function FeedCard({
           <View style={styles.engagement}>
             <Pressable
               onPress={onToggleSave ?? onPress}
-              hitSlop={6}
+              hitSlop={ICON_HIT_SLOP}
               accessibilityLabel={saved ? 'Remove from saved' : 'Save'}
               accessibilityState={{ selected: !!saved }}
+              accessibilityRole="button"
             >
               <MaterialIcons name={saved ? 'bookmark' : 'bookmark-border'} size={24} color={lightColors.text} />
             </Pressable>
-            <Pressable onPress={onShare ?? onPress} hitSlop={6} accessibilityLabel="Share">
+            <Pressable
+              onPress={onShare ?? onPress}
+              hitSlop={ICON_HIT_SLOP}
+              accessibilityLabel="Share"
+              accessibilityRole="button"
+            >
               <MaterialIcons name="share" size={22} color={lightColors.text} />
             </Pressable>
-            <Pressable onPress={onPress} hitSlop={6} accessibilityLabel="More actions">
-              <MaterialIcons name="more-horiz" size={24} color={lightColors.text} />
-            </Pressable>
+            {hasMenu ? (
+              <Pressable
+                onPress={() => setMenuOpen(true)}
+                hitSlop={ICON_HIT_SLOP}
+                accessibilityLabel="More actions"
+                accessibilityRole="button"
+              >
+                <MaterialIcons name="more-vert" size={24} color={lightColors.text} />
+              </Pressable>
+            ) : (
+              <Pressable
+                onPress={onPress}
+                hitSlop={ICON_HIT_SLOP}
+                accessibilityLabel="More actions"
+                accessibilityRole="button"
+              >
+                <MaterialIcons name="more-horiz" size={24} color={lightColors.text} />
+              </Pressable>
+            )}
           </View>
         </View>
       </View>
     </Pressable>
+    {hasMenu ? (
+      <CardActionSheet visible={menuOpen} onClose={() => setMenuOpen(false)} actions={menuActions} />
+    ) : null}
+    </>
   );
 });
 

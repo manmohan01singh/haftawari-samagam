@@ -34,7 +34,7 @@ export const PlaylistRow = memo(function PlaylistRow({ summary, onPress }: Playl
       accessibilityLabel={playlist.title}
     >
       <View style={styles.thumbWrap}>
-        <View style={styles.stackEdge} />
+        <View style={styles.stackEdge} pointerEvents="none" />
         {coverThumbnailUrl ? (
           <Image
             source={{ uri: downgradeYouTubeThumbnailUrl(coverThumbnailUrl) }}
@@ -48,7 +48,7 @@ export const PlaylistRow = memo(function PlaylistRow({ summary, onPress }: Playl
             <MaterialIcons name="playlist-play" size={30} color={lightColors.textSecondary} />
           </View>
         )}
-        <View style={styles.countBadge}>
+        <View style={styles.countBadge} pointerEvents="none">
           <MaterialIcons name="playlist-play" size={14} color="#FFFFFF" />
           <Text style={styles.countText}>{itemCount}</Text>
         </View>

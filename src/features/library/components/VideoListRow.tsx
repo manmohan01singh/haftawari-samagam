@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { layout, lightColors, radii, spacing, typography } from '../../../theme';
 import type { Video } from '../../../types/database';
+import { SMALL_ICON_HIT_SLOP } from '../../../lib/touch';
 import { formatClock, resumeRatio } from '../format';
 import { listThumbnailUrl } from '../../../components/video/cardData';
 
@@ -63,12 +64,12 @@ export const VideoListRow = memo(function VideoListRow({
           <View style={[styles.thumb, styles.thumbEmpty]} />
         )}
         {video.duration_seconds != null ? (
-          <View style={styles.durationBadge}>
+          <View style={styles.durationBadge} pointerEvents="none">
             <Text style={styles.durationText}>{formatClock(video.duration_seconds)}</Text>
           </View>
         ) : null}
         {ratio != null ? (
-          <View style={styles.progressTrack}>
+          <View style={styles.progressTrack} pointerEvents="none">
             <View style={[styles.progressFill, { width: `${Math.round(ratio * 100)}%` }]} />
           </View>
         ) : null}
@@ -87,7 +88,7 @@ export const VideoListRow = memo(function VideoListRow({
         <Pressable
           style={styles.actionButton}
           onPress={onAction}
-          hitSlop={8}
+          hitSlop={SMALL_ICON_HIT_SLOP}
           accessibilityRole="button"
           accessibilityLabel={actionLabel ?? 'Remove'}
         >

@@ -1,4 +1,4 @@
-import { OFFICIAL_CHANNEL_HANDLE, type YouTubeVideoMetadata } from '../../lib/youtube';
+import { OFFICIAL_CHANNEL_HANDLE, OFFICIAL_CHANNEL_ID, type YouTubeVideoMetadata } from '../../lib/youtube';
 import { formatCount, timeAgo } from '../../lib/format';
 import type { Video } from '../../types/database';
 
@@ -21,6 +21,10 @@ export interface CardVideoData {
   /** Real metadata line ("▷ 12K · 21 hr ago", "591 watching", a date…). */
   metaLine: string;
   channelAvatarUrl: string | null;
+  /** Real YouTube video id (share / watch URLs are built from it). */
+  youtubeVideoId: string;
+  /** Real channel id that published the video (avatar tap target). */
+  channelId: string;
 }
 
 /**
@@ -90,6 +94,8 @@ export function supabaseCardData(
           return date ? `▷ ${date}` : '';
         })(),
     channelAvatarUrl,
+    youtubeVideoId: video.youtube_video_id,
+    channelId: OFFICIAL_CHANNEL_ID,
   };
 }
 
@@ -116,5 +122,7 @@ export function apiCardData(meta: YouTubeVideoMetadata, channelAvatarUrl: string
     channelLine: meta.channelTitle,
     metaLine,
     channelAvatarUrl,
+    youtubeVideoId: meta.youtubeVideoId,
+    channelId: meta.channelId,
   };
 }

@@ -33,6 +33,7 @@ export const SecondaryTabs = memo(function SecondaryTabs({ items, selectedKey, o
           <Pressable
             key={item.key}
             onPress={() => onSelect(item.key)}
+            hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }}
             style={[styles.item, selected && styles.itemSelected]}
             accessibilityRole="button"
             accessibilityState={{ selected }}
