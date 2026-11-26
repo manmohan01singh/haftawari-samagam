@@ -31,6 +31,14 @@ export type RootStackParamList = {
   /** Defaults to the official channel when no id is passed. */
   Channel: { channelId?: string };
   Playlist: { playlistId: string };
+  /** Saved videos screen (library stream). */
+  Saved: undefined;
+  /** All playlists list screen (library stream). */
+  Playlists: undefined;
+  /** Samagam sessions list (sessions stream). */
+  Sessions: undefined;
+  /** Synchronized Samagam watch screen (sessions stream). */
+  SessionWatch: { sessionId: string };
   History: undefined;
   Settings: undefined;
   Account: undefined;

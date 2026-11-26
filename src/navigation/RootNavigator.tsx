@@ -8,6 +8,9 @@ import { SearchScreen, SearchResultsScreen } from '../screens/search';
 import { SignInScreen, SignUpScreen } from '../screens/auth';
 import { ChannelScreen } from '../screens/channel';
 import { PlaylistScreen } from '../screens/playlist';
+import { SavedScreen } from '../screens/saved';
+import { PlaylistsScreen } from '../screens/playlists';
+import { SessionWatchScreen, SessionsListScreen } from '../screens/sessions';
 import { HistoryScreen } from '../screens/history';
 import { SettingsScreen } from '../screens/settings';
 import { AccountScreen } from '../screens/account';
@@ -25,6 +28,10 @@ export function RootNavigator() {
       <Stack.Screen name="SearchResults" component={SearchResultsScreen} />
       <Stack.Screen name="Channel" component={ChannelScreen} />
       <Stack.Screen name="Playlist" component={PlaylistScreen} />
+      <Stack.Screen name="Saved" component={SavedScreen} />
+      <Stack.Screen name="Playlists" component={PlaylistsScreen} />
+      <Stack.Screen name="Sessions" component={SessionsListScreen} />
+      <Stack.Screen name="SessionWatch" component={SessionWatchScreen} />
       <Stack.Screen name="History" component={HistoryScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen name="Account" component={AccountScreen} />

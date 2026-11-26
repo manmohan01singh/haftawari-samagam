@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Share, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -201,6 +202,23 @@ export function HomeScreen({ navigation }: Props) {
         />
       ) : null}
 
+      {/* Samagam Sessions entry point — scheduled group playbacks
+          (UPCOMING / NOW PLAYING / COMPLETED), listed on their own
+          screen. Styled as a plain reference row, not a banner. */}
+      <Pressable
+        style={({ pressed }) => [styles.sessionsRow, pressed && styles.sessionsRowPressed]}
+        onPress={() => navigation.navigate('Sessions')}
+        accessibilityRole="button"
+        accessibilityLabel="Samagam Sessions"
+      >
+        <MaterialIcons name="groups" size={24} color={lightColors.text} />
+        <View style={styles.sessionsLines}>
+          <Text style={styles.sessionsTitle}>Samagam Sessions</Text>
+          <Text style={styles.sessionsSub}>Watch together at the scheduled time</Text>
+        </View>
+        <MaterialIcons name="chevron-right" size={24} color={lightColors.textSecondary} />
+      </Pressable>
+
       {!isSupabaseConfigured ? (
         <EmptyState
           title="Backend not configured"
@@ -248,6 +266,19 @@ export function HomeScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: lightColors.background },
+  sessionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: lightColors.border,
+  },
+  sessionsRowPressed: { backgroundColor: lightColors.surfaceVariant },
+  sessionsLines: { flex: 1 },
+  sessionsTitle: { ...typography.channelName, fontWeight: '600', color: lightColors.text },
+  sessionsSub: { ...typography.metadata, color: lightColors.textSecondary, marginTop: 1 },
   footerSpinner: { paddingVertical: spacing.lg },
   inlineError: {
     ...typography.metadata,

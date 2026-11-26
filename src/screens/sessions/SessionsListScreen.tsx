@@ -19,21 +19,24 @@ import {
 } from '../../features/sessions/sessionService';
 import { deriveStatus } from '../../features/sessions/stateMachine';
 import { isSupabaseConfigured } from '../../lib/supabase';
+import type { RootStackParamList } from '../../navigation/types';
 import { lightColors, spacing, typography } from '../../theme';
 import type { SessionStatus } from '../../types/database';
 
 /**
- * Route contract for the sessions stream. The parent registers these in
- * the root navigator (see the Phase 2 report):
+ * Route contract for the sessions stream. These routes are registered
+ * in the root navigator and folded into RootStackParamList
+ * (src/navigation/types.ts); this alias is kept for the stream's
+ * consumers.
  *   Sessions: undefined
  *   SessionWatch: { sessionId: string }
  */
-export type SessionsRouteParamList = {
-  Sessions: undefined;
-  SessionWatch: { sessionId: string };
-};
+export type SessionsRouteParamList = Pick<
+  RootStackParamList,
+  'Sessions' | 'SessionWatch'
+>;
 
-type Props = NativeStackScreenProps<SessionsRouteParamList, 'Sessions'>;
+type Props = NativeStackScreenProps<RootStackParamList, 'Sessions'>;
 
 type VisibleStatus = Exclude<SessionStatus, 'cancelled'>;
 
