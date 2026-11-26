@@ -1,4 +1,4 @@
-import React, { useState, type ReactNode } from 'react';
+import React, { useEffect, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -11,6 +11,37 @@ import {
 } from 'react-native';
 import { lightColors, radii, spacing, typography } from '../../../theme';
 import type { PublishState, SessionStatus, UserRole } from '../../../types/database';
+
+/**
+ * Turn a raw backend error into a short human message. Supabase /
+ * PostgREST errors carry codes and constraint names that mean nothing
+ * to an admin at the point of failure (and can read like JSON); map the
+ * recognisable cases and fall back to a plain retry message. The raw
+ * error is never shown verbatim.
+ */
+export function friendlyError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err ?? '');
+  const lower = raw.toLowerCase();
+  if (lower.includes('42501') || lower.includes('permission') || lower.includes('row-level security')) {
+    return 'You do not have permission to do this. Make sure you are signed in as an admin.';
+  }
+  if (lower.includes('duplicate key') || lower.includes('23505') || lower.includes('already exists')) {
+    return 'That already exists — try a different name or value.';
+  }
+  if (lower.includes('fetch') || lower.includes('network') || lower.includes('timeout')) {
+    return 'Could not reach the server. Check your connection and try again.';
+  }
+  if (lower.includes('jwt') || lower.includes('not authenticated') || lower.includes('session')) {
+    return 'Your sign-in session has expired. Sign in again and retry.';
+  }
+  if (lower.includes('invalid input syntax')) {
+    return 'One of the values is not in the expected format. Check the fields and try again.';
+  }
+  if (raw.length > 0 && raw.length <= 140 && !raw.includes('{') && !raw.includes('code:')) {
+    return raw;
+  }
+  return 'Something went wrong. Please try again.';
+}
 
 /** Shared building blocks for the admin dashboard screens. */
 
@@ -114,6 +145,14 @@ export function ConfirmButton({
   disabled?: boolean;
 }) {
   const [armed, setArmed] = useState(false);
+  // An armed button disarms itself after a few seconds: without this a
+  // first tap in the morning left the button primed, so a later single
+  // tap deleted/cancelled with no real confirmation.
+  useEffect(() => {
+    if (!armed) return;
+    const t = setTimeout(() => setArmed(false), 4000);
+    return () => clearTimeout(t);
+  }, [armed]);
   return (
     <AdminButton
       title={armed ? confirmTitle : title}
@@ -241,7 +280,7 @@ export const adminStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: lightColors.background },
+  screen: { flex: 1, backgroundColor: lightColors.background, width: '100%', maxWidth: 960, alignSelf: 'center' },
   screenContent: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxl },
   centered: {
     flex: 1,

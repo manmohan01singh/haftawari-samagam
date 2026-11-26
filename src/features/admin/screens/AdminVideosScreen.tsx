@@ -25,6 +25,7 @@ import {
   adminStyles,
   formatDuration,
   publishStateChip,
+  friendlyError,
 } from '../components/AdminUi';
 
 function VideosContent({ ctx }: { ctx: AdminContext }) {
@@ -44,7 +45,7 @@ function VideosContent({ ctx }: { ctx: AdminContext }) {
       setVideos(vids);
       setCategories(cats);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(friendlyError(err));
     }
   }, []);
 
@@ -69,7 +70,7 @@ function VideosContent({ ctx }: { ctx: AdminContext }) {
       );
       setNotice(done);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(friendlyError(err));
     } finally {
       setBusyId(null);
     }
@@ -87,7 +88,7 @@ function VideosContent({ ctx }: { ctx: AdminContext }) {
       setUrlInput('');
       setNotice(`Added as draft: "${video.title}". Publish it when ready.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(friendlyError(err));
     } finally {
       setAdding(false);
     }

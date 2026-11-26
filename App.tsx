@@ -7,6 +7,7 @@ import { RootNavigator } from './src/navigation';
 import { appLinking } from './src/navigation/linking';
 import { AuthProvider } from './src/features/auth';
 import { registerServiceWorker } from './src/lib/registerServiceWorker';
+import { PwaBanners } from './src/components/pwa/PwaBanners';
 
 /**
  * Haftawari Samagam.
@@ -28,6 +29,7 @@ export default function App() {
           <RootNavigator />
           <StatusBar style="auto" />
         </NavigationContainer>
+        <PwaBanners />
       </AuthProvider>
     </SafeAreaProvider>
   );

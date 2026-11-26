@@ -21,6 +21,7 @@ import {
   LoadingView,
   SectionTitle,
   adminStyles,
+  friendlyError,
 } from '../components/AdminUi';
 
 function CategoriesContent({ ctx }: { ctx: AdminContext }) {
@@ -38,7 +39,7 @@ function CategoriesContent({ ctx }: { ctx: AdminContext }) {
     try {
       setCategories(await listCategories());
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(friendlyError(err));
     }
   }, []);
 
@@ -60,7 +61,7 @@ function CategoriesContent({ ctx }: { ctx: AdminContext }) {
       setNewName('');
       setNotice(`Category created: ${created.name} (${created.slug})`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(friendlyError(err));
     } finally {
       setCreating(false);
     }
@@ -78,7 +79,7 @@ function CategoriesContent({ ctx }: { ctx: AdminContext }) {
       setEditingId(null);
       setNotice(`Renamed to "${updated.name}".`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(friendlyError(err));
     } finally {
       setBusyId(null);
     }
@@ -103,7 +104,7 @@ function CategoriesContent({ ctx }: { ctx: AdminContext }) {
       reordered.sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
       setCategories(reordered);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(friendlyError(err));
       void load();
     } finally {
       setBusyId(null);
@@ -121,7 +122,7 @@ function CategoriesContent({ ctx }: { ctx: AdminContext }) {
         `Deleted "${category.name}". Videos in it are kept and become uncategorised.`,
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(friendlyError(err));
     } finally {
       setBusyId(null);
     }

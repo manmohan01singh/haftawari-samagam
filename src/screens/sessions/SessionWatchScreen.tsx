@@ -514,6 +514,7 @@ export function SessionWatchScreen({ route, navigation }: Props) {
             sessionId={sessionId}
             participantCount={presenceCount ?? joinedCount ?? undefined}
             onPress={() => setChatOpen(true)}
+            prominent={isPlaying}
           />
         </View>
       </ScrollView>

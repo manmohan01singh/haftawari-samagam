@@ -16,9 +16,16 @@
  *   app needs for history/saves). Shorts never appear (both legs filter).
  */
 
-import { normalizeText } from './normalize';
-import { searchLocalCatalogue } from './localCatalogue';
-import { fetchOfficialChannel, matchOfficialChannel, searchChannelVideos } from './youtubeSearch';
+import { OFFICIAL_CHANNEL } from './config';
+import { normalizeText, tokenize } from './normalize';
+import { tokenSimilarity } from './fuzzy';
+import { fetchPublishedVideos, searchLocalCatalogue } from './localCatalogue';
+import {
+  fetchChannelTitles,
+  fetchOfficialChannel,
+  matchOfficialChannel,
+  searchChannelVideos,
+} from './youtubeSearch';
 import type { SearchOptions, SearchResults, VideoResult } from './types';
 
 function tierOf(result: VideoResult): number {
@@ -39,17 +46,79 @@ function compareResults(a: VideoResult, b: VideoResult): number {
   return bTime - aTime;
 }
 
-/** Run a full search. Safe to call with an AbortSignal for cancellation. */
-export async function searchAll(queryText: string, options: SearchOptions = {}): Promise<SearchResults> {
-  const query = queryText.trim();
-  const limit = options.limit ?? 25;
-  if (query === '') {
-    return { query, channel: null, videos: [], youtubeSkipped: false };
+/**
+ * Derive a corrected query from REAL known vocabulary only: tokens of
+ * the published catalogue titles, the cached channel-upload titles and
+ * the official channel's name/aliases. Each typed token is replaced by
+ * its best fuzzy token match (similarity ≥ 0.8, and actually different);
+ * if no token changes, there is no correction (null).
+ *
+ * Why this exists (QA issue 91): the YouTube search.list leg is literal
+ * — for the typo "haftawri" it returns NOTHING, and the fuzzy scorer
+ * only ever ranked the local catalogue, so the live search came back
+ * empty even though the engine's own tests pass for that typo. The
+ * correction lets searchAll retry the YouTube leg with the real word
+ * "haftawari", which the channel's search does answer.
+ */
+export async function deriveCorrection(queryText: string): Promise<string | null> {
+  const queryTokens = tokenize(queryText);
+  if (queryTokens.length === 0) return null;
+  const vocabulary = new Set<string>();
+  const addTitle = (title: string) => {
+    for (const token of tokenize(title)) if (token.length >= 3) vocabulary.add(token);
+  };
+  try {
+    const [videos, channelTitles] = await Promise.all([
+      fetchPublishedVideos().catch(() => []),
+      fetchChannelTitles().catch(() => [] as string[]),
+    ]);
+    for (const video of videos) addTitle(video.title);
+    for (const title of channelTitles) addTitle(title);
+  } catch {
+    // Vocabulary sources are best-effort; aliases below still apply.
   }
+  addTitle(OFFICIAL_CHANNEL.title);
+  for (const alias of OFFICIAL_CHANNEL.aliases) addTitle(alias);
+  addTitle('haftawari samagam kirtan'); // the app's own domain words (branding, not data)
 
+  let changed = false;
+  const corrected = queryTokens.map((token) => {
+    if (vocabulary.has(token)) return token;
+    let best: string | null = null;
+    let bestScore = 0;
+    for (const candidate of vocabulary) {
+      const score = tokenSimilarity(token, candidate);
+      if (score > bestScore) {
+        bestScore = score;
+        best = candidate;
+      }
+    }
+    if (best && bestScore >= 0.8 && best !== token) {
+      changed = true;
+      return best;
+    }
+    return token;
+  });
+  return changed ? corrected.join(' ') : null;
+}
+
+
+function mergeRanked(local: VideoResult[], youtube: VideoResult[], limit: number): VideoResult[] {
+  const byVideoId = new Map<string, VideoResult>();
+  for (const result of [...local, ...youtube]) {
+    const existing = byVideoId.get(result.youtubeVideoId);
+    if (!existing || (existing.source === 'youtube' && result.source === 'local')) {
+      byVideoId.set(result.youtubeVideoId, result);
+    }
+  }
+  return [...byVideoId.values()].sort(compareResults).slice(0, limit);
+}
+
+async function runLegs(
+  query: string,
+  options: SearchOptions,
+): Promise<{ channel: SearchResults['channel']; videos: VideoResult[]; youtubeSkipped: boolean }> {
   const localPromise = searchLocalCatalogue(query, options.signal).catch(() => [] as VideoResult[]);
-
-  // Channel card: local decision, live data.
   const channelMatch = matchOfficialChannel(query);
   const channelPromise = channelMatch
     ? fetchOfficialChannel(options.signal)
@@ -58,8 +127,6 @@ export async function searchAll(queryText: string, options: SearchOptions = {}):
         )
         .catch(() => null)
     : Promise.resolve(null);
-
-  // YouTube leg — skipped only when asked, unconfigured, or aborted.
   let youtubeSkipped = false;
   let youtubePromise: Promise<VideoResult[]>;
   if (options.localOnly) {
@@ -72,19 +139,50 @@ export async function searchAll(queryText: string, options: SearchOptions = {}):
       return [] as VideoResult[];
     });
   }
-
   const [local, channel, youtube] = await Promise.all([localPromise, channelPromise, youtubePromise]);
+  return { channel, videos: mergeRanked(local, youtube, options.limit ?? 25), youtubeSkipped };
+}
 
-  const byVideoId = new Map<string, VideoResult>();
-  for (const result of [...local, ...youtube]) {
-    const existing = byVideoId.get(result.youtubeVideoId);
-    if (!existing || (existing.source === 'youtube' && result.source === 'local')) {
-      byVideoId.set(result.youtubeVideoId, result);
+/**
+ * Run a full search. Safe to call with an AbortSignal for cancellation.
+ *
+ * TIMING CONTRACT (QA issue 91): callers that need fast first paint use
+ * searchAll(q, { localOnly: true }) for stage 1 (Supabase catalogue —
+ * no YouTube quota, no search.list latency) and then this full call for
+ * stage 2. The full call still awaits the YouTube leg, but a screen
+ * must never blank-wait on it: stage-1 results stay on screen while
+ * stage 2 runs, and a failed/slow YouTube leg degrades to the local
+ * results (youtubeSkipped), never to an empty page.
+ *
+ * TYPO CONTRACT: if the merged set is thin (< 3) and a correction was
+ * derived from known titles, the legs re-run ONCE with the corrected
+ * query and merge in; `didYouMean` reports the correction so the
+ * screen can offer it explicitly.
+ */
+export async function searchAll(queryText: string, options: SearchOptions = {}): Promise<SearchResults> {
+  const query = queryText.trim();
+  const limit = options.limit ?? 25;
+  if (query === '') {
+    return { query, channel: null, videos: [], youtubeSkipped: false, didYouMean: null };
+  }
+
+  const first = await runLegs(query, options);
+  let { channel, videos, youtubeSkipped } = first;
+
+  let didYouMean: string | null = null;
+  if (!options.localOnly) {
+    didYouMean = await deriveCorrection(query).catch(() => null);
+    if (didYouMean && videos.length < 3) {
+      const second = await runLegs(didYouMean, options).catch(() => null);
+      if (second) {
+        videos = mergeRanked(videos, second.videos, limit);
+        channel = channel ?? second.channel;
+        youtubeSkipped = youtubeSkipped && second.youtubeSkipped;
+      }
     }
   }
-  const videos = [...byVideoId.values()].sort(compareResults).slice(0, limit);
 
-  return { query, channel, videos, youtubeSkipped };
+  return { query, channel, videos, youtubeSkipped, didYouMean };
 }
 
 // ── Debounce + cancellation for the screen ───────────────────────────
@@ -136,7 +234,7 @@ export function createSearchController(debounceMs = 300): SearchController {
       timer = null;
       aborter?.abort();
       flush((waiter) =>
-        waiter.resolve({ query: '', channel: null, videos: [], youtubeSkipped: true }),
+        waiter.resolve({ query: '', channel: null, videos: [], youtubeSkipped: true, didYouMean: null }),
       );
     },
   };
