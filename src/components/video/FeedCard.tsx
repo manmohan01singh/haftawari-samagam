@@ -218,7 +218,7 @@ export const FeedCard = memo(function FeedCard({
                 accessibilityLabel="More actions"
                 accessibilityRole="button"
               >
-                <MaterialIcons name="more-vert" size={24} color={lightColors.text} />
+                <MaterialIcons name="more-horiz" size={24} color={lightColors.text} />
               </Pressable>
             ) : (
               <Pressable
@@ -247,11 +247,24 @@ const styles = StyleSheet.create({
   // separated by ~20px of that ground — not white-on-white.
   // QA issue 53: card rhythm is ~12px of page ground between cards
   // (the grey ground itself is the divider).
-  card: { marginBottom: 12 },
+  // Round-2 pixel pass: the card reads as a CONTAINER — subtle
+  // shadow lifting it off the grey page ground (cur-1 cards looked
+  // flat), thumbnail with 16dp rounded TOP corners, body with 20dp
+  // rounded bottom corners (below).
+  card: {
+    marginBottom: 12,
+    shadowColor: '#000000',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
   thumbnailWrap: { position: 'relative' },
   thumbnail: {
     width: '100%',
     aspectRatio: layout.thumbnailAspectRatio,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     // Light placeholder while the image is in flight (QA issue 7) —
     // this was playerBackground (pure black), so every slow thumbnail
     // read as a black rectangle. Matches the skeleton colour.
@@ -266,11 +279,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 3,
     backgroundColor: lightColors.accent,
-    borderRadius: nativeApp.feedCard.liveBadgeRadius,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
+    // Round-2 measurement (ref-1): the LIVE pill is ~24dp tall,
+    // radius ~8, white broadcast glyph + 13dp bold "LIVE".
+    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
   },
-  liveText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
+  liveText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
   durationBadge: {
     position: 'absolute',
     right: nativeApp.feedCard.badgeInset,

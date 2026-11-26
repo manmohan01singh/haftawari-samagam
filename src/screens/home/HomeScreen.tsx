@@ -325,58 +325,13 @@ export function HomeScreen({ navigation }: Props) {
     [user],
   );
 
-  const renderItem = useCallback(
-    ({ item }: { item: Video }) => (
-      <HomeFeedItem
-        video={item}
-        data={
-          cardDataById.get(item.id) ??
-          supabaseCardData(item, avatarUrl, liveMap.get(item.youtube_video_id) ?? null)
-        }
-        saved={savedIds.has(item.id)}
-        canSave={!!user}
-        onPressVideo={handlePressVideo}
-        onToggleSaveVideo={handleToggleSaveVideo}
-        onShareVideo={handleShareVideo}
-        onChannelPress={handleChannelPress}
-        onOpenPlaylistVideo={handleOpenPlaylistVideo}
-      />
-    ),
-    [
-      cardDataById,
-      avatarUrl,
-      liveMap,
-      savedIds,
-      user,
-      handlePressVideo,
-      handleToggleSaveVideo,
-      handleShareVideo,
-      handleChannelPress,
-      handleOpenPlaylistVideo,
-    ],
-  );
-
-  const keyExtractor = useCallback((item: Video) => item.id, []);
-
-  const initial = profile?.display_name?.charAt(0)?.toUpperCase() ?? user?.email?.charAt(0)?.toUpperCase() ?? null;
-
-  // Chips + the Sessions entry live in the feed's ListHeader so they
-  // SCROLL AWAY with the feed. Previously both were pinned above the
-  // list under the header: header + tabs + chips + sessions row ate
-  // ~215px before the first thumbnail, while screenshot 01 shows the
-  // first thumbnail starting directly under the tab row. Only the
-  // header and the secondary tab row stay fixed (as in the reference).
-  // The ChipsRow itself is ALWAYS rendered (QA issue 11): mounting it
-  // only once categories arrive would push the whole feed down — a
-  // visible jump mid-scroll. With no categories it shows just "All".
-  const listHeader = (
+  // The Sessions entry + category chips strip (rendered by
+  // renderItem after the second card — see the round-2 note there).
+  // The ChipsRow itself is ALWAYS rendered when the strip shows
+  // (QA issue 11): with no categories it shows just "All".
+  const feedStrip = useMemo(
+    () => (
     <View>
-      <ChipsRow
-        chips={[ALL_CHIP, ...categories.map((c) => c.name)]}
-        selected={selectedCategory}
-        onSelect={setSelectedCategory}
-      />
-
       {/* Samagam Sessions entry point — scheduled group playbacks
           (UPCOMING / NOW PLAYING / COMPLETED), listed on their own
           screen. Styled as a plain reference row, not a banner. */}
@@ -393,8 +348,62 @@ export function HomeScreen({ navigation }: Props) {
         </View>
         <MaterialIcons name="chevron-right" size={24} color={lightColors.textSecondary} />
       </Pressable>
+      <ChipsRow
+        chips={[ALL_CHIP, ...categories.map((c) => c.name)]}
+        selected={selectedCategory}
+        onSelect={setSelectedCategory}
+      />
     </View>
+    ),
+    [categories, selectedCategory, navigation],
   );
+
+  const renderItem = useCallback(
+    ({ item, index }: { item: Video; index: number }) => {
+      // Round-2 pixel pass: the feed must start IMMEDIATELY with the
+      // first card (ref-1 goes straight from the tab row to card 1).
+      // The Sessions entry + category chips strip renders after the
+      // SECOND card (or after the only card), never above card 1.
+      const stripAfter = Math.min(1, visibleVideos.length - 1);
+      return (
+        <>
+          <HomeFeedItem
+            video={item}
+            data={
+              cardDataById.get(item.id) ??
+              supabaseCardData(item, avatarUrl, liveMap.get(item.youtube_video_id) ?? null)
+            }
+            saved={savedIds.has(item.id)}
+            canSave={!!user}
+            onPressVideo={handlePressVideo}
+            onToggleSaveVideo={handleToggleSaveVideo}
+            onShareVideo={handleShareVideo}
+            onChannelPress={handleChannelPress}
+            onOpenPlaylistVideo={handleOpenPlaylistVideo}
+          />
+          {index === stripAfter ? feedStrip : null}
+        </>
+      );
+    },
+    [
+      cardDataById,
+      avatarUrl,
+      liveMap,
+      savedIds,
+      user,
+      handlePressVideo,
+      handleToggleSaveVideo,
+      handleShareVideo,
+      handleChannelPress,
+      handleOpenPlaylistVideo,
+      visibleVideos.length,
+      feedStrip,
+    ],
+  );
+
+  const keyExtractor = useCallback((item: Video) => item.id, []);
+
+  const initial = profile?.display_name?.charAt(0)?.toUpperCase() ?? user?.email?.charAt(0)?.toUpperCase() ?? null;
 
   return (
     <View style={styles.container}>
@@ -450,7 +459,6 @@ export function HomeScreen({ navigation }: Props) {
           data={visibleVideos}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
-          ListHeaderComponent={listHeader}
           onEndReached={onEndReached}
           onEndReachedThreshold={0.6}
           refreshing={refreshing}

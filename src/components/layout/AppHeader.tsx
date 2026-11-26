@@ -89,7 +89,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  wordmark: { fontSize: 19, fontWeight: '700', color: lightColors.text, letterSpacing: -0.3 },
+  // Round-2 measurement (ref-1): wordmark ~20dp, tight tracking,
+  // sitting ~8dp from the play mark; right-side icons 24dp.
+  wordmark: { fontSize: 20, fontWeight: '700', color: lightColors.text, letterSpacing: -0.5 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 22 },
   avatar: { width: 28, height: 28, borderRadius: 14 },
   avatarFallback: {

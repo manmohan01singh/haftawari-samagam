@@ -65,7 +65,7 @@ const styles = StyleSheet.create({
     aspectRatio: layout.thumbnailAspectRatio,
     backgroundColor: lightColors.surfaceVariant,
   },
-  thumbnailFeed: {},
+  thumbnailFeed: { borderTopLeftRadius: 16, borderTopRightRadius: 16 },
   thumbnailShelf: { borderRadius: radii.card },
   feedBody: {
     backgroundColor: lightColors.surface,
