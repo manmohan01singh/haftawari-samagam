@@ -34,6 +34,8 @@ import {
   setVideoSaved,
 } from '../../lib/videos';
 import { layout, lightColors, nativeApp, radii, spacing } from '../../theme';
+import { goBackOrTab } from '../../navigation/safeBack';
+import { recordLocalWatch } from '../../features/library/localHistory';
 import type { Video } from '../../types/database';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -192,12 +194,26 @@ export function WatchScreen({ route, navigation }: Props) {
     };
   }, [user, resolved]);
 
-  // Record watch history once per archive recording per mount.
+  // Record watch history once per recording per mount. Signed-in:
+  // the server watch_history row (archive rows only). Signed-out:
+  // a DEVICE-LOCAL entry (features/library/localHistory) so History
+  // can honestly show what was watched on this device instead of
+  // claiming nothing happened (QA issue 78).
   useEffect(() => {
-    if (!user || !resolved?.row) return;
-    if (historyRecordedFor.current === resolved.row.id) return;
-    historyRecordedFor.current = resolved.row.id;
-    void recordWatchHistory(user.id, resolved.row.id).catch(() => undefined);
+    if (!resolved) return;
+    if (historyRecordedFor.current === resolved.youtubeVideoId) return;
+    historyRecordedFor.current = resolved.youtubeVideoId;
+    if (user && resolved.row) {
+      void recordWatchHistory(user.id, resolved.row.id).catch(() => undefined);
+    } else if (!user) {
+      void recordLocalWatch({
+        youtubeVideoId: resolved.youtubeVideoId,
+        videoRowId: resolved.row?.id ?? null,
+        title: resolved.title,
+        thumbnailUrl: resolved.thumbnailUrl,
+        durationSeconds: resolved.row?.duration_seconds ?? null,
+      }).catch(() => undefined);
+    }
   }, [user, resolved]);
 
   // Lazy player mount: mark this video ready only after the navigation
@@ -254,6 +270,15 @@ export function WatchScreen({ route, navigation }: Props) {
     return (
       <View>
         <View style={styles.playerWrap}>
+          <Pressable
+            onPress={() => goBackOrTab(navigation, 'Home')}
+            style={styles.backOverlay}
+            hitSlop={8}
+            accessibilityLabel="Back"
+            accessibilityRole="button"
+          >
+            <MaterialIcons name="arrow-back" size={22} color="#FFFFFF" />
+          </Pressable>
           {playerReady ? (
             <YouTubePlayer youtubeVideoId={resolved.youtubeVideoId} />
           ) : (
@@ -361,7 +386,12 @@ export function WatchScreen({ route, navigation }: Props) {
   if (error || !resolved) {
     return (
       <View style={styles.container}>
-        <EmptyState title="Recording unavailable" message={error ?? 'This recording could not be loaded.'} />
+        <EmptyState
+          title="Recording unavailable"
+          message={error ?? 'This recording could not be loaded.'}
+          actionLabel="Go back"
+          onAction={() => goBackOrTab(navigation, 'Home')}
+        />
       </View>
     );
   }
@@ -400,6 +430,18 @@ const styles = StyleSheet.create({
     backgroundColor: lightColors.playerBackground,
   },
   playerThumb: { width: '100%', height: '100%', backgroundColor: lightColors.playerBackground },
+  backOverlay: {
+    position: 'absolute',
+    top: spacing.sm,
+    left: spacing.sm,
+    zIndex: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   playerSpinner: {
     position: 'absolute',
     top: 0,

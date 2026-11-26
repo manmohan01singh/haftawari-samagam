@@ -62,9 +62,17 @@ export const BottomNav = memo(function BottomNav({ items, activeKey, onPress }: 
                   contentFit="cover"
                   cachePolicy="memory-disk"
                 />
-              ) : (
+              ) : item.avatarInitial ? (
                 <View style={[styles.avatar, styles.avatarFallback]}>
-                  <Text style={styles.avatarInitial}>{item.avatarInitial ?? '?'}</Text>
+                  <Text style={styles.avatarInitial}>{item.avatarInitial}</Text>
+                </View>
+              ) : (
+                // Signed out: a person glyph, never a bare "?". A "?"
+                // avatar reads as a broken/unknown button; the person
+                // icon is the universal "you / account" affordance and
+                // matches the AppHeader account slot.
+                <View style={[styles.avatar, styles.avatarFallback]}>
+                  <MaterialIcons name="person" size={18} color={lightColors.textSecondary} />
                 </View>
               )
             ) : (

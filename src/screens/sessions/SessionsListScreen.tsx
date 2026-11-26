@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { goBackOrTab } from '../../navigation/safeBack';
+import { StackTabBar } from '../../components/layout/StackTabBar';
 import { EmptyState } from '../../components/common/EmptyState';
 import { SessionCard } from '../../features/sessions/components/SessionCard';
 import { useServerClock } from '../../features/sessions/hooks/useServerClock';
@@ -165,6 +166,7 @@ export function SessionsListScreen({ navigation }: Props) {
           title="Samagams are not available yet"
           message="The backend is not configured in this build, so no sessions can be shown."
         />
+        <StackTabBar navigation={navigation} activeTab="Home" />
       </View>
     );
   }
@@ -176,6 +178,7 @@ export function SessionsListScreen({ navigation }: Props) {
         <View style={styles.center}>
           <ActivityIndicator color={lightColors.text} />
         </View>
+        <StackTabBar navigation={navigation} activeTab="Home" />
       </View>
     );
   }
@@ -193,6 +196,7 @@ export function SessionsListScreen({ navigation }: Props) {
             void load();
           }}
         />
+        <StackTabBar navigation={navigation} activeTab="Home" />
       </View>
     );
   }
@@ -237,11 +241,14 @@ export function SessionsListScreen({ navigation }: Props) {
       ListEmptyComponent={
         <EmptyState
           title="No Samagams scheduled"
-          message="When a Samagam is scheduled it will appear here as UPCOMING."
+          message="Samagam Sessions are scheduled group playbacks of recordings — everyone watches together, starting at the same position. When one is scheduled it will appear here as UPCOMING, then NOW PLAYING while it runs. Until then, you can watch any recording from the home feed."
+          actionLabel="Browse recordings"
+          onAction={() => navigation.navigate('MainTabs', { screen: 'Home' })}
         />
       }
       stickySectionHeadersEnabled={false}
     />
+      <StackTabBar navigation={navigation} activeTab="Home" />
     </View>
   );
 }

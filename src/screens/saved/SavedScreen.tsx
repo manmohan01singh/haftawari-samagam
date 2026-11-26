@@ -11,6 +11,7 @@ import { formatDateLine } from '../../features/library/format';
 import type { SavedItem } from '../../features/library/types';
 import type { LibraryRootStackParamList } from '../../features/library/screenTypes';
 import { goBackOrTab } from '../../navigation/safeBack';
+import { StackTabBar } from '../../components/layout/StackTabBar';
 import { ScreenLoading, ScreenMessage } from '../../features/library/components/ScreenMessage';
 import { SwipeableRow } from '../../features/library/components/SwipeableRow';
 import { VideoListRow } from '../../features/library/components/VideoListRow';
@@ -117,6 +118,7 @@ export function SavedScreen({ navigation }: Props) {
           windowSize={7}
         />
       )}
+      <StackTabBar navigation={navigation} activeTab="Library" />
     </View>
   );
 }

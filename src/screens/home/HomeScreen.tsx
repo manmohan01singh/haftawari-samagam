@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, FlatList, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { CompositeScreenProps } from '@react-navigation/native';
+import { useScrollToTop } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppHeader } from '../../components/layout/AppHeader';
@@ -41,6 +42,10 @@ const ALL_CHIP = 'All';
  */
 export function HomeScreen({ navigation }: Props) {
   const { user, profile } = useAuth();
+  // QA 89: tapping the Home tab while already on Home scrolls the
+  // feed back to the top (useScrollToTop hooks the tab re-press).
+  const feedRef = useRef<FlatList<Video>>(null);
+  useScrollToTop(feedRef);
   const channel = useOfficialChannel();
   const [videos, setVideos] = useState<Video[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -242,6 +247,7 @@ export function HomeScreen({ navigation }: Props) {
         />
       ) : (
         <FlatList
+          ref={feedRef}
           data={visibleVideos}
           renderItem={renderItem}
           keyExtractor={keyExtractor}

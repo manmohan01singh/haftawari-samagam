@@ -47,9 +47,13 @@ export const AppHeader = memo(function AppHeader({
         <Pressable onPress={onAccountPress} hitSlop={8} accessibilityLabel="Account">
           {avatarUrl ? (
             <Image source={{ uri: avatarUrl }} style={styles.avatar} contentFit="cover" cachePolicy="memory-disk" />
+          ) : avatarInitial ? (
+            <View style={[styles.avatar, styles.avatarFallback]}>
+              <Text style={styles.avatarInitial}>{avatarInitial}</Text>
+            </View>
           ) : (
             <View style={[styles.avatar, styles.avatarFallback]}>
-              <Text style={styles.avatarInitial}>{avatarInitial ?? '?'}</Text>
+              <MaterialIcons name="person" size={19} color={lightColors.textSecondary} />
             </View>
           )}
         </Pressable>

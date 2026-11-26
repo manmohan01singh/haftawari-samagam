@@ -5,6 +5,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { branding } from '../../config/branding';
 import { useAuth } from '../../features/auth';
 import { goBackOrTab } from '../../navigation/safeBack';
+import { StackTabBar } from '../../components/layout/StackTabBar';
 import type { RootStackParamList } from '../../navigation/types';
 import { lightColors, spacing } from '../../theme';
 
@@ -97,6 +98,7 @@ export function SettingsScreen({ navigation }: Props) {
           UPCOMING, NOW PLAYING or COMPLETED.
         </Text>
       </ScrollView>
+      <StackTabBar navigation={navigation} activeTab="Library" />
     </View>
   );
 }

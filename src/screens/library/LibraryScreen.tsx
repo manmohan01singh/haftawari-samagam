@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { CompositeScreenProps } from '@react-navigation/native';
+import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { isSupabaseConfigured } from '../../lib/supabase';
@@ -29,6 +30,7 @@ import { resumeRatio } from '../../features/library/format';
 import type { HistoryItem, PlaylistSummary } from '../../features/library/types';
 import type { LibraryRootStackParamList } from '../../features/library/screenTypes';
 import { CreatePlaylistSheet } from '../../features/library/components/CreatePlaylistSheet';
+import { useLocalHistory } from '../../features/library/localHistory';
 import { PlaylistRow } from '../../features/library/components/PlaylistRow';
 import { VideoListRow } from '../../features/library/components/VideoListRow';
 
@@ -52,18 +54,31 @@ const HISTORY_CARD_WIDTH = Math.round(Dimensions.get('window').width * 0.36);
  */
 export function LibraryScreen({ navigation }: Props) {
   const { user, loading: authLoading } = useCurrentUser();
+  const scrollRef = React.useRef<React.ElementRef<typeof ScrollView>>(null);
+  useScrollToTop(scrollRef);
   const { profile } = useProfile(user?.id ?? null);
   const history = useHistory(user?.id ?? null);
   const saved = useSavedItems(user?.id ?? null);
   const summaries = usePlaylistSummaries(user?.id ?? null);
+  // Device-local history for signed-out users (QA 78): the History
+  // shelf below shows real on-device entries instead of a bare
+  // "sign in" line when the user has watched while signed out.
+  const local = useLocalHistory();
   const [createOpen, setCreateOpen] = useState(false);
+  const reloadLocal = local.reload;
+  useFocusEffect(
+    useCallback(() => {
+      reloadLocal();
+    }, [reloadLocal]),
+  );
 
   const refreshing = history.refreshing || saved.refreshing || summaries.refreshing;
   const onRefresh = useCallback(() => {
     history.refresh();
     saved.refresh();
     summaries.refresh();
-  }, [history, saved, summaries]);
+    local.reload();
+  }, [history, saved, summaries, local]);
 
   const openVideo = useCallback(
     (videoId: string) => navigation.navigate('Watch', { videoRowId: videoId }),
@@ -130,7 +145,7 @@ export function LibraryScreen({ navigation }: Props) {
           onPress={() => navigation.navigate('Account')}
           accessibilityRole="button"
         >
-          <Text style={styles.accountsText}>Accounts</Text>
+          <Text style={styles.accountsText}>Account</Text>
           <MaterialIcons name="keyboard-arrow-down" size={20} color={lightColors.text} />
         </Pressable>
         <View style={styles.headerActions}>
@@ -144,6 +159,7 @@ export function LibraryScreen({ navigation }: Props) {
       </View>
 
       <ScrollView
+        ref={scrollRef}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         contentContainerStyle={styles.scrollContent}
       >
@@ -184,6 +200,15 @@ export function LibraryScreen({ navigation }: Props) {
                 <Text style={[styles.pillText, styles.pillTextLight]}>Saved</Text>
               </Pressable>
             </View>
+            <Pressable
+              style={styles.channelRow}
+              onPress={() => navigation.navigate('Channel', {})}
+              accessibilityRole="button"
+            >
+              <MaterialIcons name="play-circle-outline" size={22} color={lightColors.text} />
+              <Text style={styles.channelRowText}>Official channel</Text>
+              <MaterialIcons name="chevron-right" size={20} color={lightColors.textSecondary} />
+            </Pressable>
             {profile?.role === 'admin' ? (
               <Pressable
                 style={styles.adminLink}
@@ -197,6 +222,9 @@ export function LibraryScreen({ navigation }: Props) {
           </>
         ) : (
           <View style={styles.signInBlock}>
+            <View style={styles.signInAvatar}>
+              <MaterialIcons name="person" size={40} color={lightColors.textSecondary} />
+            </View>
             <Text style={styles.signInTitle}>Sign in to see your library</Text>
             <Text style={styles.signInText}>
               Your history, saved samagams and playlists are kept with your account.
@@ -254,6 +282,43 @@ export function LibraryScreen({ navigation }: Props) {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.historyContent}
           />
+        ) : !user && local.entries.length > 0 ? (
+          <>
+            <FlatList
+              horizontal
+              data={local.entries.slice(0, 10)}
+              keyExtractor={(item) => item.youtubeVideoId}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.historyContent}
+              renderItem={({ item }) => (
+                <Pressable
+                  style={styles.historyCard}
+                  onPress={() =>
+                    navigation.navigate(
+                      'Watch',
+                      item.videoRowId
+                        ? { videoRowId: item.videoRowId }
+                        : { youtubeVideoId: item.youtubeVideoId },
+                    )
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel={item.title}
+                >
+                  <View style={styles.historyThumbWrap}>
+                    {item.thumbnailUrl ? (
+                      <Image source={{ uri: item.thumbnailUrl }} style={styles.historyThumb} resizeMode="cover" />
+                    ) : (
+                      <View style={[styles.historyThumb, styles.thumbEmpty]} />
+                    )}
+                  </View>
+                  <Text style={styles.historyTitle} numberOfLines={2}>
+                    {item.title}
+                  </Text>
+                </Pressable>
+              )}
+            />
+            <Text style={styles.emptyLine}>Watched on this device while signed out.</Text>
+          </>
         ) : (
           <Text style={styles.emptyLine}>
             {user
@@ -274,12 +339,15 @@ export function LibraryScreen({ navigation }: Props) {
           contentContainerStyle={styles.chipsContent}
         >
           <Pressable style={styles.chip} onPress={() => navigation.navigate('History')} accessibilityRole="button">
+            <MaterialIcons name="history" size={16} color={lightColors.text} />
             <Text style={styles.chipText}>Recent</Text>
           </Pressable>
           <Pressable style={styles.chip} onPress={() => navigation.navigate('Saved')} accessibilityRole="button">
+            <MaterialIcons name="bookmark-border" size={16} color={lightColors.text} />
             <Text style={styles.chipText}>Saved</Text>
           </Pressable>
           <Pressable style={styles.chip} onPress={() => navigation.navigate('Playlists')} accessibilityRole="button">
+            <MaterialIcons name="playlist-play" size={16} color={lightColors.text} />
             <Text style={styles.chipText}>Playlists</Text>
           </Pressable>
         </ScrollView>
@@ -496,11 +564,31 @@ const styles = StyleSheet.create({
   sessionsMeta: { fontSize: 13, color: lightColors.textSecondary, marginTop: 2 },
   chipsContent: { paddingHorizontal: spacing.lg, gap: spacing.sm, paddingTop: spacing.md },
   chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     backgroundColor: lightColors.surfaceVariant,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
     paddingVertical: 8,
   },
+  signInAvatar: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: lightColors.surfaceVariant,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
+  },
+  channelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.lg,
+  },
+  channelRowText: { flex: 1, fontSize: 15, fontWeight: '500', color: lightColors.text },
   chipText: { fontSize: 14, fontWeight: '500', color: lightColors.text },
   rowsBlock: { paddingHorizontal: spacing.lg },
   rowsEmpty: { fontSize: 14, color: lightColors.textSecondary, paddingTop: spacing.md },

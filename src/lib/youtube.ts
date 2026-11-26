@@ -342,3 +342,17 @@ export async function fetchChannelLiveAndUpcoming(
   const ids = [...liveIds, ...upcomingIds.filter((id) => !liveIds.includes(id))];
   return fetchVideosMetadata(ids, fetchImpl);
 }
+
+/**
+ * Shorts exclusion heuristic — the SAME rule the search stream uses
+ * (src/features/search/youtubeSearch.ts): the Data API has no isShort
+ * flag, so a video counts as a Short when its title/description carries
+ * "#shorts" or its real duration is 60 seconds or less. The user has
+ * banned Shorts from the app entirely, so Subscriptions and Channel
+ * uploads filter with this too, not just Search.
+ */
+export function isShortVideo(meta: YouTubeVideoMetadata): boolean {
+  if (meta.title.toLowerCase().includes('#shorts')) return true;
+  if (meta.description.toLowerCase().includes('#shorts')) return true;
+  return meta.durationSeconds !== null && meta.durationSeconds <= 60;
+}

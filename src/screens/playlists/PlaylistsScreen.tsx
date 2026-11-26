@@ -10,6 +10,7 @@ import { createPlaylist } from '../../features/library/libraryService';
 import type { PlaylistSummary } from '../../features/library/types';
 import type { LibraryRootStackParamList } from '../../features/library/screenTypes';
 import { goBackOrTab } from '../../navigation/safeBack';
+import { StackTabBar } from '../../components/layout/StackTabBar';
 import { CreatePlaylistSheet } from '../../features/library/components/CreatePlaylistSheet';
 import { PlaylistRow } from '../../features/library/components/PlaylistRow';
 import { ScreenLoading, ScreenMessage } from '../../features/library/components/ScreenMessage';
@@ -114,6 +115,7 @@ export function PlaylistsScreen({ navigation }: Props) {
         />
       )}
 
+      <StackTabBar navigation={navigation} activeTab="Library" />
       <CreatePlaylistSheet visible={createOpen} onCreate={handleCreate} onClose={() => setCreateOpen(false)} />
     </View>
   );
