@@ -23,8 +23,9 @@ export function formatCount(value: number): string {
   if (value < 1000) return String(Math.floor(value));
   if (value < 100000) {
     // K range renders at ONE decimal in the reference UI ("7.2K
-    // videos" for 7,256 — ref-3), not two ("7.26K").
-    const k = Math.round((value / 1000) * 10) / 10;
+    // videos" for 7,256 — ref-3), truncated like YouTube, not
+    // rounded ("7.26K" / "7.3K" both miss the reference).
+    const k = Math.floor((value / 1000) * 10) / 10;
     return `${Number.isInteger(k) ? String(k) : k.toFixed(1)}K`;
   }
   if (value < 10000000) {
