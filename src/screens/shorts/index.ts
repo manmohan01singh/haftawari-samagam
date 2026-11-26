@@ -1,0 +1,1 @@
+export { ShortsScreen } from './ShortsScreen';
