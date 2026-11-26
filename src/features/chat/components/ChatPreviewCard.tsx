@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { lightColors, nativeApp, radii, spacing } from '../../../theme';
+import { lightColors, nativeApp, radii, spacing, typography } from '../../../theme';
 import { useCurrentChatUser, type ChatUser } from '../useSessionChat';
 import { ChatAvatar } from './ChatAvatar';
 
@@ -18,6 +18,13 @@ export interface ChatPreviewCardProps {
   currentUser?: ChatUser | null;
   /** Tapping the pill while signed out (defaults to onPress). */
   onSignInPress?: () => void;
+  /**
+   * Prominent mode — used when the session is NOW PLAYING, so the live
+   * chat entry is obvious rather than buried: accent outline, a filled
+   * "Open live chat" action and a NOW PLAYING caption (the status text
+   * is the host's real session status, passed in by the caller).
+   */
+  prominent?: boolean;
 }
 
 /**
@@ -34,6 +41,7 @@ export function ChatPreviewCard({
   participantCount,
   currentUser,
   onSignInPress,
+  prominent = false,
 }: ChatPreviewCardProps) {
   const { user, authLoading } = useCurrentChatUser(currentUser);
   const identityName = user?.displayName?.trim() ? user.displayName : null;
@@ -55,9 +63,14 @@ export function ChatPreviewCard({
   };
 
   return (
-    <View style={styles.card} accessibilityLabel={`Live chat for session ${sessionId}`}>
+    <View
+      style={[styles.card, prominent && styles.cardProminent]}
+      accessibilityLabel={`Live chat for session ${sessionId}`}
+    >
       <View style={styles.headerRow}>
-        <Text style={styles.headerTitle}>Live chat</Text>
+        <Text style={styles.headerTitle}>
+          Live chat{prominent ? ' · NOW PLAYING' : ''}
+        </Text>
         <View style={styles.headerRight}>
           {participantCount !== undefined ? (
             <View style={styles.countWrap}>
@@ -82,6 +95,11 @@ export function ChatPreviewCard({
           </Text>
         </View>
       </Pressable>
+      {prominent ? (
+        <Pressable style={styles.openButton} onPress={handlePress} accessibilityRole="button">
+          <Text style={styles.openButtonText}>Open live chat</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -92,6 +110,18 @@ const styles = StyleSheet.create({
     borderRadius: nativeApp.chatCard.radius,
     padding: nativeApp.chatCard.padding,
   },
+  cardProminent: {
+    borderWidth: 2,
+    borderColor: lightColors.accent,
+  },
+  openButton: {
+    marginTop: spacing.md,
+    backgroundColor: lightColors.subscribeBackground,
+    borderRadius: radii.pill,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  openButtonText: { ...typography.chip, color: lightColors.subscribeText },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',

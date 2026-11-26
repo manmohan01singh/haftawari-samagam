@@ -22,9 +22,35 @@ const INSTALL_DISMISSED_KEY = 'haftawari:install-dismissed';
  *    dismissed it before (localStorage). Tapping replays the browser's
  *    own prompt — there is no fake install flow.
  */
+const IOS_DISMISSED_KEY = 'haftawari:ios-install-dismissed';
+const OFFLINE_TEXT = "You're offline — showing the app shell; samagams need internet.";
+
+/** iOS Safari has no beforeinstallprompt; installation there is the
+ * real Share → Add to Home Screen flow, so instructions are the only
+ * honest affordance. Detected by UA + not already standalone. */
+function isIosSafari(): boolean {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent;
+  const isIos = /iphone|ipad|ipod/i.test(ua) || (ua.includes('Macintosh') && 'ontouchend' in document);
+  const isSafari = /safari/i.test(ua) && !/crios|fxios|edgios/i.test(ua);
+  const standalone =
+    (navigator as unknown as { standalone?: boolean }).standalone === true ||
+    window.matchMedia?.('(display-mode: standalone)').matches;
+  return isIos && isSafari && !standalone;
+}
+
 export function PwaBanners() {
   const [updateReady, setUpdateReady] = useState(false);
   const [installReady, setInstallReady] = useState(false);
+  const [iosInstall, setIosInstall] = useState<boolean>(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return false;
+    try {
+      return isIosSafari() && window.localStorage.getItem(IOS_DISMISSED_KEY) !== '1';
+    } catch {
+      return isIosSafari();
+    }
+  });
+  const [offline, setOffline] = useState(false);
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
@@ -40,13 +66,31 @@ export function PwaBanners() {
     window.addEventListener(SW_UPDATE_EVENT, onUpdate);
     window.addEventListener(INSTALL_AVAILABLE_EVENT, onInstall);
     if (hasPwaInstallPrompt()) onInstall();
+    // Offline state (QA 103): a visible banner whenever the browser
+    // reports offline, clearing itself when connectivity returns.
+    const syncOnline = () => setOffline(!navigator.onLine);
+    syncOnline();
+    window.addEventListener('online', syncOnline);
+    window.addEventListener('offline', syncOnline);
     return () => {
       window.removeEventListener(SW_UPDATE_EVENT, onUpdate);
       window.removeEventListener(INSTALL_AVAILABLE_EVENT, onInstall);
+      window.removeEventListener('online', syncOnline);
+      window.removeEventListener('offline', syncOnline);
     };
   }, []);
 
   if (Platform.OS !== 'web') return null;
+
+  if (offline) {
+    return (
+      <View style={styles.wrap} pointerEvents="box-none">
+        <View style={[styles.banner, styles.offlineBanner]}>
+          <Text style={styles.text}>{OFFLINE_TEXT}</Text>
+        </View>
+      </View>
+    );
+  }
 
   if (updateReady) {
     return (
@@ -97,6 +141,32 @@ export function PwaBanners() {
     );
   }
 
+  if (iosInstall) {
+    return (
+      <View style={styles.wrap} pointerEvents="box-none">
+        <View style={styles.banner}>
+          <Text style={styles.text}>
+            Install Haftawari Samagam: tap Share, then “Add to Home Screen”.
+          </Text>
+          <Pressable
+            onPress={() => {
+              try {
+                window.localStorage.setItem(IOS_DISMISSED_KEY, '1');
+              } catch {
+                // Best-effort persistence only.
+              }
+              setIosInstall(false);
+            }}
+            accessibilityRole="button"
+            hitSlop={8}
+          >
+            <Text style={styles.dismiss}>Not now</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
   return null;
 }
 
@@ -126,6 +196,7 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   text: { ...typography.body, color: lightColors.subscribeText, flexShrink: 1 },
+  offlineBanner: { backgroundColor: lightColors.accent },
   primary: {
     backgroundColor: lightColors.surface,
     borderRadius: radii.pill,

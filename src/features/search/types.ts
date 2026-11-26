@@ -49,6 +49,13 @@ export interface SearchResults {
    * than pretending this is everything.
    */
   youtubeSkipped: boolean;
+  /**
+   * Real correction derived from known titles (local catalogue +
+   * cached channel titles + channel aliases) when the typed query
+   * fuzzy-matches a known word — e.g. "haftawri" → "haftawari".
+   * Null when no correction was derived. Never invented.
+   */
+  didYouMean: string | null;
 }
 
 export interface SearchOptions {

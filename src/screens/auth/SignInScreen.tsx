@@ -25,11 +25,24 @@ type Props = NativeStackScreenProps<RootStackParamList, 'SignIn'>;
 export function SignInScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetMessage, setResetMessage] = useState<string | null>(null);
+
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const formValid = emailValid && password.length > 0;
+  const invalidReason = !email.trim()
+    ? 'Enter your email and password to sign in.'
+    : !emailValid
+      ? 'That email address does not look complete — check for an @ and a domain.'
+      : !password
+        ? 'Enter your password to sign in.'
+        : null;
 
   const submit = async () => {
-    if (!supabase) return;
+    if (!supabase || !formValid) return;
     setBusy(true);
     setError(null);
     const { error: signInError } = await supabase.auth.signInWithPassword({
@@ -44,6 +57,32 @@ export function SignInScreen({ navigation }: Props) {
     navigation.goBack();
   };
 
+  // Real password reset via Supabase Auth (QA 105). The reset email
+  // links back to this app's web origin + base path when on web.
+  const forgotPassword = async () => {
+    if (!supabase) return;
+    if (!emailValid) {
+      setError('Enter your email address above first, then tap Forgot password again.');
+      return;
+    }
+    setResetBusy(true);
+    setError(null);
+    setResetMessage(null);
+    const redirectTo =
+      typeof window !== 'undefined' && window.location
+        ? `${window.location.origin}${window.location.pathname}`
+        : undefined;
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo,
+    });
+    setResetBusy(false);
+    if (resetError) {
+      setError(resetError.message);
+      return;
+    }
+    setResetMessage('Password reset email sent — check your email and follow the link to set a new password.');
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -52,6 +91,14 @@ export function SignInScreen({ navigation }: Props) {
       <View style={styles.topRow}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={10} accessibilityLabel="Back">
           <MaterialIcons name="arrow-back" size={24} color={lightColors.text} />
+        </Pressable>
+        <Pressable
+          onPress={() => navigation.navigate('MainTabs', { screen: 'Home' })}
+          hitSlop={10}
+          accessibilityLabel="Go to Home"
+          accessibilityRole="button"
+        >
+          <MaterialIcons name="home" size={24} color={lightColors.text} />
         </Pressable>
       </View>
       <View style={styles.brand}>
@@ -65,9 +112,10 @@ export function SignInScreen({ navigation }: Props) {
         <Text style={styles.error}>Sign-in is not available: the backend is not configured.</Text>
       ) : (
         <>
+          <Text style={styles.label}>Email</Text>
           <TextInput
             style={styles.input}
-            placeholder="Email"
+            placeholder="you@example.com"
             placeholderTextColor={lightColors.textSecondary}
             autoCapitalize="none"
             autoComplete="email"
@@ -75,28 +123,52 @@ export function SignInScreen({ navigation }: Props) {
             value={email}
             onChangeText={setEmail}
           />
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            placeholderTextColor={lightColors.textSecondary}
-            autoComplete="password"
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-          />
+          {email && !emailValid ? (
+            <Text style={styles.fieldError}>Enter a complete email address (with @ and a domain).</Text>
+          ) : null}
+          <Text style={styles.label}>Password</Text>
+          <View style={styles.passwordRow}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="Your password"
+              placeholderTextColor={lightColors.textSecondary}
+              autoComplete="password"
+              secureTextEntry={!showPassword}
+              value={password}
+              onChangeText={setPassword}
+            />
+            <Pressable
+              onPress={() => setShowPassword((v) => !v)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+            >
+              <MaterialIcons
+                name={showPassword ? 'visibility-off' : 'visibility'}
+                size={22}
+                color={lightColors.textSecondary}
+              />
+            </Pressable>
+          </View>
           {error ? <Text style={styles.error}>{error}</Text> : null}
+          {resetMessage ? <Text style={styles.success}>{resetMessage}</Text> : null}
+          <Pressable onPress={() => void forgotPassword()} disabled={resetBusy} accessibilityRole="button" style={styles.forgotRow}>
+            <Text style={styles.forgotText}>{resetBusy ? 'Sending reset email…' : 'Forgot password?'}</Text>
+          </Pressable>
           <Pressable
-            style={[styles.primaryButton, (busy || !email || !password) && styles.buttonDisabled]}
+            style={[styles.primaryButton, (busy || !formValid) && styles.buttonDisabled]}
             onPress={submit}
-            disabled={busy || !email || !password}
+            disabled={busy || !formValid}
             accessibilityRole="button"
           >
             {busy ? (
               <ActivityIndicator color={lightColors.subscribeText} />
             ) : (
-              <Text style={styles.primaryButtonText}>Sign in</Text>
+              <Text style={styles.primaryButtonText}>Sign In</Text>
             )}
           </Pressable>
+          {!formValid && invalidReason ? <Text style={styles.helper}>{invalidReason}</Text> : null}
+          {busy ? <Text style={styles.helper}>Signing you in…</Text> : null}
           <Pressable onPress={() => navigation.replace('SignUp')} style={styles.switchRow}>
             <Text style={styles.switchText}>
               New here? <Text style={styles.switchStrong}>Create an account</Text>
@@ -109,8 +181,8 @@ export function SignInScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: lightColors.background, paddingHorizontal: spacing.xl },
-  topRow: { paddingTop: spacing.xl, marginBottom: spacing.lg },
+  container: { flex: 1, backgroundColor: lightColors.background, paddingHorizontal: spacing.xl, width: '100%', maxWidth: 480, alignSelf: 'center' },
+  topRow: { paddingTop: spacing.xl, marginBottom: spacing.lg, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   brand: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xxl },
   playMark: {
     width: 34,
@@ -132,6 +204,21 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   error: { ...typography.body, color: lightColors.accent, marginBottom: spacing.md },
+  label: { ...typography.chip, color: lightColors.text, marginBottom: spacing.xs, marginTop: spacing.sm },
+  fieldError: { ...typography.metadata, color: lightColors.accent, marginBottom: spacing.sm },
+  success: { ...typography.body, color: lightColors.text, marginBottom: spacing.md },
+  helper: { ...typography.metadata, color: lightColors.textSecondary, textAlign: 'center', marginTop: spacing.sm },
+  forgotRow: { alignSelf: 'flex-end', paddingVertical: spacing.sm },
+  forgotText: { ...typography.chip, color: lightColors.text },
+  passwordRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: lightColors.surfaceVariant,
+    borderRadius: radii.card,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  passwordInput: { flex: 1, paddingVertical: 14, fontSize: 16, color: lightColors.text },
   primaryButton: {
     backgroundColor: lightColors.subscribeBackground,
     borderRadius: radii.pill,

@@ -22,16 +22,58 @@ function normalizeEntry(text: string): string {
   return text.trim().replace(/\s+/g, ' ');
 }
 
-/** Recent searches, most recent first. [] when none / on read failure. */
-export async function listSearchHistory(userId?: string | null): Promise<string[]> {
+export interface SearchHistoryEntry {
+  text: string;
+  /** Epoch ms when the search was submitted; null for legacy (v1) entries. */
+  searchedAt: number | null;
+}
+
+/**
+ * Recent searches with timestamps, most recent first.
+ * Storage is v2 ({ text, searchedAt }) but v1 plain-string entries
+ * written by earlier builds still parse (searchedAt = null) — existing
+ * users keep their history across the upgrade.
+ */
+export async function listSearchHistoryEntries(
+  userId?: string | null,
+): Promise<SearchHistoryEntry[]> {
   try {
     const raw = await AsyncStorage.getItem(storageKey(userId));
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((entry): entry is string => typeof entry === 'string');
+    const entries: SearchHistoryEntry[] = [];
+    for (const entry of parsed) {
+      if (typeof entry === 'string') {
+        entries.push({ text: entry, searchedAt: null });
+      } else if (
+        entry !== null &&
+        typeof entry === 'object' &&
+        typeof (entry as { text?: unknown }).text === 'string'
+      ) {
+        const ts = (entry as { searchedAt?: unknown }).searchedAt;
+        entries.push({
+          text: (entry as { text: string }).text,
+          searchedAt: typeof ts === 'number' ? ts : null,
+        });
+      }
+    }
+    return entries;
   } catch {
     return [];
+  }
+}
+
+/** Recent searches, most recent first. [] when none / on read failure. */
+export async function listSearchHistory(userId?: string | null): Promise<string[]> {
+  return (await listSearchHistoryEntries(userId)).map((entry) => entry.text);
+}
+
+async function writeEntries(userId: string | null | undefined, entries: SearchHistoryEntry[]): Promise<void> {
+  try {
+    await AsyncStorage.setItem(storageKey(userId), JSON.stringify(entries.slice(0, MAX_ENTRIES)));
+  } catch {
+    // Best-effort: history must never break a search.
   }
 }
 
@@ -39,31 +81,23 @@ export async function listSearchHistory(userId?: string | null): Promise<string[
 export async function addSearchHistory(text: string, userId?: string | null): Promise<string[]> {
   const entry = normalizeEntry(text);
   if (entry === '') return listSearchHistory(userId);
-  const existing = await listSearchHistory(userId);
-  const next = [
-    entry,
-    ...existing.filter((item) => item.toLowerCase() !== entry.toLowerCase()),
+  const existing = await listSearchHistoryEntries(userId);
+  const next: SearchHistoryEntry[] = [
+    { text: entry, searchedAt: Date.now() },
+    ...existing.filter((item) => item.text.toLowerCase() !== entry.toLowerCase()),
   ].slice(0, MAX_ENTRIES);
-  try {
-    await AsyncStorage.setItem(storageKey(userId), JSON.stringify(next));
-  } catch {
-    // Best-effort: history must never break a search.
-  }
-  return next;
+  await writeEntries(userId, next);
+  return next.map((item) => item.text);
 }
 
 /** Remove one entry (exact text, case-insensitive). */
 export async function removeSearchHistory(text: string, userId?: string | null): Promise<string[]> {
   const target = normalizeEntry(text).toLowerCase();
-  const next = (await listSearchHistory(userId)).filter(
-    (item) => item.toLowerCase() !== target,
+  const next = (await listSearchHistoryEntries(userId)).filter(
+    (item) => item.text.toLowerCase() !== target,
   );
-  try {
-    await AsyncStorage.setItem(storageKey(userId), JSON.stringify(next));
-  } catch {
-    // Best-effort, as above.
-  }
-  return next;
+  await writeEntries(userId, next);
+  return next.map((item) => item.text);
 }
 
 /** Clear the whole list ("Clear history" in the UI). */

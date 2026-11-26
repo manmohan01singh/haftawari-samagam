@@ -28,10 +28,12 @@ export {
   parseIso8601Duration,
   searchChannelVideos,
 } from './youtubeSearch';
-export { searchAll, createSearchController, queryKey, type SearchController } from './engine';
+export { searchAll, createSearchController, queryKey, deriveCorrection, type SearchController } from './engine';
 export { getSuggestions } from './suggestions';
 export {
   listSearchHistory,
+  listSearchHistoryEntries,
+  type SearchHistoryEntry,
   addSearchHistory,
   removeSearchHistory,
   clearSearchHistory,

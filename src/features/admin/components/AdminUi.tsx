@@ -280,7 +280,7 @@ export const adminStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: lightColors.background },
+  screen: { flex: 1, backgroundColor: lightColors.background, width: '100%', maxWidth: 960, alignSelf: 'center' },
   screenContent: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxl },
   centered: {
     flex: 1,
