@@ -1,0 +1,104 @@
+import React, {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+} from 'react';
+import { StyleSheet, View } from 'react-native';
+import { layout, lightColors } from '../../../theme';
+import type { YouTubeEmbedHandle } from './YouTubeEmbed';
+
+export type { YouTubeEmbedHandle };
+
+interface YouTubeEmbedProps {
+  youtubeVideoId: string;
+  startSeconds: number;
+  autoplay?: boolean;
+  onTimeUpdate?: (seconds: number) => void;
+  onReady?: () => void;
+}
+
+// react-native-web has no WebView; on web the official embed is a plain
+// iframe. It is rendered with YouTube's DEFAULT controls and branding —
+// nothing hidden or re-skinned. Sync uses the documented IFrame API
+// postMessage protocol (enablejsapi=1): 'listening' handshake,
+// infoDelivery currentTime reports, seekTo/playVideo/pauseVideo commands.
+const Iframe = 'iframe' as unknown as React.ElementType;
+
+export const YouTubeEmbed = forwardRef<YouTubeEmbedHandle, YouTubeEmbedProps>(
+  function YouTubeEmbed(
+    { youtubeVideoId, startSeconds, autoplay = false, onTimeUpdate, onReady },
+    ref,
+  ) {
+    const frameRef = useRef<{ contentWindow: Window | null } | null>(null);
+    const callbacks = useRef({ onTimeUpdate, onReady });
+    callbacks.current = { onTimeUpdate, onReady };
+
+    const command = (func: string, args: unknown[] = []) => {
+      frameRef.current?.contentWindow?.postMessage(
+        JSON.stringify({ event: 'command', func, args }),
+        '*',
+      );
+    };
+
+    useImperativeHandle(ref, () => ({
+      seekTo: (seconds: number) => command('seekTo', [Math.max(0, Math.floor(seconds)), true]),
+      play: () => command('playVideo'),
+      pause: () => command('pauseVideo'),
+    }));
+
+    useEffect(() => {
+      const onMessage = (event: MessageEvent) => {
+        if (typeof event.data !== 'string') return;
+        let parsed: { event?: string; info?: { currentTime?: number } };
+        try {
+          parsed = JSON.parse(event.data) as typeof parsed;
+        } catch {
+          return;
+        }
+        if (parsed.event === 'onReady') callbacks.current.onReady?.();
+        if (
+          parsed.event === 'infoDelivery' &&
+          parsed.info &&
+          typeof parsed.info.currentTime === 'number'
+        ) {
+          callbacks.current.onTimeUpdate?.(parsed.info.currentTime);
+        }
+      };
+      window.addEventListener('message', onMessage);
+      return () => window.removeEventListener('message', onMessage);
+    }, []);
+
+    const src =
+      `https://www.youtube.com/embed/${encodeURIComponent(youtubeVideoId)}` +
+      `?start=${Math.max(0, Math.floor(startSeconds))}` +
+      `&autoplay=${autoplay ? 1 : 0}&rel=0&enablejsapi=1&playsinline=1`;
+
+    return (
+      <View style={styles.wrap}>
+        <Iframe
+          ref={frameRef}
+          src={src}
+          title="YouTube video player"
+          style={{ width: '100%', height: '100%', border: 0 }}
+          allow="accelerometer; autoplay; encrypted-media; picture-in-picture; fullscreen"
+          allowFullScreen
+          onLoad={() => {
+            frameRef.current?.contentWindow?.postMessage(
+              JSON.stringify({ event: 'listening', id: 'session-player' }),
+              '*',
+            );
+          }}
+        />
+      </View>
+    );
+  },
+);
+
+const styles = StyleSheet.create({
+  wrap: {
+    width: '100%',
+    aspectRatio: layout.thumbnailAspectRatio,
+    backgroundColor: lightColors.playerBackground,
+  },
+});
