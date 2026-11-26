@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover" />
+    <title>Haftawari Samagam</title>
+    <meta name="theme-color" content="#FFFFFF" />
+    <meta name="description" content="Haftawari and Amritvela kirtan samagams, scheduled and shared." />
+    <!-- PWA manifest (public/manifest.webmanifest) + install icons.
+         Relative hrefs: the web build is served under a base path
+         (experiments.baseUrl, e.g. GitHub Pages /haftawari-samagam/),
+         so root-absolute paths would 404. -->
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="icon-192.png" />
+    <!-- Warm up the connections the first screen needs (QA perf pass):
+         the backend (feed data), the YouTube API (channel data) and
+         the thumbnail CDN. DNS + TLS for these complete while the JS
+         bundle downloads/parses instead of serially afterwards. -->
+    <link rel="preconnect" href="https://umbdfrjxcxootvshxveg.supabase.co" />
+    <link rel="preconnect" href="https://www.googleapis.com" />
+    <link rel="preconnect" href="https://i.ytimg.com" />
+    <link rel="preconnect" href="https://www.youtube.com" />
+    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <style id="expo-reset">
+      /* These styles make the body full-height */
+      html,
+      body {
+        height: 100%;
+      }
+      /* These styles disable body scrolling if you are using <ScrollView> */
+      body {
+        overflow: hidden;
+        /* App background from the first paint — no grey/white flash
+           while the bundle loads (QA issue 1). */
+        background-color: #ffffff;
+      }
+      /* These styles make the root element full-height */
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+      /* Tap reliability (PWA): `manipulation` removes the double-tap-zoom
+         gesture (and its tap delay / swallowed first taps) on mobile
+         browsers for every element that is not a scroll surface, and the
+         transparent highlight removes the grey flash that made taps feel
+         unregistered. Scroll containers keep their native panning:
+         react-native-web sets its own touch-action on them. */
+      html,
+      body {
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+      }
+      [role='button'],
+      a,
+      button,
+      input,
+      textarea {
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+      }
+    </style>
+    <style id="app-splash">
+      /* Static first-paint shell (QA issues 1/2/4): shown by the
+         browser BEFORE any JavaScript runs, so a cold load is never a
+         blank grey page. React replaces #root's contents on mount.
+         Pure CSS — no images, no JS, ~0 cost. Colours mirror the app
+         theme (white surface, #f2f2f2 skeleton, red play mark). */
+      .app-splash {
+        position: absolute;
+        inset: 0;
+        background-color: #ffffff;
+        font-family: -apple-system, Roboto, 'Segoe UI', sans-serif;
+        color: #0f0f0f;
+        display: flex;
+        flex-direction: column;
+      }
+      .app-splash-bar {
+        height: 56px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 16px;
+      }
+      .app-splash-mark {
+        width: 30px;
+        height: 21px;
+        border-radius: 6px;
+        background-color: #ff0000;
+        position: relative;
+        flex: none;
+      }
+      .app-splash-mark::after {
+        content: '';
+        position: absolute;
+        left: 11px;
+        top: 5px;
+        border-left: 9px solid #ffffff;
+        border-top: 5.5px solid transparent;
+        border-bottom: 5.5px solid transparent;
+      }
+      .app-splash-name {
+        font-size: 19px;
+        font-weight: 700;
+        letter-spacing: -0.3px;
+      }
+      .app-splash-card {
+        padding-bottom: 16px;
+      }
+      .app-splash-thumb {
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        background-color: #f2f2f2;
+      }
+      .app-splash-lines {
+        padding: 12px 16px 0;
+      }
+      .app-splash-line {
+        height: 17px;
+        border-radius: 4px;
+        background-color: #f2f2f2;
+        margin-bottom: 6px;
+      }
+      .app-splash-status {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 4px 16px 14px;
+        color: #606060;
+        font-size: 14px;
+      }
+      .app-splash-spinner {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        border: 3px solid #e5e5e5;
+        border-top-color: #606060;
+        animation: app-splash-spin 0.9s linear infinite;
+        flex: none;
+      }
+      @keyframes app-splash-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  <meta name="theme-color" content="#FFFFFF">
+<meta name="description" content="Haftawari and Amritvela kirtan samagams, scheduled and shared.">
+<link rel="icon" href="/haftawari-samagam/favicon.ico"/></head>
+
+  <body>
+    <!-- Use static rendering with Expo Router to support running without JavaScript. -->
+    <noscript>
+      Haftawari Samagam needs JavaScript to run. Please enable JavaScript in your browser and
+      reload this page.
+    </noscript>
+    <!-- The root element for your Expo app. Its static splash content
+         (below) is replaced by React on mount. -->
+    <div id="root">
+      <div class="app-splash" aria-hidden="true">
+        <div class="app-splash-bar">
+          <div class="app-splash-mark"></div>
+          <div class="app-splash-name">Haftawari Samagam</div>
+        </div>
+        <div class="app-splash-status">
+          <div class="app-splash-spinner"></div>
+          <div>Loading samagams…</div>
+        </div>
+        <div class="app-splash-card">
+          <div class="app-splash-thumb"></div>
+          <div class="app-splash-lines">
+            <div class="app-splash-line" style="width: 92%"></div>
+            <div class="app-splash-line" style="width: 64%"></div>
+          </div>
+        </div>
+        <div class="app-splash-card">
+          <div class="app-splash-thumb"></div>
+          <div class="app-splash-lines">
+            <div class="app-splash-line" style="width: 85%"></div>
+            <div class="app-splash-line" style="width: 55%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  <script src="/haftawari-samagam/_expo/static/js/web/index-a362feee7c72cb4adb6ad8070f633f28.js" defer></script>
+</body>
+</html>
