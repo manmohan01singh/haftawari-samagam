@@ -13,7 +13,6 @@ import {
 import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { EmptyState } from '../../components/common/EmptyState';
 import { goBackOrTab } from '../../navigation/safeBack';
 import { StackTabBar } from '../../components/layout/StackTabBar';
@@ -22,7 +21,7 @@ import { Toast, useToast } from '../../components/common/Toast';
 import { shareContent, shareFeedback } from '../../lib/share';
 import { ShelfCard } from '../../components/video/ShelfCard';
 import { SkeletonCard } from '../../components/video/SkeletonCard';
-import { useOfficialChannel } from '../../features/channel';
+import { useChannelFollow, useOfficialChannel } from '../../features/channel';
 import { formatCount } from '../../lib/format';
 import {
   OFFICIAL_CHANNEL_ID,
@@ -34,7 +33,7 @@ import {
   type YouTubeVideoMetadata,
 } from '../../lib/youtube';
 import { apiCardData as baseApiCardData, formatDateLine } from '../../components/video/cardData';
-import { lightColors, radii, spacing } from '../../theme';
+import { lightColors, nativeApp, radii, spacing } from '../../theme';
 import type { RootStackParamList } from '../../navigation/types';
 import { FEED_LIST_PERF } from '../../lib/listPerf';
 
@@ -71,30 +70,12 @@ export function ChannelScreen({ route, navigation }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [descExpanded, setDescExpanded] = useState(false);
   // QA33: there is NO subscriptions backend table, so Subscribe here is
-  // an honest DEVICE-LOCAL follow: it persists in AsyncStorage on this
-  // device only (labelled as such under the button) and drives nothing
-  // fake — no counts change, no bell, no notifications are promised.
-  const [following, setFollowing] = useState(false);
+  // an honest DEVICE-LOCAL follow, via the SAME shared hook (and the
+  // same AsyncStorage key) the Search channel block uses, so both
+  // surfaces always agree. It drives nothing fake — no counts change,
+  // and it is labelled as device-local under the pill row.
+  const { following, toggleFollow } = useChannelFollow(channelId);
   const { toast, showToast } = useToast();
-  const followKey = `channel-follow:${channelId}`;
-  useEffect(() => {
-    let active = true;
-    AsyncStorage.getItem(followKey)
-      .then((value) => {
-        if (active) setFollowing(value === '1');
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, [followKey]);
-  const toggleFollow = useCallback(() => {
-    setFollowing((prev) => {
-      const next = !prev;
-      void AsyncStorage.setItem(followKey, next ? '1' : '0').catch(() => undefined);
-      return next;
-    });
-  }, [followKey]);
   const shareVideo = useCallback(
     (title: string, youtubeVideoId: string) => {
       void shareContent(title, `https://www.youtube.com/watch?v=${youtubeVideoId}`).then((outcome) => {
@@ -223,9 +204,16 @@ export function ChannelScreen({ route, navigation }: Props) {
           </View>
         )}
         <View style={styles.identityLines}>
-          <Text style={styles.name}>{channel.title}</Text>
+          <View style={styles.nameRow}>
+            <Text style={styles.name}>{channel.title}</Text>
+            {/* Same rule as the Search channel block: the badge belongs
+                to the official channel's verified-music record only. */}
+            {isOfficial ? (
+              <MaterialIcons name="verified" size={16} color={lightColors.textSecondary} style={styles.verifiedBadge} />
+            ) : null}
+          </View>
           {channel.handle ? <Text style={styles.handleLine}>{channel.handle}</Text> : null}
-          <Text style={styles.metaLine}>
+          <Text style={styles.metaLine} numberOfLines={1}>
             {[
               channel.subscriberCount != null ? `${formatCount(channel.subscriberCount)} subscribers` : null,
               channel.videoCount != null ? `${formatCount(channel.videoCount)} videos` : null,
@@ -235,19 +223,40 @@ export function ChannelScreen({ route, navigation }: Props) {
           </Text>
         </View>
       </View>
+      {/* Ref-3 two-pill row, ≈48% each, 44dp tall: LEFT the honest
+          device-local follow pill (dark "Subscribe" → grey "Subscribed"
+          with bell + chevron, exactly the reference's subscribed
+          state); RIGHT an outline pill with a real action — on the
+          Channel screen itself "View Channel" would be a no-op, so the
+          pill opens this channel on YouTube. */}
       <View style={styles.identityActions}>
         <Pressable
           style={[styles.subscribePill, following && styles.subscribePillActive]}
           onPress={toggleFollow}
           accessibilityRole="button"
           accessibilityState={{ selected: following }}
+          accessibilityLabel={following ? 'Subscribed on this device' : 'Subscribe on this device'}
         >
-          <Text style={[styles.subscribeText, following && styles.subscribeTextActive]}>
-            {following ? 'Subscribed' : 'Subscribe'}
-          </Text>
+          {following ? (
+            <>
+              <MaterialIcons name="notifications" size={20} color={lightColors.text} />
+              <Text style={[styles.subscribeText, styles.subscribeTextActive]}>Subscribed</Text>
+              <MaterialIcons name="expand-more" size={18} color={lightColors.text} />
+            </>
+          ) : (
+            <Text style={styles.subscribeText}>Subscribe</Text>
+          )}
         </Pressable>
-        <Text style={styles.followNote}>Saved on this device only</Text>
+        <Pressable
+          style={styles.youtubePill}
+          onPress={() => void Linking.openURL(`https://www.youtube.com/channel/${channelId}`)}
+          accessibilityRole="button"
+          accessibilityLabel="Open in YouTube"
+        >
+          <Text style={styles.youtubePillText}>Open in YouTube</Text>
+        </Pressable>
       </View>
+      <Text style={styles.followNote}>Follow is saved on this device only</Text>
         {channel.description ? (
           <View style={styles.descriptionWrap}>
             <LinkedText
@@ -301,11 +310,23 @@ export function ChannelScreen({ route, navigation }: Props) {
           </Pressable>
         </View>
         <View style={styles.listPad}>
-          <View style={styles.loadingRow}>
-            <ActivityIndicator color={lightColors.text} />
-            <Text style={styles.loadingLabel}>Loading channel…</Text>
+          {/* Header-shaped skeleton (banner strip at the served crop's
+              aspect, 88dp avatar, name/handle/count lines, pill row) —
+              the screen never shows a grey blank or a lone spinner
+              while the channel loads. */}
+          <View style={styles.skelBanner} />
+          <View style={styles.skelIdentity}>
+            <View style={styles.skelAvatar} />
+            <View style={styles.skelLines}>
+              <View style={[styles.skelBar, { width: '85%' }]} />
+              <View style={[styles.skelBar, { width: '55%' }]} />
+              <View style={[styles.skelBar, { width: '70%' }]} />
+            </View>
           </View>
-          <SkeletonCard variant="shelf" />
+          <View style={styles.skelPills}>
+            <View style={styles.skelPill} />
+            <View style={styles.skelPill} />
+          </View>
           <SkeletonCard variant="shelf" />
           <SkeletonCard variant="shelf" />
         </View>
@@ -453,41 +474,56 @@ const styles = StyleSheet.create({
   topBarTitle: { flex: 1, fontSize: 17, fontWeight: '600', color: lightColors.text },
   banner: {
     // Full-bleed: escape the list's horizontal padding (same trick
-    // as topBar) and use the mobile banner's own 1546x423 aspect, so
-    // the banner art fills the strip edge-to-edge with no letterbox
-    // bands and no rounded-corner crop.
+    // as topBar), NO radius, and the aspect of the crop the API URL
+    // actually serves — verified live 2026-11-26: bannerDisplayUrl's
+    // fcrop URL returns 1546x256 (aspect 6.04), containing only the
+    // artwork band. The previous 1546/423 container was taller than
+    // the served image, so cover-fit scaled the art up and cropped
+    // its sides; at 1546/256 the strip shows the whole band
+    // edge-to-edge with no letterbox and no crop.
     marginHorizontal: -spacing.lg,
-    aspectRatio: 1546 / 423,
+    aspectRatio: 1546 / 256,
     backgroundColor: lightColors.surfaceVariant,
   },
   identity: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: spacing.lg,
     paddingTop: spacing.lg,
   },
   identityLines: { flex: 1 },
-  identityActions: { marginTop: spacing.lg },
-  avatar: { width: 72, height: 72, borderRadius: 36 },
+  nameRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  verifiedBadge: { marginLeft: spacing.xs, marginTop: 5, flexShrink: 0 },
+  identityActions: {
+    flexDirection: 'row',
+    gap: nativeApp.searchChannel.buttonGap,
+    marginTop: spacing.lg,
+  },
+  avatar: {
+    width: nativeApp.searchChannel.avatarSize, // 88 — ref-3 channel block
+    height: nativeApp.searchChannel.avatarSize,
+    borderRadius: nativeApp.searchChannel.avatarSize / 2,
+  },
   avatarFallback: {
     backgroundColor: lightColors.surfaceVariant,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarInitial: { fontSize: 24, fontWeight: '600', color: lightColors.textSecondary },
+  avatarInitial: { fontSize: 30, fontWeight: '600', color: lightColors.textSecondary },
   name: {
-    fontSize: 20,
+    fontSize: nativeApp.searchChannel.nameFontSize, // 20
     lineHeight: 25,
-    fontWeight: '600',
+    fontWeight: '700',
     color: lightColors.text,
+    flexShrink: 1,
   },
   handleLine: {
     fontSize: 14,
     color: lightColors.textSecondary,
-    marginTop: 2,
+    marginTop: 3,
   },
   metaLine: {
-    fontSize: 13,
+    fontSize: 14,
     color: lightColors.textSecondary,
     marginTop: 2,
   },
@@ -502,18 +538,52 @@ const styles = StyleSheet.create({
   descriptionWrap: { marginTop: spacing.md },
   moreText: { fontSize: 14, fontWeight: '600', color: lightColors.text, marginTop: spacing.xs },
   subscribePill: {
-    alignSelf: 'stretch',
+    flex: 1,
+    height: nativeApp.searchChannel.buttonHeight, // 44
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
     backgroundColor: lightColors.subscribeBackground,
     borderRadius: radii.pill,
-    paddingHorizontal: spacing.xl,
-    minHeight: 44,
-    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
   },
   subscribePillActive: { backgroundColor: lightColors.surfaceVariant },
   subscribeText: { fontSize: 15, fontWeight: '600', color: lightColors.subscribeText },
   subscribeTextActive: { color: lightColors.text },
-  followNote: { fontSize: 12, color: lightColors.textSecondary, marginTop: spacing.xs },
+  youtubePill: {
+    flex: 1,
+    height: nativeApp.searchChannel.buttonHeight, // 44
+    borderWidth: 1,
+    borderColor: lightColors.border,
+    borderRadius: radii.pill,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+  },
+  youtubePillText: { fontSize: 15, fontWeight: '600', color: lightColors.text },
+  followNote: { fontSize: 11, color: lightColors.textSecondary, marginTop: 6 },
+  skelBanner: {
+    marginHorizontal: -spacing.lg,
+    aspectRatio: 1546 / 256,
+    backgroundColor: lightColors.surfaceVariant,
+  },
+  skelIdentity: { flexDirection: 'row', gap: spacing.lg, paddingTop: spacing.lg },
+  skelAvatar: {
+    width: nativeApp.searchChannel.avatarSize,
+    height: nativeApp.searchChannel.avatarSize,
+    borderRadius: nativeApp.searchChannel.avatarSize / 2,
+    backgroundColor: lightColors.surfaceVariant,
+  },
+  skelLines: { flex: 1, justifyContent: 'center', gap: spacing.sm },
+  skelBar: { height: 14, borderRadius: 7, backgroundColor: lightColors.surfaceVariant },
+  skelPills: { flexDirection: 'row', gap: nativeApp.searchChannel.buttonGap, marginTop: spacing.lg, marginBottom: spacing.xl },
+  skelPill: {
+    flex: 1,
+    height: nativeApp.searchChannel.buttonHeight,
+    borderRadius: radii.pill,
+    backgroundColor: lightColors.surfaceVariant,
+  },
   tabs: {
     flexDirection: 'row',
     gap: spacing.xl,
@@ -526,8 +596,6 @@ const styles = StyleSheet.create({
   tabLabel: { fontSize: 15, fontWeight: '500', color: lightColors.textSecondary },
   tabLabelActive: { color: lightColors.text, fontWeight: '600' },
   footerSpinner: { paddingVertical: spacing.lg },
-  loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 16 },
-  loadingLabel: { fontSize: 15, color: lightColors.textSecondary },
   stateTopBar: {
     height: 52,
     flexDirection: 'row',
