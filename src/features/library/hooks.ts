@@ -35,6 +35,7 @@ export function useCurrentUser(): { user: User | null; loading: boolean } {
       setLoading(false);
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
       setUser(session?.user ?? null);
       setLoading(false);
     });

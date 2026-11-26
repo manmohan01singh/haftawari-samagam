@@ -15,6 +15,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { branding } from '../../config/branding';
 import { goBackOrTab } from '../../navigation/safeBack';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
+import { authRedirectUrl, friendlyAuthError } from '../../features/auth/authHelpers';
 import { lightColors, radii, spacing, typography } from '../../theme';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -37,6 +38,7 @@ export function SignUpScreen({ navigation }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsConfirmation, setNeedsConfirmation] = useState(false);
+  const [alreadyRegistered, setAlreadyRegistered] = useState(false);
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   // Supabase Auth's enforced minimum for this project is 6 characters;
@@ -55,20 +57,48 @@ export function SignUpScreen({ navigation }: Props) {
     if (!supabase || !formValid) return;
     setBusy(true);
     setError(null);
-    const { data, error: signUpError } = await supabase.auth.signUp({
-      email: email.trim(),
-      password,
-      options: { data: { display_name: displayName.trim() || undefined } },
-    });
-    setBusy(false);
-    if (signUpError) {
-      setError(signUpError.message);
-      return;
-    }
-    if (data.session) {
-      goBackOrTab(navigation, 'Library');
-    } else {
-      setNeedsConfirmation(true);
+    setAlreadyRegistered(false);
+    try {
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email: email.trim().toLowerCase(),
+        password,
+        options: {
+          data: { display_name: displayName.trim() || undefined },
+          // THE redirect fix: previously NO emailRedirectTo was
+          // passed, so confirmation links fell back to whatever the
+          // dashboard Site URL happened to be (the project default /
+          // a dev URL) and dead-ended away from the live PWA. The
+          // link now returns to the PWA root itself, where
+          // detectSessionInUrl picks the session up.
+          emailRedirectTo: authRedirectUrl(),
+        },
+      });
+      if (signUpError) {
+        const friendly = friendlyAuthError(signUpError);
+        setError(friendly.message);
+        if (friendly.kind === 'already_registered') setAlreadyRegistered(true);
+        return;
+      }
+      // Obfuscated duplicate: with confirmation required, Supabase
+      // answers a repeat sign-up as if it succeeded but returns a
+      // user with NO identities. Detect it and say so honestly
+      // instead of promising a confirmation email that never comes.
+      if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+        setAlreadyRegistered(true);
+        setError(
+          'An account with this email already exists. Try signing in — or reset your password if you have forgotten it.',
+        );
+        return;
+      }
+      if (data.session) {
+        goBackOrTab(navigation, 'Library');
+      } else {
+        setNeedsConfirmation(true);
+      }
+    } catch (e) {
+      setError(friendlyAuthError(e).message);
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -103,7 +133,9 @@ export function SignUpScreen({ navigation }: Props) {
       ) : needsConfirmation ? (
         <View>
           <Text style={styles.confirmText}>
-            Account created. Please check your email and open the confirmation link, then sign in.
+            Almost done — a confirmation email is on its way to {email.trim().toLowerCase()}. Tap the
+            link in that email: it brings you back to this app and signs you in. If it does not arrive
+            in a few minutes, check your spam folder.
           </Text>
           <Pressable style={styles.primaryButton} onPress={() => navigation.replace('SignIn')}>
             <Text style={styles.primaryButtonText}>Go to Sign In</Text>
@@ -140,6 +172,8 @@ export function SignUpScreen({ navigation }: Props) {
               style={styles.passwordInput}
               placeholder="At least 6 characters"
               placeholderTextColor={lightColors.textSecondary}
+              autoCapitalize="none"
+              autoCorrect={false}
               autoComplete="new-password"
               secureTextEntry={!showPassword}
               value={password}
@@ -163,18 +197,24 @@ export function SignUpScreen({ navigation }: Props) {
             <Text style={styles.fieldError}>Password is too short — at least 6 characters are required.</Text>
           ) : null}
           {error ? <Text style={styles.error}>{error}</Text> : null}
-          <Pressable
-            style={[styles.primaryButton, (busy || !formValid) && styles.buttonDisabled]}
-            onPress={submit}
-            disabled={busy || !formValid}
-            accessibilityRole="button"
-          >
-            {busy ? (
-              <ActivityIndicator color={lightColors.subscribeText} />
-            ) : (
-              <Text style={styles.primaryButtonText}>Sign Up</Text>
-            )}
-          </Pressable>
+          {alreadyRegistered ? (
+            <Pressable style={styles.primaryButton} onPress={() => navigation.replace('SignIn')}>
+              <Text style={styles.primaryButtonText}>Go to Sign In</Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              style={[styles.primaryButton, (busy || !formValid) && styles.buttonDisabled]}
+              onPress={submit}
+              disabled={busy || !formValid}
+              accessibilityRole="button"
+            >
+              {busy ? (
+                <ActivityIndicator color={lightColors.subscribeText} />
+              ) : (
+                <Text style={styles.primaryButtonText}>Sign Up</Text>
+              )}
+            </Pressable>
+          )}
           {!formValid && invalidReason ? <Text style={styles.helper}>{invalidReason}</Text> : null}
           <Pressable onPress={() => navigation.replace('SignIn')} style={styles.switchRow}>
             <Text style={styles.switchText}>

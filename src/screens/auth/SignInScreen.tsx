@@ -15,23 +15,34 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { branding } from '../../config/branding';
 import { goBackOrTab } from '../../navigation/safeBack';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
+import { useAuth } from '../../features/auth/AuthContext';
+import { authRedirectUrl, friendlyAuthError, type AuthErrorKind } from '../../features/auth/authHelpers';
 import { lightColors, radii, spacing, typography } from '../../theme';
 import type { RootStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SignIn'>;
 
 /**
- * Email sign-in (Supabase Auth). Errors are shown exactly as Supabase
- * returns them — no invented messages, no fake success states.
+ * Email sign-in (Supabase Auth). Failures are mapped to clear human
+ * messages on the form (wrong credentials vs unconfirmed email vs
+ * network vs rate limit) — previously the raw GoTrue string was shown
+ * verbatim and an unconfirmed-email failure offered no way forward,
+ * so every failure read as "login doesn't work".
  */
 export function SignInScreen({ navigation }: Props) {
+  // Set when the user landed here from a FAILED email link (expired /
+  // already used) — explains why they are signed out.
+  const { linkError } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorKind, setErrorKind] = useState<AuthErrorKind | null>(null);
   const [resetBusy, setResetBusy] = useState(false);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
+  const [resendBusy, setResendBusy] = useState(false);
+  const [resendMessage, setResendMessage] = useState<string | null>(null);
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const formValid = emailValid && password.length > 0;
@@ -47,42 +58,95 @@ export function SignInScreen({ navigation }: Props) {
     if (!supabase || !formValid) return;
     setBusy(true);
     setError(null);
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
-    setBusy(false);
-    if (signInError) {
-      setError(signInError.message);
+    setErrorKind(null);
+    setResendMessage(null);
+    try {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        // Email is an identifier: trim stray spaces and normalise
+        // case. The password is passed EXACTLY as typed — never
+        // trimmed (spaces can be part of a password).
+        email: email.trim().toLowerCase(),
+        password,
+      });
+      if (signInError) {
+        const friendly = friendlyAuthError(signInError);
+        setError(friendly.message);
+        setErrorKind(friendly.kind);
+        return;
+      }
+    } catch (e) {
+      const friendly = friendlyAuthError(e);
+      setError(friendly.message);
+      setErrorKind(friendly.kind);
       return;
+    } finally {
+      setBusy(false);
     }
     goBackOrTab(navigation, 'Library');
   };
 
+  // Resend the sign-up confirmation email (shown when sign-in fails
+  // with "email not confirmed"). Same redirect target as sign-up.
+  const resendConfirmation = async () => {
+    if (!supabase || !emailValid) return;
+    setResendBusy(true);
+    setResendMessage(null);
+    try {
+      const { error: resendError } = await supabase.auth.resend({
+        type: 'signup',
+        email: email.trim().toLowerCase(),
+        options: { emailRedirectTo: authRedirectUrl() },
+      });
+      if (resendError) {
+        setResendMessage(friendlyAuthError(resendError).message);
+        return;
+      }
+      setResendMessage('Confirmation email sent again — check your inbox and tap its link, then sign in.');
+    } catch (e) {
+      setResendMessage(friendlyAuthError(e).message);
+    } finally {
+      setResendBusy(false);
+    }
+  };
+
   // Real password reset via Supabase Auth (QA 105). The reset email
-  // links back to this app's web origin + base path when on web.
+  // must link back to the PWA root itself (authRedirectUrl) — the old
+  // code used origin + the CURRENT pathname, so tapping "Forgot
+  // password?" from the /sign-in route produced a redirect target of
+  // …/haftawari-samagam/sign-in, a path GitHub Pages cannot serve on
+  // direct load (404) and which is not the allow-listed URL.
   const forgotPassword = async () => {
     if (!supabase) return;
     if (!emailValid) {
       setError('Enter your email address above first, then tap Forgot password again.');
+      setErrorKind(null);
       return;
     }
     setResetBusy(true);
     setError(null);
+    setErrorKind(null);
     setResetMessage(null);
-    const redirectTo =
-      typeof window !== 'undefined' && window.location
-        ? `${window.location.origin}${window.location.pathname}`
-        : undefined;
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo,
-    });
-    setResetBusy(false);
-    if (resetError) {
-      setError(resetError.message);
-      return;
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(
+        email.trim().toLowerCase(),
+        { redirectTo: authRedirectUrl() },
+      );
+      if (resetError) {
+        const friendly = friendlyAuthError(resetError);
+        setError(friendly.message);
+        setErrorKind(friendly.kind);
+        return;
+      }
+      setResetMessage(
+        'Password reset email sent — check your email and tap the link. It brings you back here to set a new password.',
+      );
+    } catch (e) {
+      const friendly = friendlyAuthError(e);
+      setError(friendly.message);
+      setErrorKind(friendly.kind);
+    } finally {
+      setResetBusy(false);
     }
-    setResetMessage('Password reset email sent — check your email and follow the link to set a new password.');
   };
 
   return (
@@ -135,6 +199,8 @@ export function SignInScreen({ navigation }: Props) {
               style={styles.passwordInput}
               placeholder="Your password"
               placeholderTextColor={lightColors.textSecondary}
+              autoCapitalize="none"
+              autoCorrect={false}
               autoComplete="password"
               secureTextEntry={!showPassword}
               value={password}
@@ -153,7 +219,21 @@ export function SignInScreen({ navigation }: Props) {
               />
             </Pressable>
           </View>
+          {linkError && !error ? <Text style={styles.error}>{linkError}</Text> : null}
           {error ? <Text style={styles.error}>{error}</Text> : null}
+          {errorKind === 'not_confirmed' ? (
+            <Pressable
+              onPress={() => void resendConfirmation()}
+              disabled={resendBusy}
+              accessibilityRole="button"
+              style={styles.resendRow}
+            >
+              <Text style={styles.forgotText}>
+                {resendBusy ? 'Sending confirmation email…' : 'Resend confirmation email'}
+              </Text>
+            </Pressable>
+          ) : null}
+          {resendMessage ? <Text style={styles.success}>{resendMessage}</Text> : null}
           {resetMessage ? <Text style={styles.success}>{resetMessage}</Text> : null}
           <Pressable onPress={() => void forgotPassword()} disabled={resetBusy} accessibilityRole="button" style={styles.forgotRow}>
             <Text style={styles.forgotText}>{resetBusy ? 'Sending reset email…' : 'Forgot password?'}</Text>
@@ -213,6 +293,7 @@ const styles = StyleSheet.create({
   success: { ...typography.body, color: lightColors.text, marginBottom: spacing.md },
   helper: { ...typography.metadata, color: lightColors.textSecondary, textAlign: 'center', marginTop: spacing.sm },
   forgotRow: { alignSelf: 'flex-end', paddingVertical: spacing.sm },
+  resendRow: { alignSelf: 'flex-start', paddingVertical: spacing.sm },
   forgotText: { ...typography.chip, color: lightColors.text },
   passwordRow: {
     flexDirection: 'row',
