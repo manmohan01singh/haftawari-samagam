@@ -55,7 +55,7 @@ export function SavedScreen({ navigation }: Props) {
         <VideoListRow
           video={item.video}
           metaLine={`Saved ${formatDateLine(item.entry.saved_at)}`}
-          onPress={(video) => navigation.navigate('Watch', { videoId: video.id })}
+          onPress={(video) => navigation.navigate('Watch', { videoRowId: video.id })}
           actionIcon="bookmark"
           actionLabel="Remove from saved"
           onAction={() => unsave(item)}

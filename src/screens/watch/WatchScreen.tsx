@@ -17,6 +17,7 @@ import { YouTubePlayer } from '../../components/video/YouTubePlayer';
 import { supabaseCardData, formatDateLine, type CardVideoData } from '../../components/video/cardData';
 import { useAuth } from '../../features/auth';
 import { useOfficialChannel } from '../../features/channel';
+import { AddToPlaylistSheet } from '../../features/library';
 import { formatCount } from '../../lib/format';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import {
@@ -82,6 +83,7 @@ export function WatchScreen({ route, navigation }: Props) {
   const [readyFor, setReadyFor] = useState<string | null>(null);
   const playerReady = resolved != null && readyFor === resolved.youtubeVideoId;
   const [savedState, setSavedState] = useState<{ rowId: string; saved: boolean } | null>(null);
+  const [playlistSheetOpen, setPlaylistSheetOpen] = useState(false);
   const saved =
     resolved?.row && savedState?.rowId === resolved.row.id ? savedState.saved : false;
   const historyRecordedFor = useRef<string | null>(null);
@@ -312,6 +314,15 @@ export function WatchScreen({ route, navigation }: Props) {
                   <MaterialIcons name={saved ? 'bookmark' : 'bookmark-border'} size={24} color={lightColors.text} />
                 </Pressable>
               ) : null}
+              {resolved.row && user ? (
+                <Pressable
+                  onPress={() => setPlaylistSheetOpen(true)}
+                  hitSlop={8}
+                  accessibilityLabel="Save to playlist"
+                >
+                  <MaterialIcons name="playlist-add" size={26} color={lightColors.text} />
+                </Pressable>
+              ) : null}
               <Pressable onPress={onShare} hitSlop={8} accessibilityLabel="Share">
                 <MaterialIcons name="share" size={23} color={lightColors.text} />
               </Pressable>
@@ -368,6 +379,14 @@ export function WatchScreen({ route, navigation }: Props) {
         removeClippedSubviews
         initialNumToRender={4}
         windowSize={7}
+      />
+      {/* "Save to playlist" sheet (library stream) — archive rows and
+          signed-in users only, matching the action button's gating. */}
+      <AddToPlaylistSheet
+        visible={playlistSheetOpen}
+        userId={user?.id ?? null}
+        videoId={resolved.row?.id ?? null}
+        onClose={() => setPlaylistSheetOpen(false)}
       />
     </View>
   );

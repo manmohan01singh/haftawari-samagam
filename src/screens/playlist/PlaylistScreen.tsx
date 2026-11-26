@@ -68,7 +68,7 @@ export function PlaylistScreen({ navigation, route }: Props) {
         <VideoListRow
           video={item.video}
           metaLine={`#${item.item.position + 1}`}
-          onPress={(video) => navigation.navigate('Watch', { videoId: video.id })}
+          onPress={(video) => navigation.navigate('Watch', { videoRowId: video.id })}
           actionIcon={isOwner ? 'close' : undefined}
           actionLabel="Remove from playlist"
           onAction={isOwner ? () => removeItem(item) : undefined}

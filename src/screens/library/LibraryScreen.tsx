@@ -66,7 +66,7 @@ export function LibraryScreen({ navigation }: Props) {
   }, [history, saved, summaries]);
 
   const openVideo = useCallback(
-    (videoId: string) => navigation.navigate('Watch', { videoId }),
+    (videoId: string) => navigation.navigate('Watch', { videoRowId: videoId }),
     [navigation],
   );
 

@@ -78,7 +78,7 @@ export function HistoryScreen({ navigation }: Props) {
           video={item.video}
           metaLine={`Watched ${formatDateLine(item.entry.watched_at)}`}
           resumePositionSeconds={item.entry.last_position_seconds}
-          onPress={(video) => navigation.navigate('Watch', { videoId: video.id })}
+          onPress={(video) => navigation.navigate('Watch', { videoRowId: video.id })}
           actionIcon="close"
           actionLabel="Remove from history"
           onAction={() => removeOne(item)}
