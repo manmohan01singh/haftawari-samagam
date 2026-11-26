@@ -17,6 +17,18 @@ interface YouTubePlayerProps {
  *
  * Mounted ONLY by the watch screen, and only after its parent defers
  * mounting until the navigation transition has settled (lazy load).
+ *
+ * Picture-in-Picture (Route 1, see docs/PIP.md):
+ * `allowsPictureInPictureMediaPlayback` enables the platform PiP
+ * capability of the WebView itself. On iOS this is real: it sets
+ * WKWebViewConfiguration.allowsPictureInPictureMediaPlayback, so a
+ * playing video may move into the system PiP window. On Android the
+ * prop is a no-op inside react-native-webview — Android PiP is an
+ * Activity capability, enabled by the local config plugin
+ * (plugins/withPictureInPicture.js). Whether the YouTube embed
+ * actually enters PiP is decided by the OS and YouTube's player,
+ * never by a custom button in this app, and background playback
+ * outside PiP still pauses per YouTube policy.
  */
 export function YouTubePlayer({ youtubeVideoId }: YouTubePlayerProps) {
   const embedUrl = `https://www.youtube.com/embed/${encodeURIComponent(youtubeVideoId)}?rel=0&playsinline=1`;
@@ -27,6 +39,7 @@ export function YouTubePlayer({ youtubeVideoId }: YouTubePlayerProps) {
         style={styles.webview}
         allowsFullscreenVideo
         allowsInlineMediaPlayback
+        allowsPictureInPictureMediaPlayback
         mediaPlaybackRequiresUserAction={false}
         javaScriptEnabled
         domStorageEnabled

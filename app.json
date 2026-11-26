@@ -33,7 +33,8 @@
       "themeColor": "#FFFFFF"
     },
     "plugins": [
-      "expo-image"
+      "expo-image",
+      "./plugins/withPictureInPicture.js"
     ]
   }
 }

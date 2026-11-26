@@ -38,6 +38,15 @@ interface YouTubeEmbedProps {
  * rules. Synchronization is achieved only through the documented
  * IFrame API: the `start` player variable for late joiners, and
  * `seekTo()` for drift correction / re-sync.
+ *
+ * Picture-in-Picture (Route 1, see docs/PIP.md):
+ * `allowsPictureInPictureMediaPlayback` enables the WebView's own PiP
+ * capability — real on iOS (WKWebViewConfiguration flag); on Android
+ * the prop is a no-op in react-native-webview and PiP is an Activity
+ * capability enabled by plugins/withPictureInPicture.js instead.
+ * Actual PiP entry is decided by the OS and YouTube's player; this
+ * app adds no PiP button, and playback outside PiP still pauses when
+ * the app is left, per YouTube policy.
  */
 export const YouTubeEmbed = forwardRef<YouTubeEmbedHandle, YouTubeEmbedProps>(
   function YouTubeEmbed(
@@ -81,6 +90,7 @@ export const YouTubeEmbed = forwardRef<YouTubeEmbedHandle, YouTubeEmbedProps>(
           javaScriptEnabled
           domStorageEnabled
           allowsFullscreenVideo
+          allowsPictureInPictureMediaPlayback
           mediaPlaybackRequiresUserAction={false}
           onMessage={onMessage}
           style={styles.webview}
