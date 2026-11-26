@@ -1,0 +1,147 @@
+import React from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
+import { lightColors, nativeApp, radii, spacing } from '../../../theme';
+import { useCurrentChatUser, type ChatUser } from '../useSessionChat';
+import { ChatAvatar } from './ChatAvatar';
+
+export interface ChatPreviewCardProps {
+  sessionId: string;
+  /** Opens the full chat (SessionChat sheet). */
+  onPress?: () => void;
+  /**
+   * Real participant count from the host (e.g. Presence). Shown only
+   * when supplied — the card never invents a count.
+   */
+  participantCount?: number;
+  /** Signed-in user from the host app; omit to resolve from Supabase Auth. */
+  currentUser?: ChatUser | null;
+  /** Tapping the pill while signed out (defaults to onPress). */
+  onSignInPress?: () => void;
+}
+
+/**
+ * The "Live chat" card that sits under the player on the watch page
+ * (screenshot 06): inset container, light grey fill, radius 16, header
+ * row ("Live chat" + real count when known), and the signed-in user's
+ * avatar beside a lighter input pill reading "Chat publicly as …".
+ * The pill is a doorway into the full chat sheet — typing happens in
+ * SessionChat, so nothing here pretends to be an editor.
+ */
+export function ChatPreviewCard({
+  sessionId,
+  onPress,
+  participantCount,
+  currentUser,
+  onSignInPress,
+}: ChatPreviewCardProps) {
+  const { user, authLoading } = useCurrentChatUser(currentUser);
+  const identityName = user?.displayName?.trim() ? user.displayName : null;
+
+  const pillText = authLoading
+    ? 'Loading…'
+    : user
+      ? identityName
+        ? `Chat publicly as ${identityName}…`
+        : 'Chat publicly…'
+      : 'Sign in to chat';
+
+  const handlePress = () => {
+    if (!user && onSignInPress) {
+      onSignInPress();
+      return;
+    }
+    onPress?.();
+  };
+
+  return (
+    <View style={styles.card} accessibilityLabel={`Live chat for session ${sessionId}`}>
+      <View style={styles.headerRow}>
+        <Text style={styles.headerTitle}>Live chat</Text>
+        <View style={styles.headerRight}>
+          {participantCount !== undefined ? (
+            <View style={styles.countWrap}>
+              <MaterialIcons name="person" size={16} color={lightColors.textSecondary} />
+              <Text style={styles.countText}>{participantCount}</Text>
+            </View>
+          ) : null}
+          <MaterialIcons name="chevron-right" size={20} color={lightColors.textSecondary} />
+        </View>
+      </View>
+      <Pressable style={styles.inputRow} onPress={handlePress} accessibilityRole="button">
+        {user ? (
+          <ChatAvatar userId={user.id} displayName={user.displayName} />
+        ) : (
+          <View style={styles.signedOutAvatar}>
+            <MaterialIcons name="person" size={22} color={lightColors.textSecondary} />
+          </View>
+        )}
+        <View style={styles.pill}>
+          <Text style={styles.pillText} numberOfLines={1}>
+            {pillText}
+          </Text>
+        </View>
+      </Pressable>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: {
+    backgroundColor: lightColors.surfaceVariant,
+    borderRadius: nativeApp.chatCard.radius,
+    padding: nativeApp.chatCard.padding,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
+  },
+  headerTitle: {
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '600',
+    color: lightColors.text,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  countWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  countText: {
+    fontSize: 13,
+    color: lightColors.textSecondary,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  signedOutAvatar: {
+    width: nativeApp.chatSheet.avatarSize,
+    height: nativeApp.chatSheet.avatarSize,
+    borderRadius: nativeApp.chatSheet.avatarSize / 2,
+    backgroundColor: lightColors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  pill: {
+    flex: 1,
+    backgroundColor: lightColors.surface,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    justifyContent: 'center',
+  },
+  pillText: {
+    fontSize: 14,
+    color: lightColors.textSecondary,
+  },
+});
