@@ -14,7 +14,12 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { EmptyState } from '../../components/common/EmptyState';
 import { FeedCard } from '../../components/video/FeedCard';
 import { YouTubePlayer } from '../../components/video/YouTubePlayer';
-import { supabaseCardData, formatDateLine, type CardVideoData } from '../../components/video/cardData';
+import {
+  apiCardData,
+  supabaseCardData,
+  formatDateLine,
+  type CardVideoData,
+} from '../../components/video/cardData';
 import { useAuth } from '../../features/auth';
 import { useOfficialChannel } from '../../features/channel';
 import { AddToPlaylistSheet } from '../../features/library';
@@ -23,6 +28,7 @@ import { FEED_LIST_PERF } from '../../lib/listPerf';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import {
   fetchChannelById,
+  fetchChannelUploads,
   fetchVideoMetadata,
   type YouTubeChannelInfo,
   type YouTubeVideoMetadata,
@@ -49,6 +55,8 @@ interface ResolvedWatch {
   metaLine: string;
   thumbnailUrl: string | null;
   row: Video | null;
+  /** True only when the YouTube API itself reports this video live. */
+  isLive: boolean;
 }
 
 /**
@@ -79,11 +87,22 @@ export function WatchScreen({ route, navigation }: Props) {
   const error = watchState.key === watchKey ? watchState.error : null;
   const loading = watchState.key !== watchKey;
   const [channel, setChannel] = useState<YouTubeChannelInfo | null>(null);
-  const [upNext, setUpNext] = useState<Video[]>([]);
+  // Up Next items: local catalogue rows first; when the catalogue is
+  // thin, real channel uploads from the YouTube API fill the list
+  // (QA issue 58) — same compact-row rendering either way.
+  type UpNextItem =
+    | { kind: 'row'; video: Video }
+    | { kind: 'api'; meta: YouTubeVideoMetadata };
+  const [upNextItems, setUpNextItems] = useState<UpNextItem[]>([]);
   const [expanded, setExpanded] = useState(false);
   const [readyFor, setReadyFor] = useState<string | null>(null);
   const playerReady = resolved != null && readyFor === resolved.youtubeVideoId;
   const [savedState, setSavedState] = useState<{ rowId: string; saved: boolean } | null>(null);
+  // Local pressed-state for the icon-only Like/Dislike pair (screenshot
+  // 06 action row shows no counts; the real like count, when the API
+  // provides one, lives in the metadata line). No count is displayed
+  // or stored from these toggles.
+  const [reaction, setReaction] = useState<'like' | 'dislike' | null>(null);
   const [playlistSheetOpen, setPlaylistSheetOpen] = useState(false);
   const saved =
     resolved?.row && savedState?.rowId === resolved.row.id ? savedState.saved : false;
@@ -102,19 +121,36 @@ export function WatchScreen({ route, navigation }: Props) {
         }
         const ytId = row?.youtube_video_id ?? youtubeVideoId;
         if (!ytId) throw new Error('This recording could not be found.');
-        if (!row) {
-          meta = await fetchVideoMetadata(ytId);
-          if (!meta) throw new Error('This recording could not be found on YouTube.');
-        }
+        // QA issue 55: ALWAYS enrich from the YouTube API when it is
+        // reachable — even for archive rows — so the sheet's meta
+        // line carries the real likes / watching / views / hashtags
+        // of screenshot 06 instead of a bare date. Failure to enrich
+        // is not fatal for archive rows (the row itself is the data);
+        // it IS fatal when there is no row at all.
+        meta = await fetchVideoMetadata(ytId).catch(() => null);
+        if (!row && !meta) throw new Error('This recording could not be found on YouTube.');
         if (!active) return;
+        const isLive = meta?.liveBroadcastContent === 'live';
         const metaParts: string[] = [];
         if (meta) {
           if (meta.liveBroadcastContent === 'live' && meta.concurrentViewers != null) {
             metaParts.push(`${formatCount(meta.concurrentViewers)} watching`);
           }
           if (meta.likeCount != null) metaParts.push(`${formatCount(meta.likeCount)} likes`);
-          if (meta.viewCount != null) metaParts.push(`${formatCount(meta.viewCount)} views`);
+          if (isLive) {
+            if (meta.concurrentViewers != null) {
+              metaParts.push(`${formatCount(meta.concurrentViewers)} watching`);
+            }
+          } else if (meta.viewCount != null) {
+            // Reference: view counts in metadata lines carry the ▷
+            // prefix ("▷ 3.3 lakh", "▷332 watching").
+            metaParts.push(`▷ ${formatCount(meta.viewCount)} views`);
+          }
           metaParts.push(formatDateLine(meta.publishedAt));
+          // Hashtags come from the video's OWN description text
+          // (real API data), first two, as in the reference meta line.
+          const tags = [...new Set((meta.description.match(/#[\p{L}\p{N}_]+/gu) ?? []).slice(0, 2))];
+          metaParts.push(...tags);
         } else if (row) {
           metaParts.push(formatDateLine(row.published_at ?? row.created_at));
         }
@@ -129,6 +165,7 @@ export function WatchScreen({ route, navigation }: Props) {
             metaLine: metaParts.filter(Boolean).join('  ·  '),
             thumbnailUrl: row?.thumbnail_url ?? meta?.thumbnailUrl ?? null,
             row,
+            isLive,
           },
           error: null,
         });
@@ -167,19 +204,34 @@ export function WatchScreen({ route, navigation }: Props) {
     };
   }, [resolved, officialChannel]);
 
-  // Up Next: other published archive recordings.
+  // Up Next: other published archive recordings first; if the local
+  // catalogue is thin (< 4), fall back to the channel's real uploads
+  // via the YouTube API (QA issue 58 — the channel has far more
+  // videos than the seeded catalogue).
+  const currentYtId = resolved?.youtubeVideoId ?? youtubeVideoId ?? null;
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
     let active = true;
-    fetchUpNext(videoRowId ?? null)
-      .then((rows) => {
-        if (active) setUpNext(rows);
-      })
-      .catch(() => undefined);
+    (async () => {
+      const rows = isSupabaseConfigured
+        ? await fetchUpNext(videoRowId ?? null).catch(() => [] as Video[])
+        : [];
+      const items: UpNextItem[] = rows.map((video) => ({ kind: 'row' as const, video }));
+      if (items.length < 4 && officialChannel?.uploadsPlaylistId) {
+        const page = await fetchChannelUploads(officialChannel.uploadsPlaylistId).catch(() => null);
+        if (page) {
+          const seen = new Set(rows.map((r) => r.youtube_video_id));
+          if (currentYtId) seen.add(currentYtId);
+          for (const meta of page.videos) {
+            if (!seen.has(meta.youtubeVideoId)) items.push({ kind: 'api' as const, meta });
+          }
+        }
+      }
+      if (active) setUpNextItems(items.slice(0, 15));
+    })();
     return () => {
       active = false;
     };
-  }, [videoRowId]);
+  }, [videoRowId, officialChannel, currentYtId]);
 
   // Saved state for archive rows (stored keyed by row id).
   useEffect(() => {
@@ -232,15 +284,31 @@ export function WatchScreen({ route, navigation }: Props) {
   }, [user, resolved, saved]);
 
   const renderUpNext = useCallback(
-    ({ item }: { item: Video }) => {
-      const data: CardVideoData = supabaseCardData(item, officialChannel?.avatarUrl ?? null);
+    ({ item }: { item: UpNextItem }) => {
+      if (item.kind === 'api') {
+        const data: CardVideoData = apiCardData(item.meta, officialChannel?.avatarUrl ?? null);
+        return (
+          <FeedCard
+            variant="upNext"
+            data={data}
+            onPress={() => navigation.push('Watch', { youtubeVideoId: item.meta.youtubeVideoId })}
+            onShare={() => {
+              void Share.share({
+                message: `${item.meta.title} — https://www.youtube.com/watch?v=${item.meta.youtubeVideoId}`,
+              });
+            }}
+          />
+        );
+      }
+      const data: CardVideoData = supabaseCardData(item.video, officialChannel?.avatarUrl ?? null);
       return (
         <FeedCard
+          variant="upNext"
           data={data}
-          onPress={() => navigation.push('Watch', { videoRowId: item.id })}
+          onPress={() => navigation.push('Watch', { videoRowId: item.video.id })}
           onShare={() => {
             void Share.share({
-              message: `${item.title} — https://www.youtube.com/watch?v=${item.youtube_video_id}`,
+              message: `${item.video.title} — https://www.youtube.com/watch?v=${item.video.youtube_video_id}`,
             });
           }}
         />
@@ -249,47 +317,79 @@ export function WatchScreen({ route, navigation }: Props) {
     [navigation, officialChannel],
   );
 
-  const keyExtractor = useCallback((item: Video) => item.id, []);
+  const keyExtractor = useCallback(
+    (item: UpNextItem) => (item.kind === 'row' ? `sb-${item.video.id}` : `yt-${item.meta.youtubeVideoId}`),
+    [],
+  );
+
+  // Player element — rendered OUTSIDE the FlatList (see the return
+  // below) so it stays pinned at the top while Up Next scrolls, as in
+  // screenshot 06. Previously it lived inside ListHeaderComponent and
+  // scrolled away with the sheet.
+  const player = resolved ? (
+    <View style={styles.playerWrap}>
+      {playerReady ? (
+        <YouTubePlayer youtubeVideoId={resolved.youtubeVideoId} />
+      ) : (
+        <>
+          {resolved.thumbnailUrl ? (
+            <Image
+              source={{ uri: resolved.thumbnailUrl }}
+              style={styles.playerThumb}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+            />
+          ) : (
+            <View style={styles.playerThumb} />
+          )}
+          <View style={styles.playerSpinner}>
+            <ActivityIndicator color="#FFFFFF" />
+          </View>
+        </>
+      )}
+      {/* QA issue 64: a clear red LIVE pill on the player itself when
+          the API reports the video live (bottom-right, as in the
+          reference thumbnails/player), not just a small label that
+          appears somewhere after load. */}
+      {resolved.isLive ? (
+        <View style={styles.playerLiveBadge}>
+          <MaterialIcons name="sensors" size={14} color="#FFFFFF" />
+          <Text style={styles.playerLiveText}>LIVE</Text>
+        </View>
+      ) : null}
+    </View>
+  ) : null;
 
   const header = useMemo(() => {
     if (!resolved) return null;
     const channelName = channel?.title ?? resolved.channelTitle;
     const channelAvatar = channel?.avatarUrl ?? null;
+    // Screenshot 06 metadata line: "@handle · N likes · ▷ N views ·
+    // date · more" — single line, parts joined only when present (the
+    // old build left a leading space when the handle was missing).
+    const metaText = [channel?.handle, resolved.metaLine].filter(Boolean).join('  ·  ');
     return (
       <View>
-        <View style={styles.playerWrap}>
-          {playerReady ? (
-            <YouTubePlayer youtubeVideoId={resolved.youtubeVideoId} />
-          ) : (
-            <>
-              {resolved.thumbnailUrl ? (
-                <Image
-                  source={{ uri: resolved.thumbnailUrl }}
-                  style={styles.playerThumb}
-                  contentFit="cover"
-                  cachePolicy="memory-disk"
-                />
-              ) : (
-                <View style={styles.playerThumb} />
-              )}
-              <View style={styles.playerSpinner}>
-                <ActivityIndicator color="#FFFFFF" />
-              </View>
-            </>
-          )}
-        </View>
         <View style={styles.sheet}>
-          <Text style={styles.title} numberOfLines={expanded ? undefined : 2}>
+          <Text style={styles.title} numberOfLines={expanded ? undefined : 1}>
             {resolved.title}
           </Text>
           <Pressable onPress={() => setExpanded((v) => !v)}>
             <Text style={styles.metaLine} numberOfLines={1}>
-              {channel?.handle ?? ''} {resolved.metaLine ? ` · ${resolved.metaLine}` : ''}{' '}
+              {metaText}
+              {metaText ? '  ' : ''}
               <Text style={styles.moreText}>{expanded ? 'less' : 'more'}</Text>
             </Text>
           </Pressable>
 
-          <View style={styles.channelRow}>
+          {/* QA issue 62: the whole channel row is the tap target to
+              the Channel page; the name is one line, tail-ellipsis. */}
+          <Pressable
+            style={styles.channelRow}
+            onPress={() => navigation.navigate('Channel', { channelId: channel?.channelId })}
+            accessibilityRole="button"
+            accessibilityLabel={`View channel ${channelName}`}
+          >
             {channelAvatar ? (
               <Image
                 source={{ uri: channelAvatar }}
@@ -303,52 +403,120 @@ export function WatchScreen({ route, navigation }: Props) {
               </View>
             )}
             <View style={styles.channelLines}>
-              <Text style={styles.channelName} numberOfLines={1}>
+              <Text style={styles.channelName} numberOfLines={1} ellipsizeMode="tail">
                 {channelName}
               </Text>
               {channel?.subscriberCount != null ? (
                 <Text style={styles.channelMeta} numberOfLines={1}>
-                  {formatCount(channel.subscriberCount)} subscribers
+                  {`${formatCount(channel.subscriberCount)} subscribers`}
                 </Text>
               ) : null}
             </View>
+          </Pressable>
+
+          {/* Action row (screenshot 06): at left the light-grey pill
+              beside the channel row's avatar column — here the real
+              "View Channel" destination in the Subscribed pill's
+              geometry (this app has no subscribe backend, so the pill
+              is NOT labelled Subscribed); right-aligned icon-only
+              group Like / Dislike / Share / Save / •••, no counts,
+              no labels. Previously Save/Playlist/Share were crowded
+              into the channel row and the pill sat alone below it. */}
+          <View style={styles.actionRow}>
+            <Pressable
+              style={styles.channelPill}
+              onPress={() => navigation.navigate('Channel', { channelId: channel?.channelId })}
+              accessibilityRole="button"
+              accessibilityLabel="View Channel"
+            >
+              <Text style={styles.channelPillText}>View Channel</Text>
+              <MaterialIcons name="chevron-right" size={18} color={lightColors.text} />
+            </Pressable>
             <View style={styles.actions}>
+              <Pressable
+                onPress={() => setReaction((r) => (r === 'like' ? null : 'like'))}
+                hitSlop={6}
+                accessibilityLabel="Like"
+                accessibilityState={{ selected: reaction === 'like' }}
+              >
+                <MaterialIcons
+                  name={reaction === 'like' ? 'thumb-up' : 'thumb-up-off-alt'}
+                  size={24}
+                  color={lightColors.text}
+                />
+              </Pressable>
+              <Pressable
+                onPress={() => setReaction((r) => (r === 'dislike' ? null : 'dislike'))}
+                hitSlop={6}
+                accessibilityLabel="Dislike"
+                accessibilityState={{ selected: reaction === 'dislike' }}
+              >
+                <MaterialIcons
+                  name={reaction === 'dislike' ? 'thumb-down' : 'thumb-down-off-alt'}
+                  size={24}
+                  color={lightColors.text}
+                />
+              </Pressable>
+              <Pressable onPress={onShare} hitSlop={6} accessibilityLabel="Share">
+                <MaterialIcons name="share" size={23} color={lightColors.text} />
+              </Pressable>
               {resolved.row && user ? (
-                <Pressable onPress={onToggleSave} hitSlop={8} accessibilityLabel={saved ? 'Remove from saved' : 'Save'}>
+                <Pressable
+                  onPress={onToggleSave}
+                  hitSlop={6}
+                  accessibilityLabel={saved ? 'Remove from saved' : 'Save'}
+                  accessibilityState={{ selected: saved }}
+                >
                   <MaterialIcons name={saved ? 'bookmark' : 'bookmark-border'} size={24} color={lightColors.text} />
                 </Pressable>
               ) : null}
               {resolved.row && user ? (
                 <Pressable
                   onPress={() => setPlaylistSheetOpen(true)}
-                  hitSlop={8}
-                  accessibilityLabel="Save to playlist"
+                  hitSlop={6}
+                  accessibilityLabel="More actions"
                 >
-                  <MaterialIcons name="playlist-add" size={26} color={lightColors.text} />
+                  <MaterialIcons name="more-horiz" size={24} color={lightColors.text} />
                 </Pressable>
               ) : null}
-              <Pressable onPress={onShare} hitSlop={8} accessibilityLabel="Share">
-                <MaterialIcons name="share" size={23} color={lightColors.text} />
-              </Pressable>
             </View>
           </View>
-          <Pressable
-            style={styles.viewChannelPill}
-            onPress={() => navigation.navigate('Channel', { channelId: channel?.channelId })}
-            accessibilityRole="button"
-          >
-            <Text style={styles.viewChannelText}>View Channel</Text>
-          </Pressable>
 
-          {expanded && resolved.description ? (
-            <View style={styles.descriptionBox}>
-              <Text style={styles.descriptionText}>{resolved.description}</Text>
-            </View>
+          {/* QA issues 55/65: a description PREVIEW box is visible in
+              the collapsed state (2 lines, tap to expand); in the
+              expanded state the box carries its own visible
+              "Show less" collapse affordance — previously "less" was
+              hidden inside the meta line only. */}
+          {resolved.description ? (
+            expanded ? (
+              <View style={styles.descriptionBox}>
+                <Text style={styles.descriptionText}>{resolved.description}</Text>
+                <Pressable
+                  onPress={() => setExpanded(false)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Show less"
+                >
+                  <Text style={styles.descriptionToggle}>Show less</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <Pressable
+                style={styles.descriptionBox}
+                onPress={() => setExpanded(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Show description"
+              >
+                <Text style={styles.descriptionText} numberOfLines={2} ellipsizeMode="tail">
+                  {resolved.description}
+                </Text>
+              </Pressable>
+            )
           ) : null}
         </View>
       </View>
     );
-  }, [resolved, channel, playerReady, expanded, user, saved, onToggleSave, onShare, navigation]);
+  }, [resolved, channel, expanded, user, saved, onToggleSave, onShare, navigation, reaction]);
 
   if (loading) {
     return (
@@ -360,6 +528,13 @@ export function WatchScreen({ route, navigation }: Props) {
         <View style={styles.sheetSkeleton}>
           <View style={[styles.skelLine, { width: '85%' }]} />
           <View style={[styles.skelLine, { width: '55%', marginTop: 8 }]} />
+          <View style={styles.skelRow}>
+            <View style={styles.skelAvatar} />
+            <View style={{ flex: 1 }}>
+              <View style={[styles.skelLine, { width: '40%', height: 14 }]} />
+              <View style={[styles.skelLine, { width: '28%', height: 12, marginTop: 6 }]} />
+            </View>
+          </View>
         </View>
       </View>
     );
@@ -368,6 +543,7 @@ export function WatchScreen({ route, navigation }: Props) {
   if (error || !resolved) {
     return (
       <View style={styles.container}>
+        <View style={styles.playerSkeleton} />
         <EmptyState title="Recording unavailable" message={error ?? 'This recording could not be loaded.'} />
       </View>
     );
@@ -375,11 +551,19 @@ export function WatchScreen({ route, navigation }: Props) {
 
   return (
     <View style={styles.container}>
+      {player}
       <FlatList
-        data={upNext}
+        data={upNextItems}
         renderItem={renderUpNext}
         keyExtractor={keyExtractor}
-        ListHeaderComponent={header ?? undefined}
+        ListHeaderComponent={
+          <View>
+            {header}
+            {/* QA issue 56: an explicit "Up Next" heading above the
+                compact rows (shown only when there are items). */}
+            {upNextItems.length > 0 ? <Text style={styles.upNextHeading}>Up Next</Text> : null}
+          </View>
+        }
         ListEmptyComponent={
           <Text style={styles.upNextEmpty}>No other published recordings yet.</Text>
         }
@@ -405,6 +589,20 @@ const styles = StyleSheet.create({
     backgroundColor: lightColors.playerBackground,
   },
   playerThumb: { width: '100%', height: '100%', backgroundColor: lightColors.playerBackground },
+  playerLiveBadge: {
+    position: 'absolute',
+    right: 8,
+    bottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: lightColors.accent,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    zIndex: 2,
+  },
+  playerLiveText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
   playerSpinner: {
     position: 'absolute',
     top: 0,
@@ -416,12 +614,17 @@ const styles = StyleSheet.create({
   },
   sheet: {
     backgroundColor: lightColors.surface,
-    borderTopLeftRadius: nativeApp.watchSheet.topRadius + 4,
-    borderTopRightRadius: nativeApp.watchSheet.topRadius + 4,
-    marginTop: -(nativeApp.watchSheet.topRadius + 4),
+    // Screenshot 06 / token: exactly 20px rounded top corners
+    // overlapping the player's bottom edge by the same 20px (the old
+    // build used token+4 = 24 on both, which read visibly rounder
+    // and ate 4px more of the player than the reference).
+    borderTopLeftRadius: nativeApp.watchSheet.topRadius,
+    borderTopRightRadius: nativeApp.watchSheet.topRadius,
+    marginTop: -nativeApp.watchSheet.topRadius,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
     paddingBottom: spacing.md,
+    zIndex: 1,
   },
   title: { fontSize: 20, lineHeight: 26, fontWeight: '600', color: lightColors.text },
   metaLine: { fontSize: 14, color: lightColors.textSecondary, marginTop: spacing.sm },
@@ -439,20 +642,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarInitial: { fontSize: 16, fontWeight: '600', color: lightColors.textSecondary },
-  channelLines: { flex: 1 },
+  channelLines: { flex: 1, minWidth: 0 },
   channelName: { fontSize: 15, fontWeight: '600', color: lightColors.text },
   channelMeta: { fontSize: 13, color: lightColors.textSecondary, marginTop: 1 },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 26 },
-  viewChannelPill: {
-    alignSelf: 'flex-start',
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginTop: spacing.md,
-    borderWidth: 1,
-    borderColor: lightColors.border,
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: 9,
+    gap: spacing.md,
   },
-  viewChannelText: { fontSize: 14, fontWeight: '600', color: lightColors.text },
+  channelPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: lightColors.surfaceVariant,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+  },
+  channelPillText: { fontSize: 14, fontWeight: '500', color: lightColors.text },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 20, flexShrink: 0 },
   descriptionBox: {
     backgroundColor: lightColors.surfaceVariant,
     borderRadius: radii.card,
@@ -460,6 +670,21 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
   },
   descriptionText: { fontSize: 14, lineHeight: 20, color: lightColors.text },
+  descriptionToggle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: lightColors.text,
+    marginTop: spacing.sm,
+  },
+  upNextHeading: {
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '700',
+    color: lightColors.text,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.sm,
+  },
   upNextEmpty: {
     fontSize: 14,
     color: lightColors.textSecondary,
@@ -475,6 +700,23 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   playerSkeletonLabel: { ...typography.metadata, color: lightColors.textSecondary },
-  sheetSkeleton: { padding: spacing.lg },
+  // The loading sheet keeps the real sheet's geometry (white surface,
+  // 20px rounded top overlapping the player) so the layout does not
+  // jump when the real sheet replaces it.
+  sheetSkeleton: {
+    backgroundColor: lightColors.surface,
+    borderTopLeftRadius: nativeApp.watchSheet.topRadius,
+    borderTopRightRadius: nativeApp.watchSheet.topRadius,
+    marginTop: -nativeApp.watchSheet.topRadius,
+    padding: spacing.lg,
+    zIndex: 1,
+  },
   skelLine: { height: 18, borderRadius: 4, backgroundColor: lightColors.surfaceVariant },
+  skelRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.lg, gap: spacing.md },
+  skelAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: lightColors.surfaceVariant,
+  },
 });

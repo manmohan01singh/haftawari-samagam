@@ -15,6 +15,12 @@ import { useAuth } from '../../features/auth';
 import { useOfficialChannel } from '../../features/channel';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import {
+  OFFICIAL_CHANNEL_ID,
+  fetchChannelLiveAndUpcoming,
+  isYouTubeConfigured,
+  type YouTubeVideoMetadata,
+} from '../../lib/youtube';
+import {
   fetchCategories,
   fetchPublishedVideos,
   fetchSavedVideoIds,
@@ -93,6 +99,23 @@ export function HomeScreen({ navigation }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [exhausted, setExhausted] = useState(false);
   const loadingRef = useRef(false);
+  // Real live state from the YouTube API (QA 49/68): a map of
+  // youtube_video_id → live/upcoming metadata for the official
+  // channel. Archive rows have no live flag of their own.
+  const [liveMap, setLiveMap] = useState<Map<string, YouTubeVideoMetadata>>(new Map());
+
+  useEffect(() => {
+    if (!isYouTubeConfigured) return;
+    let active = true;
+    fetchChannelLiveAndUpcoming(OFFICIAL_CHANNEL_ID)
+      .then((metas) => {
+        if (active) setLiveMap(new Map(metas.map((m) => [m.youtubeVideoId, m])));
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const loadPage = useCallback(async (offset: number): Promise<Video[]> => {
     const page = await fetchPublishedVideos(PAGE_SIZE, offset);
@@ -165,22 +188,36 @@ export function HomeScreen({ navigation }: Props) {
   }, [exhausted, loadPage, loading, videos.length]);
 
   const visibleVideos = useMemo(() => {
-    if (selectedCategory === ALL_CHIP) return videos;
-    const cat = categories.find((c) => c.name === selectedCategory);
-    if (!cat) return videos;
-    return videos.filter((v) => v.category_id === cat.id);
-  }, [videos, categories, selectedCategory]);
+    const filtered =
+      selectedCategory === ALL_CHIP
+        ? videos
+        : (() => {
+            const cat = categories.find((c) => c.name === selectedCategory);
+            return cat ? videos.filter((v) => v.category_id === cat.id) : videos;
+          })();
+    // Live first (QA 68): stable float of genuinely-live items (real
+    // API state) above the newest-first catalogue order.
+    if (liveMap.size === 0) return filtered;
+    const live = filtered.filter((v) => liveMap.get(v.youtube_video_id)?.liveBroadcastContent === 'live');
+    if (live.length === 0) return filtered;
+    const rest = filtered.filter((v) => liveMap.get(v.youtube_video_id)?.liveBroadcastContent !== 'live');
+    return [...live, ...rest];
+  }, [videos, categories, selectedCategory, liveMap]);
 
   const avatarUrl = channel?.avatarUrl ?? null;
 
   // Stable per-card display data: one CardVideoData object per video,
-  // rebuilt only when the feed or the channel avatar changes — never
-  // on a saved-state toggle.
+  // rebuilt only when the feed, the channel avatar or the live map
+  // changes — never on a saved-state toggle. The live map feeds the
+  // QA 49 enrichment (LIVE badge + real watching count) inside
+  // supabaseCardData.
   const cardDataById = useMemo(() => {
     const map = new Map<string, CardVideoData>();
-    for (const v of videos) map.set(v.id, supabaseCardData(v, avatarUrl));
+    for (const v of videos) {
+      map.set(v.id, supabaseCardData(v, avatarUrl, liveMap.get(v.youtube_video_id) ?? null));
+    }
     return map;
-  }, [videos, avatarUrl]);
+  }, [videos, avatarUrl, liveMap]);
 
   // Mirror of savedIds for the stable toggle handler below.
   const savedIdsRef = useRef(savedIds);
@@ -228,7 +265,10 @@ export function HomeScreen({ navigation }: Props) {
     ({ item }: { item: Video }) => (
       <HomeFeedItem
         video={item}
-        data={cardDataById.get(item.id) ?? supabaseCardData(item, avatarUrl)}
+        data={
+          cardDataById.get(item.id) ??
+          supabaseCardData(item, avatarUrl, liveMap.get(item.youtube_video_id) ?? null)
+        }
         saved={savedIds.has(item.id)}
         canSave={!!user}
         onPressVideo={handlePressVideo}
@@ -239,6 +279,7 @@ export function HomeScreen({ navigation }: Props) {
     [
       cardDataById,
       avatarUrl,
+      liveMap,
       savedIds,
       user,
       handlePressVideo,
@@ -251,26 +292,17 @@ export function HomeScreen({ navigation }: Props) {
 
   const initial = profile?.display_name?.charAt(0)?.toUpperCase() ?? user?.email?.charAt(0)?.toUpperCase() ?? null;
 
-  return (
-    <View style={styles.container}>
-      <AppHeader
-        onSearchPress={() => navigation.navigate('Search')}
-        onAccountPress={() => navigation.navigate('Account')}
-        avatarInitial={initial}
-      />
-      <SecondaryTabs
-        items={[
-          { key: 'home', label: 'Home' },
-          { key: 'subs', label: 'Subs' },
-        ]}
-        selectedKey="home"
-        onSelect={(key) => {
-          if (key === 'subs') navigation.navigate('Subscriptions');
-        }}
-      />
-      {/* Always rendered, even before categories arrive (QA issue
-          11): conditionally mounting this row pushed the whole feed
-          down when categories loaded — a visible jump mid-scroll. */}
+  // Chips + the Sessions entry live in the feed's ListHeader so they
+  // SCROLL AWAY with the feed. Previously both were pinned above the
+  // list under the header: header + tabs + chips + sessions row ate
+  // ~215px before the first thumbnail, while screenshot 01 shows the
+  // first thumbnail starting directly under the tab row. Only the
+  // header and the secondary tab row stay fixed (as in the reference).
+  // The ChipsRow itself is ALWAYS rendered (QA issue 11): mounting it
+  // only once categories arrive would push the whole feed down — a
+  // visible jump mid-scroll. With no categories it shows just "All".
+  const listHeader = (
+    <View>
       <ChipsRow
         chips={[ALL_CHIP, ...categories.map((c) => c.name)]}
         selected={selectedCategory}
@@ -293,6 +325,35 @@ export function HomeScreen({ navigation }: Props) {
         </View>
         <MaterialIcons name="chevron-right" size={24} color={lightColors.textSecondary} />
       </Pressable>
+    </View>
+  );
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.headerBlock}>
+        <AppHeader
+          onSearchPress={() => navigation.navigate('Search')}
+          onAccountPress={() => navigation.navigate('Account')}
+          avatarInitial={initial}
+        />
+        <SecondaryTabs
+          items={[
+            { key: 'home', label: 'Home' },
+            { key: 'subs', label: 'Subs' },
+            { key: 'live', label: 'Live' },
+          ]}
+          selectedKey="home"
+          onSelect={(key) => {
+            if (key === 'subs') navigation.navigate('Subscriptions');
+            // "Live" is the reference tab row's live entry; in this
+            // app the live surface is Samagam Sessions (NOW PLAYING) —
+            // a real destination, not a dead tab. "Music"/"More" from
+            // the screenshot have no section in this app and are not
+            // shown as dead tabs.
+            if (key === 'live') navigation.navigate('Sessions');
+          }}
+        />
+      </View>
 
       {!isSupabaseConfigured ? (
         <EmptyState
@@ -320,6 +381,7 @@ export function HomeScreen({ navigation }: Props) {
           data={visibleVideos}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
+          ListHeaderComponent={listHeader}
           onEndReached={onEndReached}
           onEndReachedThreshold={0.6}
           refreshing={refreshing}
@@ -345,15 +407,18 @@ export function HomeScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: lightColors.background },
+  // Screenshot 01: cards are white containers on a light-grey page
+  // ground — the grey shows in the gaps between cards and around the
+  // chips/sessions rows. White-on-white made the feed read as one
+  // unbroken sheet with no card separation.
+  container: { flex: 1, backgroundColor: '#F8F8F8' },
+  headerBlock: { backgroundColor: lightColors.surface },
   sessionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: lightColors.border,
   },
   sessionsRowPressed: { backgroundColor: lightColors.surfaceVariant },
   sessionsLines: { flex: 1 },

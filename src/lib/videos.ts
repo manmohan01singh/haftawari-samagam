@@ -7,14 +7,19 @@
 import { requireSupabase, supabase } from './supabase';
 import type { Category, Video, WatchHistoryEntry } from '../types/database';
 
-/** One page of the published catalogue (featured first, then newest). */
+/**
+ * One page of the published catalogue, NEWEST FIRST (QA issue 68:
+ * the old featured-first ordering floated a featured 30/11/20 video
+ * above the current live/recent content; the Home feed must lead
+ * with live/recent — live items are additionally floated to the top
+ * by HomeScreen using real API live state).
+ */
 export async function fetchPublishedVideos(limit = 25, offset = 0): Promise<Video[]> {
   const client = requireSupabase();
   const { data, error } = await client
     .from('videos')
     .select('*')
     .eq('publish_state', 'published')
-    .order('is_featured', { ascending: false })
     .order('published_at', { ascending: false, nullsFirst: false })
     .range(offset, offset + limit - 1);
   if (error) throw new Error(error.message);

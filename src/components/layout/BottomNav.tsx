@@ -60,12 +60,12 @@ export const BottomNav = memo(function BottomNav({ items, activeKey, onPress }: 
                   <Text style={styles.avatarInitial}>{item.avatarInitial}</Text>
                 </View>
               ) : (
-                // Signed out (QA issue 19): person glyph, not a "?".
-                <MaterialIcons
-                  name="account-circle"
-                  size={28}
-                  color={active ? lightColors.text : lightColors.textSecondary}
-                />
+                // Signed out (QA issues 19/46/50): no "?" placeholder —
+                // a person glyph inside the avatar circle, the same
+                // treatment the header account slot uses, app-wide.
+                <View style={[styles.avatar, styles.avatarFallback, active && styles.avatarActive]}>
+                  <MaterialIcons name="person" size={18} color={lightColors.textSecondary} />
+                </View>
               )
             ) : (
               // QA issue 21: the active slot previously differed only
@@ -96,9 +96,9 @@ const styles = StyleSheet.create({
   },
   item: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   createCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     borderWidth: 1.5,
     borderColor: lightColors.text,
     alignItems: 'center',
@@ -107,6 +107,8 @@ const styles = StyleSheet.create({
   iconPill: { borderRadius: 999, paddingHorizontal: 18, paddingVertical: 4 },
   iconPillActive: { backgroundColor: lightColors.surfaceVariant },
   avatar: { width: 28, height: 28, borderRadius: 14 },
+  // Active-state cue for the avatar slot (QA 50): a 2px ring in the
+  // primary text colour; icon slots cue via the pill behind the icon.
   avatarActive: { borderWidth: 2, borderColor: lightColors.text },
   avatarFallback: {
     backgroundColor: lightColors.surfaceVariant,

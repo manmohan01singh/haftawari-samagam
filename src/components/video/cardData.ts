@@ -24,26 +24,31 @@ export interface CardVideoData {
 }
 
 /**
- * List-sized thumbnail: hqdefault (480×360) derived from the video id —
- * the stored maxres original is reserved for hero/watch surfaces so
- * lists stay light and smooth.
+ * List-sized thumbnail: mqdefault (320×180) derived from the video
+ * id. QA issue 51: the previous hqdefault is 480×360 (4:3) — shown
+ * cover-fit in a 16:9 frame it crops top/bottom, cutting off the
+ * thumbnail's own in-image text. mqdefault is true 16:9, so the full
+ * thumbnail art shows uncropped. The stored maxres original stays
+ * reserved for hero/watch surfaces.
  */
 export function listThumbnailUrl(youtubeVideoId: string | null, storedUrl: string | null): string | null {
-  if (youtubeVideoId) return `https://i.ytimg.com/vi/${youtubeVideoId}/hqdefault.jpg`;
+  if (youtubeVideoId) return `https://i.ytimg.com/vi/${youtubeVideoId}/mqdefault.jpg`;
   return storedUrl ? downgradeYouTubeThumbnailUrl(storedUrl) : null;
 }
 
 /**
- * Rewrite a stored YouTube thumbnail URL to its list-sized hqdefault
- * (480×360) variant. Stored URLs are often maxresdefault (1280×720,
+ * Rewrite a stored YouTube thumbnail URL to its list-sized mqdefault
+ * (320×180) variant. Stored URLs are often maxresdefault (1280×720,
  * several× the bytes) — loading those in list rows was a real image-
  * weight problem (VideoListRow / PlaylistRow / SessionCard used the
- * stored URL directly). Non-YouTube URLs pass through unchanged.
+ * stored URL directly). mqdefault is also the only true-16:9 small
+ * variant, so rows keep the full thumbnail art uncropped (QA issue
+ * 51). Non-YouTube URLs pass through unchanged.
  */
 export function downgradeYouTubeThumbnailUrl(url: string): string {
   return url.replace(
     /(i\.ytimg\.com\/vi\/[^/]+\/)(?:maxresdefault|sddefault|hqdefault|mqdefault|default)(\.(?:jpg|webp))/,
-    '$1hqdefault$2',
+    '$1mqdefault$2',
   );
 }
 
@@ -54,15 +59,36 @@ export function formatDateLine(iso: string | null): string {
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-export function supabaseCardData(video: Video, channelAvatarUrl: string | null): CardVideoData {
+export function supabaseCardData(
+  video: Video,
+  channelAvatarUrl: string | null,
+  liveMeta?: YouTubeVideoMetadata | null,
+): CardVideoData {
+  // QA issue 49: LIVE badge + "watching" count on Home cards. Archive
+  // rows carry no live state, so this comes ONLY from a real YouTube
+  // API live lookup for the same video id (fetchChannelLiveAndUpcoming)
+  // passed in by the caller — never inferred or invented.
+  const isLive = liveMeta?.liveBroadcastContent === 'live' && liveMeta.youtubeVideoId === video.youtube_video_id;
   return {
     key: `sb-${video.id}`,
     title: video.title,
     thumbnailUrl: listThumbnailUrl(video.youtube_video_id, video.thumbnail_url),
-    durationSeconds: video.duration_seconds,
-    broadcastState: 'none',
+    durationSeconds: isLive ? null : video.duration_seconds,
+    broadcastState: isLive ? 'live' : 'none',
     channelLine: OFFICIAL_CHANNEL_HANDLE,
-    metaLine: formatDateLine(video.published_at ?? video.created_at),
+    // Reference correction (screenshot 01): recorded-item metadata
+    // lines open with the ▷ glyph ("▷ 12K · 21 hr ago"). Archive rows
+    // carry no view count, so the real value shown after ▷ is the
+    // recording's date — never an invented count. A genuinely live
+    // item instead shows its real concurrent-viewer count.
+    metaLine: isLive
+      ? liveMeta.concurrentViewers != null
+        ? `${formatCount(liveMeta.concurrentViewers)} watching`
+        : 'Live now'
+      : (() => {
+          const date = formatDateLine(video.published_at ?? video.created_at);
+          return date ? `▷ ${date}` : '';
+        })(),
     channelAvatarUrl,
   };
 }

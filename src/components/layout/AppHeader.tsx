@@ -17,7 +17,10 @@ interface AppHeaderProps {
 /**
  * Mobile top bar, geometry from the native-app reference (§1):
  * 56px, white, no bottom border; red play mark + app wordmark at the
- * left; actions at the right at 24px with ~22px spacing.
+ * left; actions at the right at 24px with ~22px spacing. The wordmark
+ * uses branding.shortName — the full app name overflowed/squeezed the
+ * action icons on mobile-width web (branding.ts reserves shortName
+ * for exactly this compact header).
  *
  * Only actions with real destinations are rendered (Search, Account).
  * The reference's cast and notification-bell icons have no backend in
@@ -37,7 +40,7 @@ export const AppHeader = memo(function AppHeader({
           <MaterialIcons name="play-arrow" size={16} color="#FFFFFF" />
         </View>
         <Text style={styles.wordmark} numberOfLines={1}>
-          {branding.appName}
+          {branding.shortName}
         </Text>
       </View>
       <View style={styles.actions}>
@@ -52,10 +55,14 @@ export const AppHeader = memo(function AppHeader({
               <Text style={styles.avatarInitial}>{avatarInitial}</Text>
             </View>
           ) : (
-            // Signed out (QA issue 19): the fallback used to render a
-            // literal "?" in a grey circle, which reads as broken.
-            // A person glyph is the honest signed-out affordance.
-            <MaterialIcons name="account-circle" size={28} color={lightColors.textSecondary} />
+            // Signed out (QA issues 19/46): the fallback used to render
+            // a literal "?" in a grey circle, which reads as a broken
+            // image. A person glyph inside the avatar circle is the
+            // honest signed-out affordance — the same treatment the
+            // bottom-nav avatar slot uses, app-wide.
+            <View style={[styles.avatar, styles.avatarFallback]}>
+              <MaterialIcons name="person" size={18} color={lightColors.textSecondary} />
+            </View>
           )}
         </Pressable>
       </View>
