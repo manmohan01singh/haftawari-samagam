@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React, { memo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -13,64 +13,121 @@ interface FeedCardProps {
   saved?: boolean;
   onToggleSave?: () => void;
   onShare?: () => void;
+  /**
+   * `feed` (default) = Home card container per screenshot 01: full-bleed
+   * thumbnail, white body with rounded bottom corners on the grey page,
+   * title full-width ABOVE the avatar row, inline engagement row
+   * (thumb-up / comment / bookmark / •••, no counts) inside the body.
+   * `upNext` = Watch "Up Next" row per screenshot 06: flat white, no
+   * engagement row — avatar + title with ••• at the title's right,
+   * channel · metadata line under the title.
+   */
+  variant?: 'feed' | 'upNext';
 }
 
 /**
  * Home-feed card, geometry from the native-app reference
- * (docs/reference/REFERENCE_UI.md §1, screenshot 01):
- * full-bleed 16:9 thumbnail, LIVE/duration pill bottom-right (8px
- * inset), title full-width below (17px semibold, 2 lines), then the
- * avatar row — 40px avatar, @handle + metadata lines, and the inline
- * engagement row right-aligned with 24px icons and NO counts.
+ * (docs/reference/REFERENCE_UI.md §1, screenshot 01).
  *
- * Engagement actions render only when a real handler exists: Save
- * (saved_videos) and Share (system share sheet). Like/Comment have no
- * backend in the schema, so they are not shown as dead buttons.
+ * Engagement row: all four reference icons are always rendered (the
+ * screenshot is the source of truth for this row). Bookmark uses the
+ * real saved_videos handler when one is supplied; comment and ••• fall
+ * back to real destinations (open the recording / system share sheet);
+ * the thumb is a local pressed-state toggle only — no count is ever
+ * shown or invented.
  */
-export const FeedCard = memo(function FeedCard({ data, onPress, saved, onToggleSave, onShare }: FeedCardProps) {
+export const FeedCard = memo(function FeedCard({
+  data,
+  onPress,
+  saved,
+  onToggleSave,
+  onShare,
+  variant = 'feed',
+}: FeedCardProps) {
   const isLive = data.broadcastState === 'live';
+  const [liked, setLiked] = useState(false);
+  const isUpNext = variant === 'upNext';
+
+  const thumbnail = (
+    <View style={styles.thumbnailWrap}>
+      {data.thumbnailUrl ? (
+        <Image
+          source={{ uri: data.thumbnailUrl }}
+          style={styles.thumbnail}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={150}
+        />
+      ) : (
+        <View style={[styles.thumbnail, styles.thumbnailEmpty]} />
+      )}
+      {isLive ? (
+        <View style={styles.liveBadge}>
+          <MaterialIcons name="sensors" size={14} color="#FFFFFF" />
+          <Text style={styles.liveText}>LIVE</Text>
+        </View>
+      ) : data.durationSeconds != null ? (
+        <View style={styles.durationBadge}>
+          <Text style={styles.durationText}>{formatDuration(data.durationSeconds)}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+
+  const avatar = data.channelAvatarUrl ? (
+    <Image
+      source={{ uri: data.channelAvatarUrl }}
+      style={styles.avatar}
+      contentFit="cover"
+      cachePolicy="memory-disk"
+    />
+  ) : (
+    <View style={[styles.avatar, styles.avatarFallback]}>
+      <Text style={styles.avatarInitial}>{data.channelLine.replace('@', '').charAt(0).toUpperCase()}</Text>
+    </View>
+  );
+
+  if (isUpNext) {
+    // Screenshot 06 Up Next row: avatar left, title (••• at its right),
+    // then "channel · ▷ meta" on one grey line. No engagement row.
+    const metaParts = [data.channelLine, data.metaLine].filter(Boolean);
+    return (
+      <Pressable onPress={onPress} style={styles.upNextCard} accessibilityRole="button">
+        {thumbnail}
+        <View style={styles.upNextBody}>
+          {avatar}
+          <View style={styles.lines}>
+            <Text style={styles.upNextTitle} numberOfLines={2}>
+              {data.title}
+            </Text>
+            {metaParts.length > 0 ? (
+              <Text style={styles.meta} numberOfLines={1}>
+                {metaParts.join('  ·  ')}
+              </Text>
+            ) : null}
+          </View>
+          <Pressable
+            onPress={onShare ?? onPress}
+            hitSlop={8}
+            accessibilityLabel="More actions"
+            style={styles.moreButton}
+          >
+            <MaterialIcons name="more-vert" size={22} color={lightColors.text} />
+          </Pressable>
+        </View>
+      </Pressable>
+    );
+  }
+
   return (
     <Pressable onPress={onPress} style={styles.card} accessibilityRole="button">
-      <View style={styles.thumbnailWrap}>
-        {data.thumbnailUrl ? (
-          <Image
-            source={{ uri: data.thumbnailUrl }}
-            style={styles.thumbnail}
-            contentFit="cover"
-            cachePolicy="memory-disk"
-            transition={150}
-          />
-        ) : (
-          <View style={[styles.thumbnail, styles.thumbnailEmpty]} />
-        )}
-        {isLive ? (
-          <View style={styles.liveBadge}>
-            <MaterialIcons name="sensors" size={14} color="#FFFFFF" />
-            <Text style={styles.liveText}>LIVE</Text>
-          </View>
-        ) : data.durationSeconds != null ? (
-          <View style={styles.durationBadge}>
-            <Text style={styles.durationText}>{formatDuration(data.durationSeconds)}</Text>
-          </View>
-        ) : null}
-      </View>
+      {thumbnail}
       <View style={styles.body}>
         <Text style={styles.title} numberOfLines={2}>
           {data.title}
         </Text>
         <View style={styles.row}>
-          {data.channelAvatarUrl ? (
-            <Image
-              source={{ uri: data.channelAvatarUrl }}
-              style={styles.avatar}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-            />
-          ) : (
-            <View style={[styles.avatar, styles.avatarFallback]}>
-              <Text style={styles.avatarInitial}>{data.channelLine.replace('@', '').charAt(0).toUpperCase()}</Text>
-            </View>
-          )}
+          {avatar}
           <View style={styles.lines}>
             <Text style={styles.handle} numberOfLines={1}>
               {data.channelLine}
@@ -82,16 +139,32 @@ export const FeedCard = memo(function FeedCard({ data, onPress, saved, onToggleS
             ) : null}
           </View>
           <View style={styles.engagement}>
-            {onToggleSave ? (
-              <Pressable onPress={onToggleSave} hitSlop={8} accessibilityLabel={saved ? 'Remove from saved' : 'Save'}>
-                <MaterialIcons name={saved ? 'bookmark' : 'bookmark-border'} size={24} color={lightColors.text} />
-              </Pressable>
-            ) : null}
-            {onShare ? (
-              <Pressable onPress={onShare} hitSlop={8} accessibilityLabel="Share">
-                <MaterialIcons name="share" size={22} color={lightColors.text} />
-              </Pressable>
-            ) : null}
+            <Pressable
+              onPress={() => setLiked((v) => !v)}
+              hitSlop={6}
+              accessibilityLabel={liked ? 'Unlike' : 'Like'}
+              accessibilityState={{ selected: liked }}
+            >
+              <MaterialIcons
+                name={liked ? 'thumb-up' : 'thumb-up-off-alt'}
+                size={24}
+                color={lightColors.text}
+              />
+            </Pressable>
+            <Pressable onPress={onPress} hitSlop={6} accessibilityLabel="Comments">
+              <MaterialIcons name="chat-bubble-outline" size={23} color={lightColors.text} />
+            </Pressable>
+            <Pressable
+              onPress={onToggleSave ?? onPress}
+              hitSlop={6}
+              accessibilityLabel={saved ? 'Remove from saved' : 'Save'}
+              accessibilityState={{ selected: !!saved }}
+            >
+              <MaterialIcons name={saved ? 'bookmark' : 'bookmark-border'} size={24} color={lightColors.text} />
+            </Pressable>
+            <Pressable onPress={onShare ?? onPress} hitSlop={6} accessibilityLabel="More actions">
+              <MaterialIcons name="more-horiz" size={24} color={lightColors.text} />
+            </Pressable>
           </View>
         </View>
       </View>
@@ -100,7 +173,10 @@ export const FeedCard = memo(function FeedCard({ data, onPress, saved, onToggleS
 });
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: lightColors.background, paddingBottom: spacing.lg },
+  // Card container (screenshot 01): the white body carries rounded
+  // bottom corners and the cards sit on the page's light-grey ground,
+  // separated by ~20px of that ground — not white-on-white.
+  card: { marginBottom: 20 },
   thumbnailWrap: { position: 'relative' },
   thumbnail: {
     width: '100%',
@@ -131,7 +207,14 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   durationText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600' },
-  body: { paddingHorizontal: nativeApp.feedCard.bodyPadding, paddingTop: spacing.md },
+  body: {
+    backgroundColor: lightColors.surface,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    paddingHorizontal: nativeApp.feedCard.bodyPadding,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
+  },
   title: { fontSize: 17, lineHeight: 23, fontWeight: '600', color: lightColors.text },
   row: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: spacing.md },
   avatar: { width: 40, height: 40, borderRadius: 20 },
@@ -141,12 +224,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarInitial: { fontSize: 16, fontWeight: '600', color: lightColors.textSecondary },
-  lines: { flex: 1 },
+  lines: { flex: 1, minWidth: 0 },
   handle: { fontSize: 14, color: lightColors.textSecondary },
   meta: { fontSize: 14, color: lightColors.textSecondary, marginTop: 1 },
   engagement: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: nativeApp.feedCard.engagementRow.iconGap,
+    flexShrink: 0,
   },
+  // Up Next (screenshot 06): flat on the white sheet, no card rounding,
+  // ~16px below the previous item's body.
+  upNextCard: { backgroundColor: lightColors.surface, paddingBottom: spacing.lg },
+  upNextBody: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingHorizontal: nativeApp.feedCard.bodyPadding,
+    paddingTop: spacing.md,
+    gap: spacing.md,
+  },
+  upNextTitle: { fontSize: 16, lineHeight: 22, fontWeight: '600', color: lightColors.text },
+  moreButton: { marginTop: 1 },
 });

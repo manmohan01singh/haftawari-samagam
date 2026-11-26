@@ -26,7 +26,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: spacing.xl,
-    backgroundColor: lightColors.background,
+    // Transparent: the host screen owns the page ground (Home's feed
+    // ground is light grey; a hard-coded white here painted a white
+    // box over it).
+    backgroundColor: 'transparent',
   },
   title: {
     ...typography.sectionTitle,

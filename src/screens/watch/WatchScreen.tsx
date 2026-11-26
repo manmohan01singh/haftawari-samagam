@@ -83,6 +83,11 @@ export function WatchScreen({ route, navigation }: Props) {
   const [readyFor, setReadyFor] = useState<string | null>(null);
   const playerReady = resolved != null && readyFor === resolved.youtubeVideoId;
   const [savedState, setSavedState] = useState<{ rowId: string; saved: boolean } | null>(null);
+  // Local pressed-state for the icon-only Like/Dislike pair (screenshot
+  // 06 action row shows no counts; the real like count, when the API
+  // provides one, lives in the metadata line). No count is displayed
+  // or stored from these toggles.
+  const [reaction, setReaction] = useState<'like' | 'dislike' | null>(null);
   const [playlistSheetOpen, setPlaylistSheetOpen] = useState(false);
   const saved =
     resolved?.row && savedState?.rowId === resolved.row.id ? savedState.saved : false;
@@ -109,7 +114,9 @@ export function WatchScreen({ route, navigation }: Props) {
         const metaParts: string[] = [];
         if (meta) {
           if (meta.likeCount != null) metaParts.push(`${formatCount(meta.likeCount)} likes`);
-          if (meta.viewCount != null) metaParts.push(`${formatCount(meta.viewCount)} views`);
+          // Reference: view counts in metadata lines carry the ▷
+          // prefix ("▷ 3.3 lakh", "▷332 watching").
+          if (meta.viewCount != null) metaParts.push(`▷ ${formatCount(meta.viewCount)} views`);
           metaParts.push(formatDateLine(meta.publishedAt));
         } else if (row) {
           metaParts.push(formatDateLine(row.published_at ?? row.created_at));
@@ -232,6 +239,7 @@ export function WatchScreen({ route, navigation }: Props) {
       const data: CardVideoData = supabaseCardData(item, officialChannel?.avatarUrl ?? null);
       return (
         <FeedCard
+          variant="upNext"
           data={data}
           onPress={() => navigation.push('Watch', { videoRowId: item.id })}
           onShare={() => {
@@ -247,40 +255,52 @@ export function WatchScreen({ route, navigation }: Props) {
 
   const keyExtractor = useCallback((item: Video) => item.id, []);
 
+  // Player element — rendered OUTSIDE the FlatList (see the return
+  // below) so it stays pinned at the top while Up Next scrolls, as in
+  // screenshot 06. Previously it lived inside ListHeaderComponent and
+  // scrolled away with the sheet.
+  const player = resolved ? (
+    <View style={styles.playerWrap}>
+      {playerReady ? (
+        <YouTubePlayer youtubeVideoId={resolved.youtubeVideoId} />
+      ) : (
+        <>
+          {resolved.thumbnailUrl ? (
+            <Image
+              source={{ uri: resolved.thumbnailUrl }}
+              style={styles.playerThumb}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+            />
+          ) : (
+            <View style={styles.playerThumb} />
+          )}
+          <View style={styles.playerSpinner}>
+            <ActivityIndicator color="#FFFFFF" />
+          </View>
+        </>
+      )}
+    </View>
+  ) : null;
+
   const header = useMemo(() => {
     if (!resolved) return null;
     const channelName = channel?.title ?? resolved.channelTitle;
     const channelAvatar = channel?.avatarUrl ?? null;
+    // Screenshot 06 metadata line: "@handle · N likes · ▷ N views ·
+    // date · more" — single line, parts joined only when present (the
+    // old build left a leading space when the handle was missing).
+    const metaText = [channel?.handle, resolved.metaLine].filter(Boolean).join('  ·  ');
     return (
       <View>
-        <View style={styles.playerWrap}>
-          {playerReady ? (
-            <YouTubePlayer youtubeVideoId={resolved.youtubeVideoId} />
-          ) : (
-            <>
-              {resolved.thumbnailUrl ? (
-                <Image
-                  source={{ uri: resolved.thumbnailUrl }}
-                  style={styles.playerThumb}
-                  contentFit="cover"
-                  cachePolicy="memory-disk"
-                />
-              ) : (
-                <View style={styles.playerThumb} />
-              )}
-              <View style={styles.playerSpinner}>
-                <ActivityIndicator color="#FFFFFF" />
-              </View>
-            </>
-          )}
-        </View>
         <View style={styles.sheet}>
-          <Text style={styles.title} numberOfLines={expanded ? undefined : 2}>
+          <Text style={styles.title} numberOfLines={expanded ? undefined : 1}>
             {resolved.title}
           </Text>
           <Pressable onPress={() => setExpanded((v) => !v)}>
             <Text style={styles.metaLine} numberOfLines={1}>
-              {channel?.handle ?? ''} {resolved.metaLine ? ` · ${resolved.metaLine}` : ''}{' '}
+              {metaText}
+              {metaText ? '  ' : ''}
               <Text style={styles.moreText}>{expanded ? 'less' : 'more'}</Text>
             </Text>
           </Pressable>
@@ -308,33 +328,75 @@ export function WatchScreen({ route, navigation }: Props) {
                 </Text>
               ) : null}
             </View>
+          </View>
+
+          {/* Action row (screenshot 06): at left the light-grey pill
+              beside the channel row's avatar column — here the real
+              "View Channel" destination in the Subscribed pill's
+              geometry (this app has no subscribe backend, so the pill
+              is NOT labelled Subscribed); right-aligned icon-only
+              group Like / Dislike / Share / Save / •••, no counts,
+              no labels. Previously Save/Playlist/Share were crowded
+              into the channel row and the pill sat alone below it. */}
+          <View style={styles.actionRow}>
+            <Pressable
+              style={styles.channelPill}
+              onPress={() => navigation.navigate('Channel', { channelId: channel?.channelId })}
+              accessibilityRole="button"
+              accessibilityLabel="View Channel"
+            >
+              <Text style={styles.channelPillText}>View Channel</Text>
+              <MaterialIcons name="chevron-right" size={18} color={lightColors.text} />
+            </Pressable>
             <View style={styles.actions}>
+              <Pressable
+                onPress={() => setReaction((r) => (r === 'like' ? null : 'like'))}
+                hitSlop={6}
+                accessibilityLabel="Like"
+                accessibilityState={{ selected: reaction === 'like' }}
+              >
+                <MaterialIcons
+                  name={reaction === 'like' ? 'thumb-up' : 'thumb-up-off-alt'}
+                  size={24}
+                  color={lightColors.text}
+                />
+              </Pressable>
+              <Pressable
+                onPress={() => setReaction((r) => (r === 'dislike' ? null : 'dislike'))}
+                hitSlop={6}
+                accessibilityLabel="Dislike"
+                accessibilityState={{ selected: reaction === 'dislike' }}
+              >
+                <MaterialIcons
+                  name={reaction === 'dislike' ? 'thumb-down' : 'thumb-down-off-alt'}
+                  size={24}
+                  color={lightColors.text}
+                />
+              </Pressable>
+              <Pressable onPress={onShare} hitSlop={6} accessibilityLabel="Share">
+                <MaterialIcons name="share" size={23} color={lightColors.text} />
+              </Pressable>
               {resolved.row && user ? (
-                <Pressable onPress={onToggleSave} hitSlop={8} accessibilityLabel={saved ? 'Remove from saved' : 'Save'}>
+                <Pressable
+                  onPress={onToggleSave}
+                  hitSlop={6}
+                  accessibilityLabel={saved ? 'Remove from saved' : 'Save'}
+                  accessibilityState={{ selected: saved }}
+                >
                   <MaterialIcons name={saved ? 'bookmark' : 'bookmark-border'} size={24} color={lightColors.text} />
                 </Pressable>
               ) : null}
               {resolved.row && user ? (
                 <Pressable
                   onPress={() => setPlaylistSheetOpen(true)}
-                  hitSlop={8}
-                  accessibilityLabel="Save to playlist"
+                  hitSlop={6}
+                  accessibilityLabel="More actions"
                 >
-                  <MaterialIcons name="playlist-add" size={26} color={lightColors.text} />
+                  <MaterialIcons name="more-horiz" size={24} color={lightColors.text} />
                 </Pressable>
               ) : null}
-              <Pressable onPress={onShare} hitSlop={8} accessibilityLabel="Share">
-                <MaterialIcons name="share" size={23} color={lightColors.text} />
-              </Pressable>
             </View>
           </View>
-          <Pressable
-            style={styles.viewChannelPill}
-            onPress={() => navigation.navigate('Channel', { channelId: channel?.channelId })}
-            accessibilityRole="button"
-          >
-            <Text style={styles.viewChannelText}>View Channel</Text>
-          </Pressable>
 
           {expanded && resolved.description ? (
             <View style={styles.descriptionBox}>
@@ -344,7 +406,7 @@ export function WatchScreen({ route, navigation }: Props) {
         </View>
       </View>
     );
-  }, [resolved, channel, playerReady, expanded, user, saved, onToggleSave, onShare, navigation]);
+  }, [resolved, channel, expanded, user, saved, onToggleSave, onShare, navigation, reaction]);
 
   if (loading) {
     return (
@@ -353,6 +415,13 @@ export function WatchScreen({ route, navigation }: Props) {
         <View style={styles.sheetSkeleton}>
           <View style={[styles.skelLine, { width: '85%' }]} />
           <View style={[styles.skelLine, { width: '55%', marginTop: 8 }]} />
+          <View style={styles.skelRow}>
+            <View style={styles.skelAvatar} />
+            <View style={{ flex: 1 }}>
+              <View style={[styles.skelLine, { width: '40%', height: 14 }]} />
+              <View style={[styles.skelLine, { width: '28%', height: 12, marginTop: 6 }]} />
+            </View>
+          </View>
         </View>
       </View>
     );
@@ -361,6 +430,7 @@ export function WatchScreen({ route, navigation }: Props) {
   if (error || !resolved) {
     return (
       <View style={styles.container}>
+        <View style={styles.playerSkeleton} />
         <EmptyState title="Recording unavailable" message={error ?? 'This recording could not be loaded.'} />
       </View>
     );
@@ -368,6 +438,7 @@ export function WatchScreen({ route, navigation }: Props) {
 
   return (
     <View style={styles.container}>
+      {player}
       <FlatList
         data={upNext}
         renderItem={renderUpNext}
@@ -411,12 +482,17 @@ const styles = StyleSheet.create({
   },
   sheet: {
     backgroundColor: lightColors.surface,
-    borderTopLeftRadius: nativeApp.watchSheet.topRadius + 4,
-    borderTopRightRadius: nativeApp.watchSheet.topRadius + 4,
-    marginTop: -(nativeApp.watchSheet.topRadius + 4),
+    // Screenshot 06 / token: exactly 20px rounded top corners
+    // overlapping the player's bottom edge by the same 20px (the old
+    // build used token+4 = 24 on both, which read visibly rounder
+    // and ate 4px more of the player than the reference).
+    borderTopLeftRadius: nativeApp.watchSheet.topRadius,
+    borderTopRightRadius: nativeApp.watchSheet.topRadius,
+    marginTop: -nativeApp.watchSheet.topRadius,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
     paddingBottom: spacing.md,
+    zIndex: 1,
   },
   title: { fontSize: 20, lineHeight: 26, fontWeight: '600', color: lightColors.text },
   metaLine: { fontSize: 14, color: lightColors.textSecondary, marginTop: spacing.sm },
@@ -437,17 +513,24 @@ const styles = StyleSheet.create({
   channelLines: { flex: 1 },
   channelName: { fontSize: 15, fontWeight: '600', color: lightColors.text },
   channelMeta: { fontSize: 13, color: lightColors.textSecondary, marginTop: 1 },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 26 },
-  viewChannelPill: {
-    alignSelf: 'flex-start',
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginTop: spacing.md,
-    borderWidth: 1,
-    borderColor: lightColors.border,
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: 9,
+    gap: spacing.md,
   },
-  viewChannelText: { fontSize: 14, fontWeight: '600', color: lightColors.text },
+  channelPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: lightColors.surfaceVariant,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+  },
+  channelPillText: { fontSize: 14, fontWeight: '500', color: lightColors.text },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 20, flexShrink: 0 },
   descriptionBox: {
     backgroundColor: lightColors.surfaceVariant,
     borderRadius: radii.card,
@@ -466,6 +549,20 @@ const styles = StyleSheet.create({
     aspectRatio: layout.thumbnailAspectRatio,
     backgroundColor: lightColors.playerBackground,
   },
-  sheetSkeleton: { padding: spacing.lg },
+  sheetSkeleton: {
+    backgroundColor: lightColors.surface,
+    borderTopLeftRadius: nativeApp.watchSheet.topRadius,
+    borderTopRightRadius: nativeApp.watchSheet.topRadius,
+    marginTop: -nativeApp.watchSheet.topRadius,
+    padding: spacing.lg,
+    zIndex: 1,
+  },
   skelLine: { height: 18, borderRadius: 4, backgroundColor: lightColors.surfaceVariant },
+  skelRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.lg, gap: spacing.md },
+  skelAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: lightColors.surfaceVariant,
+  },
 });

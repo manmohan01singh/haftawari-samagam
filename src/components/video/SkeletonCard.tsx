@@ -38,7 +38,9 @@ export const SkeletonCard = memo(function SkeletonCard({ variant }: { variant: '
 });
 
 const styles = StyleSheet.create({
-  feedCard: { paddingBottom: spacing.lg },
+  // Feed skeleton mirrors the real FeedCard container: white body with
+  // 20px rounded bottom corners, 20px of page ground below the card.
+  feedCard: { marginBottom: 20 },
   shelfCard: { paddingBottom: spacing.xl },
   thumbnail: {
     width: '100%',
@@ -47,7 +49,14 @@ const styles = StyleSheet.create({
   },
   thumbnailFeed: {},
   thumbnailShelf: { borderRadius: radii.card },
-  feedBody: { paddingHorizontal: nativeApp.feedCard.bodyPadding, paddingTop: spacing.md },
+  feedBody: {
+    backgroundColor: lightColors.surface,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    paddingHorizontal: nativeApp.feedCard.bodyPadding,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
+  },
   shelfBody: { paddingTop: spacing.md },
   line: { height: 17, borderRadius: 4, backgroundColor: lightColors.surfaceVariant },
   lineSm: { height: 13, borderRadius: 4, backgroundColor: lightColors.surfaceVariant },

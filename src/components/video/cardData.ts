@@ -48,7 +48,14 @@ export function supabaseCardData(video: Video, channelAvatarUrl: string | null):
     durationSeconds: video.duration_seconds,
     broadcastState: 'none',
     channelLine: OFFICIAL_CHANNEL_HANDLE,
-    metaLine: formatDateLine(video.published_at ?? video.created_at),
+    // Reference correction (screenshot 01): recorded-item metadata
+    // lines open with the ▷ glyph ("▷ 12K · 21 hr ago"). Archive rows
+    // carry no view count, so the real value shown after ▷ is the
+    // recording's date — never an invented count.
+    metaLine: (() => {
+      const date = formatDateLine(video.published_at ?? video.created_at);
+      return date ? `▷ ${date}` : '';
+    })(),
     channelAvatarUrl,
   };
 }

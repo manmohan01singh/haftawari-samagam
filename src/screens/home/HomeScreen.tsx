@@ -177,23 +177,14 @@ export function HomeScreen({ navigation }: Props) {
 
   const initial = profile?.display_name?.charAt(0)?.toUpperCase() ?? user?.email?.charAt(0)?.toUpperCase() ?? null;
 
-  return (
-    <View style={styles.container}>
-      <AppHeader
-        onSearchPress={() => navigation.navigate('Search')}
-        onAccountPress={() => navigation.navigate('Account')}
-        avatarInitial={initial}
-      />
-      <SecondaryTabs
-        items={[
-          { key: 'home', label: 'Home' },
-          { key: 'subs', label: 'Subs' },
-        ]}
-        selectedKey="home"
-        onSelect={(key) => {
-          if (key === 'subs') navigation.navigate('Subscriptions');
-        }}
-      />
+  // Chips + the Sessions entry live in the feed's ListHeader so they
+  // SCROLL AWAY with the feed. Previously both were pinned above the
+  // list under the header: header + tabs + chips + sessions row ate
+  // ~215px before the first thumbnail, while screenshot 01 shows the
+  // first thumbnail starting directly under the tab row. Only the
+  // header and the secondary tab row stay fixed (as in the reference).
+  const listHeader = (
+    <View>
       {categories.length > 0 ? (
         <ChipsRow
           chips={[ALL_CHIP, ...categories.map((c) => c.name)]}
@@ -218,6 +209,28 @@ export function HomeScreen({ navigation }: Props) {
         </View>
         <MaterialIcons name="chevron-right" size={24} color={lightColors.textSecondary} />
       </Pressable>
+    </View>
+  );
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.headerBlock}>
+        <AppHeader
+          onSearchPress={() => navigation.navigate('Search')}
+          onAccountPress={() => navigation.navigate('Account')}
+          avatarInitial={initial}
+        />
+        <SecondaryTabs
+          items={[
+            { key: 'home', label: 'Home' },
+            { key: 'subs', label: 'Subs' },
+          ]}
+          selectedKey="home"
+          onSelect={(key) => {
+            if (key === 'subs') navigation.navigate('Subscriptions');
+          }}
+        />
+      </View>
 
       {!isSupabaseConfigured ? (
         <EmptyState
@@ -245,6 +258,7 @@ export function HomeScreen({ navigation }: Props) {
           data={visibleVideos}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
+          ListHeaderComponent={listHeader}
           onEndReached={onEndReached}
           onEndReachedThreshold={0.6}
           refreshing={refreshing}
@@ -265,15 +279,18 @@ export function HomeScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: lightColors.background },
+  // Screenshot 01: cards are white containers on a light-grey page
+  // ground — the grey shows in the gaps between cards and around the
+  // chips/sessions rows. White-on-white made the feed read as one
+  // unbroken sheet with no card separation.
+  container: { flex: 1, backgroundColor: '#F8F8F8' },
+  headerBlock: { backgroundColor: lightColors.surface },
   sessionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: lightColors.border,
   },
   sessionsRowPressed: { backgroundColor: lightColors.surfaceVariant },
   sessionsLines: { flex: 1 },
