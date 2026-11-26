@@ -2,6 +2,12 @@
  * Design tokens measured from the audited YouTube UI
  * (desktop + mobile audits, 26 Nov 2026). These are layout facts —
  * header height, sidebar widths, thumbnail geometry — not copied assets.
+ *
+ * Native-app update (26 Nov 2026): the user's own screenshots of the
+ * native YouTube Android app supersede the mobile-web audit for the app.
+ * Full catalogue: docs/reference/REFERENCE_UI.md. Tokens proven by those
+ * screenshots live in `nativeApp` below (additive — audit tokens above
+ * are unchanged and remain the PWA/desktop reference).
  */
 
 export const layout = {
@@ -112,11 +118,64 @@ export const darkColors: ThemeColors = {
   playerBackground: '#000000',
 };
 
+/**
+ * Tokens proven by the native Android app screenshots
+ * (docs/reference/REFERENCE_UI.md, screenshots 01–07). App only —
+ * the PWA keeps the mobile-web values in `layout`/`radii` above.
+ */
+export const nativeApp = {
+  /** Bottom nav: 4 icon-only slots (Home, Shorts, circled +, avatar), no labels. */
+  bottomNav: {
+    showLabels: false,
+    slotCount: 4,
+    createIcon: 'circledPlus' as const,
+    profileSlot: 'avatar' as const,
+  },
+  /** Secondary tab row under the top bar: Home / Subs / Music / Live / More. */
+  secondaryTabs: {
+    textSize: 16,
+    selectedPalePill: true, // selected = pale pill bg; unselected = plain text
+    horizontalPadding: 16,
+  },
+  /** Home feed card (screenshot 01). */
+  feedCard: {
+    thumbnailFullBleed: true, // edge-to-edge on Home
+    bodyPadding: spacing.md + 4, // ≈16
+    badgeInset: 8,
+    liveBadgeRadius: 6,
+    /** Inline engagement row inside the card body: like/comment/save/more. */
+    engagementRow: { iconSize: 24, iconGap: 20, showCounts: false },
+  },
+  /** Inset thumbnails used by Subscriptions/Search shelves (screenshots 02–03). */
+  shelfCard: {
+    thumbnailInset: spacing.md + 4, // ≈16 side margins
+    thumbnailRadius: radii.card, // 12
+    carouselCardWidthRatio: 0.78, // next card peeks at the edge
+  },
+  /** Subscriptions channel rail (screenshot 02). */
+  avatarRail: { avatarSize: 64, liveDotSize: 14, nameFontSize: 12 },
+  /** Stacked playlist rows on the You/Library page (screenshot 04). */
+  stackedPlaylist: {
+    thumbnailWidthRatio: 0.4,
+    stackOffset: 6, // offset layer peeking behind the thumbnail's top edge
+  },
+  /** Watch page sheet + live chat (screenshots 05–07). */
+  watchSheet: { topRadius: 16, dragHandleWidth: 48, dragHandleHeight: 4 },
+  chatCard: { radius: 16, padding: spacing.md },
+  chatSheet: {
+    avatarSize: 36,
+    badgeHeight: 20, // e.g. top-fan crown pill after a handle
+    noticeRadius: radii.card, // 12
+    reactionButtonSize: 56, // floating heart circle
+  },
+} as const;
+
 export const theme = {
   layout,
   radii,
   spacing,
   typography,
+  nativeApp,
   light: lightColors,
   dark: darkColors,
 } as const;
