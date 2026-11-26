@@ -15,6 +15,12 @@ import { useAuth } from '../../features/auth';
 import { useOfficialChannel } from '../../features/channel';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import {
+  OFFICIAL_CHANNEL_ID,
+  fetchChannelLiveAndUpcoming,
+  isYouTubeConfigured,
+  type YouTubeVideoMetadata,
+} from '../../lib/youtube';
+import {
   fetchCategories,
   fetchPublishedVideos,
   fetchSavedVideoIds,
@@ -52,6 +58,23 @@ export function HomeScreen({ navigation }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [exhausted, setExhausted] = useState(false);
   const loadingRef = useRef(false);
+  // Real live state from the YouTube API (QA 49/68): a map of
+  // youtube_video_id → live/upcoming metadata for the official
+  // channel. Archive rows have no live flag of their own.
+  const [liveMap, setLiveMap] = useState<Map<string, YouTubeVideoMetadata>>(new Map());
+
+  useEffect(() => {
+    if (!isYouTubeConfigured) return;
+    let active = true;
+    fetchChannelLiveAndUpcoming(OFFICIAL_CHANNEL_ID)
+      .then((metas) => {
+        if (active) setLiveMap(new Map(metas.map((m) => [m.youtubeVideoId, m])));
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const loadPage = useCallback(async (offset: number): Promise<Video[]> => {
     const page = await fetchPublishedVideos(PAGE_SIZE, offset);
@@ -124,17 +147,27 @@ export function HomeScreen({ navigation }: Props) {
   }, [exhausted, loadPage, loading, videos.length]);
 
   const visibleVideos = useMemo(() => {
-    if (selectedCategory === ALL_CHIP) return videos;
-    const cat = categories.find((c) => c.name === selectedCategory);
-    if (!cat) return videos;
-    return videos.filter((v) => v.category_id === cat.id);
-  }, [videos, categories, selectedCategory]);
+    const filtered =
+      selectedCategory === ALL_CHIP
+        ? videos
+        : (() => {
+            const cat = categories.find((c) => c.name === selectedCategory);
+            return cat ? videos.filter((v) => v.category_id === cat.id) : videos;
+          })();
+    // Live first (QA 68): stable float of genuinely-live items (real
+    // API state) above the newest-first catalogue order.
+    if (liveMap.size === 0) return filtered;
+    const live = filtered.filter((v) => liveMap.get(v.youtube_video_id)?.liveBroadcastContent === 'live');
+    if (live.length === 0) return filtered;
+    const rest = filtered.filter((v) => liveMap.get(v.youtube_video_id)?.liveBroadcastContent !== 'live');
+    return [...live, ...rest];
+  }, [videos, categories, selectedCategory, liveMap]);
 
   const avatarUrl = channel?.avatarUrl ?? null;
 
   const renderItem = useCallback(
     ({ item }: { item: Video }) => {
-      const data: CardVideoData = supabaseCardData(item, avatarUrl);
+      const data: CardVideoData = supabaseCardData(item, avatarUrl, liveMap.get(item.youtube_video_id) ?? null);
       return (
         <FeedCard
           data={data}
@@ -170,7 +203,7 @@ export function HomeScreen({ navigation }: Props) {
         />
       );
     },
-    [avatarUrl, navigation, savedIds, user],
+    [avatarUrl, navigation, savedIds, user, liveMap],
   );
 
   const keyExtractor = useCallback((item: Video) => item.id, []);

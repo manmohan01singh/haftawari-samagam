@@ -40,7 +40,7 @@ export const SkeletonCard = memo(function SkeletonCard({ variant }: { variant: '
 const styles = StyleSheet.create({
   // Feed skeleton mirrors the real FeedCard container: white body with
   // 20px rounded bottom corners, 20px of page ground below the card.
-  feedCard: { marginBottom: 20 },
+  feedCard: { marginBottom: 12 },
   shelfCard: { paddingBottom: spacing.xl },
   thumbnail: {
     width: '100%',

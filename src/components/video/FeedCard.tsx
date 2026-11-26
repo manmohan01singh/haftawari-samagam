@@ -1,4 +1,4 @@
-import React, { memo, useState } from 'react';
+import React, { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -16,11 +16,14 @@ interface FeedCardProps {
   /**
    * `feed` (default) = Home card container per screenshot 01: full-bleed
    * thumbnail, white body with rounded bottom corners on the grey page,
-   * title full-width ABOVE the avatar row, inline engagement row
-   * (thumb-up / comment / bookmark / •••, no counts) inside the body.
-   * `upNext` = Watch "Up Next" row per screenshot 06: flat white, no
-   * engagement row — avatar + title with ••• at the title's right,
-   * channel · metadata line under the title.
+   * title full-width ABOVE the avatar row, and the engagement row
+   * right-aligned on the avatar row. QA issue 48 guardrail: only REAL
+   * actions are wired — bookmark (saved_videos), share (system sheet)
+   * and ••• (opens the recording, where save/playlist/share live).
+   * Like/comment have no backend in this app and are NOT rendered as
+   * dead icons; they are flagged in the QA report instead.
+   * `upNext` = compact horizontal row (QA issue 57): small 16:9 thumb
+   * at left, title + channel/meta at right, ⋮ at the far right.
    */
   variant?: 'feed' | 'upNext';
 }
@@ -45,7 +48,6 @@ export const FeedCard = memo(function FeedCard({
   variant = 'feed',
 }: FeedCardProps) {
   const isLive = data.broadcastState === 'live';
-  const [liked, setLiked] = useState(false);
   const isUpNext = variant === 'upNext';
 
   const thumbnail = (
@@ -88,33 +90,53 @@ export const FeedCard = memo(function FeedCard({
   );
 
   if (isUpNext) {
-    // Screenshot 06 Up Next row: avatar left, title (••• at its right),
-    // then "channel · ▷ meta" on one grey line. No engagement row.
+    // QA issue 57: Up Next is a COMPACT HORIZONTAL row — small 16:9
+    // thumbnail at left (~40% width, radius 8, duration/LIVE chip on
+    // it), title + channel/meta lines at right, ⋮ at the far right.
+    // (QA issue 61: titles use explicit tail ellipsis.)
     const metaParts = [data.channelLine, data.metaLine].filter(Boolean);
     return (
       <Pressable onPress={onPress} style={styles.upNextCard} accessibilityRole="button">
-        {thumbnail}
-        <View style={styles.upNextBody}>
-          {avatar}
-          <View style={styles.lines}>
-            <Text style={styles.upNextTitle} numberOfLines={2}>
-              {data.title}
-            </Text>
-            {metaParts.length > 0 ? (
-              <Text style={styles.meta} numberOfLines={1}>
-                {metaParts.join('  ·  ')}
-              </Text>
-            ) : null}
-          </View>
-          <Pressable
-            onPress={onShare ?? onPress}
-            hitSlop={8}
-            accessibilityLabel="More actions"
-            style={styles.moreButton}
-          >
-            <MaterialIcons name="more-vert" size={22} color={lightColors.text} />
-          </Pressable>
+        <View style={styles.upNextThumbWrap}>
+          {data.thumbnailUrl ? (
+            <Image
+              source={{ uri: data.thumbnailUrl }}
+              style={styles.upNextThumb}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              transition={150}
+            />
+          ) : (
+            <View style={[styles.upNextThumb, styles.thumbnailEmpty]} />
+          )}
+          {isLive ? (
+            <View style={styles.upNextBadge}>
+              <Text style={styles.liveText}>LIVE</Text>
+            </View>
+          ) : data.durationSeconds != null ? (
+            <View style={styles.upNextBadge}>
+              <Text style={styles.durationText}>{formatDuration(data.durationSeconds)}</Text>
+            </View>
+          ) : null}
         </View>
+        <View style={styles.lines}>
+          <Text style={styles.upNextTitle} numberOfLines={2} ellipsizeMode="tail">
+            {data.title}
+          </Text>
+          {metaParts.length > 0 ? (
+            <Text style={styles.upNextMeta} numberOfLines={2} ellipsizeMode="tail">
+              {metaParts.join('\n')}
+            </Text>
+          ) : null}
+        </View>
+        <Pressable
+          onPress={onShare ?? onPress}
+          hitSlop={8}
+          accessibilityLabel="More actions"
+          style={styles.moreButton}
+        >
+          <MaterialIcons name="more-vert" size={20} color={lightColors.text} />
+        </Pressable>
       </Pressable>
     );
   }
@@ -123,37 +145,25 @@ export const FeedCard = memo(function FeedCard({
     <Pressable onPress={onPress} style={styles.card} accessibilityRole="button">
       {thumbnail}
       <View style={styles.body}>
-        <Text style={styles.title} numberOfLines={2}>
+        <Text style={styles.title} numberOfLines={2} ellipsizeMode="tail">
           {data.title}
         </Text>
         <View style={styles.row}>
           {avatar}
           <View style={styles.lines}>
-            <Text style={styles.handle} numberOfLines={1}>
+            <Text style={styles.handle} numberOfLines={1} ellipsizeMode="tail">
               {data.channelLine}
             </Text>
             {data.metaLine ? (
-              <Text style={styles.meta} numberOfLines={1}>
+              <Text style={styles.meta} numberOfLines={1} ellipsizeMode="tail">
                 {data.metaLine}
               </Text>
             ) : null}
           </View>
+          {/* Engagement row (QA 48/69): right-aligned, inside the card
+              body, 24px icons with even spacing, no counts — and only
+              real actions: Save (bookmark), Share, ••• (more). */}
           <View style={styles.engagement}>
-            <Pressable
-              onPress={() => setLiked((v) => !v)}
-              hitSlop={6}
-              accessibilityLabel={liked ? 'Unlike' : 'Like'}
-              accessibilityState={{ selected: liked }}
-            >
-              <MaterialIcons
-                name={liked ? 'thumb-up' : 'thumb-up-off-alt'}
-                size={24}
-                color={lightColors.text}
-              />
-            </Pressable>
-            <Pressable onPress={onPress} hitSlop={6} accessibilityLabel="Comments">
-              <MaterialIcons name="chat-bubble-outline" size={23} color={lightColors.text} />
-            </Pressable>
             <Pressable
               onPress={onToggleSave ?? onPress}
               hitSlop={6}
@@ -162,7 +172,10 @@ export const FeedCard = memo(function FeedCard({
             >
               <MaterialIcons name={saved ? 'bookmark' : 'bookmark-border'} size={24} color={lightColors.text} />
             </Pressable>
-            <Pressable onPress={onShare ?? onPress} hitSlop={6} accessibilityLabel="More actions">
+            <Pressable onPress={onShare ?? onPress} hitSlop={6} accessibilityLabel="Share">
+              <MaterialIcons name="share" size={22} color={lightColors.text} />
+            </Pressable>
+            <Pressable onPress={onPress} hitSlop={6} accessibilityLabel="More actions">
               <MaterialIcons name="more-horiz" size={24} color={lightColors.text} />
             </Pressable>
           </View>
@@ -176,7 +189,9 @@ const styles = StyleSheet.create({
   // Card container (screenshot 01): the white body carries rounded
   // bottom corners and the cards sit on the page's light-grey ground,
   // separated by ~20px of that ground — not white-on-white.
-  card: { marginBottom: 20 },
+  // QA issue 53: card rhythm is ~12px of page ground between cards
+  // (the grey ground itself is the divider).
+  card: { marginBottom: 12 },
   thumbnailWrap: { position: 'relative' },
   thumbnail: {
     width: '100%',
@@ -215,7 +230,8 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     paddingBottom: spacing.md,
   },
-  title: { fontSize: 17, lineHeight: 23, fontWeight: '600', color: lightColors.text },
+  // QA issue 52: reference card titles are ~15-16px, two lines max.
+  title: { fontSize: 16, lineHeight: 22, fontWeight: '600', color: lightColors.text },
   row: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: spacing.md },
   avatar: { width: 40, height: 40, borderRadius: 20 },
   avatarFallback: {
@@ -233,16 +249,32 @@ const styles = StyleSheet.create({
     gap: nativeApp.feedCard.engagementRow.iconGap,
     flexShrink: 0,
   },
-  // Up Next (screenshot 06): flat on the white sheet, no card rounding,
-  // ~16px below the previous item's body.
-  upNextCard: { backgroundColor: lightColors.surface, paddingBottom: spacing.lg },
-  upNextBody: {
+  // Up Next compact row (QA 57): horizontal, flat on the white sheet.
+  upNextCard: {
+    backgroundColor: lightColors.surface,
     flexDirection: 'row',
     alignItems: 'flex-start',
     paddingHorizontal: nativeApp.feedCard.bodyPadding,
-    paddingTop: spacing.md,
+    paddingVertical: spacing.sm + 2,
     gap: spacing.md,
   },
-  upNextTitle: { fontSize: 16, lineHeight: 22, fontWeight: '600', color: lightColors.text },
+  upNextThumbWrap: { position: 'relative', width: '38%', maxWidth: 168 },
+  upNextThumb: {
+    width: '100%',
+    aspectRatio: layout.thumbnailAspectRatio,
+    borderRadius: 8,
+    backgroundColor: lightColors.playerBackground,
+  },
+  upNextBadge: {
+    position: 'absolute',
+    right: 4,
+    bottom: 4,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
+  upNextTitle: { fontSize: 15, lineHeight: 20, fontWeight: '600', color: lightColors.text },
+  upNextMeta: { fontSize: 13, lineHeight: 18, color: lightColors.textSecondary, marginTop: 3 },
   moreButton: { marginTop: 1 },
 });

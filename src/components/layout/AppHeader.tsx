@@ -50,9 +50,15 @@ export const AppHeader = memo(function AppHeader({
         <Pressable onPress={onAccountPress} hitSlop={8} accessibilityLabel="Account">
           {avatarUrl ? (
             <Image source={{ uri: avatarUrl }} style={styles.avatar} contentFit="cover" cachePolicy="memory-disk" />
-          ) : (
+          ) : avatarInitial ? (
             <View style={[styles.avatar, styles.avatarFallback]}>
-              <Text style={styles.avatarInitial}>{avatarInitial ?? '?'}</Text>
+              <Text style={styles.avatarInitial}>{avatarInitial}</Text>
+            </View>
+          ) : (
+            // QA issue 46: a bare "?" in a circle reads as a broken
+            // image. Signed-out / no-name state shows a person glyph.
+            <View style={[styles.avatar, styles.avatarFallback]}>
+              <MaterialIcons name="person" size={18} color={lightColors.textSecondary} />
             </View>
           )}
         </Pressable>

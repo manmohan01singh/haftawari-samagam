@@ -51,13 +51,18 @@ export const BottomNav = memo(function BottomNav({ items, activeKey, onPress }: 
               item.avatarUrl ? (
                 <Image
                   source={{ uri: item.avatarUrl }}
-                  style={styles.avatar}
+                  style={[styles.avatar, active && styles.avatarActive]}
                   contentFit="cover"
                   cachePolicy="memory-disk"
                 />
+              ) : item.avatarInitial ? (
+                <View style={[styles.avatar, styles.avatarFallback, active && styles.avatarActive]}>
+                  <Text style={styles.avatarInitial}>{item.avatarInitial}</Text>
+                </View>
               ) : (
-                <View style={[styles.avatar, styles.avatarFallback]}>
-                  <Text style={styles.avatarInitial}>{item.avatarInitial ?? '?'}</Text>
+                // No "?" placeholder (QA 46/50): person glyph instead.
+                <View style={[styles.avatar, styles.avatarFallback, active && styles.avatarActive]}>
+                  <MaterialIcons name="person" size={18} color={lightColors.textSecondary} />
                 </View>
               )
             ) : (
@@ -84,15 +89,18 @@ const styles = StyleSheet.create({
   },
   item: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   createCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     borderWidth: 1.5,
     borderColor: lightColors.text,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatar: { width: 28, height: 28, borderRadius: 14 },
+  // Active-state cue for the avatar slot (QA 50): a 2px ring in the
+  // primary text colour; icon slots cue via icon colour instead.
+  avatarActive: { borderWidth: 2, borderColor: lightColors.text },
   avatarFallback: {
     backgroundColor: lightColors.surfaceVariant,
     alignItems: 'center',
