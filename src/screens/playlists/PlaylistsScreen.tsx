@@ -6,7 +6,9 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import { lightColors, spacing } from '../../theme';
 import { useCurrentUser, usePlaylistSummaries } from '../../features/library/hooks';
-import { createPlaylist } from '../../features/library/libraryService';
+import { createPlaylist, deletePlaylist } from '../../features/library/libraryService';
+import { CardActionSheet } from '../../components/common/CardActionSheet';
+import { ConfirmModal } from '../../features/library/components/ConfirmModal';
 import type { PlaylistSummary } from '../../features/library/types';
 import type { LibraryRootStackParamList } from '../../features/library/screenTypes';
 import { goBackOrTab } from '../../navigation/safeBack';
@@ -29,6 +31,29 @@ export function PlaylistsScreen({ navigation }: Props) {
   const { user, loading: authLoading } = useCurrentUser();
   const summaries = usePlaylistSummaries(user?.id ?? null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [menuFor, setMenuFor] = useState<PlaylistSummary | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<PlaylistSummary | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const handleDelete = useCallback(async () => {
+    if (!confirmDelete) return;
+    const target = confirmDelete;
+    setDeleting(true);
+    setActionError(null);
+    // Optimistic remove; restored below if the backend delete fails.
+    summaries.setData(summaries.data.filter((s) => s.playlist.id !== target.playlist.id));
+    try {
+      await deletePlaylist(target.playlist.id);
+      setConfirmDelete(null);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Could not delete that playlist.');
+      summaries.reload();
+      setConfirmDelete(null);
+    } finally {
+      setDeleting(false);
+    }
+  }, [confirmDelete, summaries]);
 
   const reload = summaries.reload;
   useFocusEffect(
@@ -56,7 +81,9 @@ export function PlaylistsScreen({ navigation }: Props) {
   );
 
   const renderItem = useCallback(
-    ({ item }: { item: PlaylistSummary }) => <PlaylistRow summary={item} onPress={openPlaylist} />,
+    ({ item }: { item: PlaylistSummary }) => (
+      <PlaylistRow summary={item} onPress={openPlaylist} onMenu={setMenuFor} />
+    ),
     [openPlaylist],
   );
 
@@ -103,6 +130,11 @@ export function PlaylistsScreen({ navigation }: Props) {
           keyExtractor={keyExtractor}
           contentContainerStyle={styles.listPad}
           refreshControl={<RefreshControl refreshing={summaries.refreshing} onRefresh={summaries.refresh} />}
+          ListHeaderComponent={
+            actionError || summaries.error ? (
+              <Text style={styles.errorLine}>{actionError ?? summaries.error}</Text>
+            ) : undefined
+          }
           ListEmptyComponent={
             <ScreenMessage
               title="No playlists yet"
@@ -121,6 +153,41 @@ export function PlaylistsScreen({ navigation }: Props) {
 
       <StackTabBar navigation={navigation} activeTab="Library" />
       <CreatePlaylistSheet visible={createOpen} onCreate={handleCreate} onClose={() => setCreateOpen(false)} />
+      <CardActionSheet
+        visible={menuFor != null}
+        onClose={() => setMenuFor(null)}
+        actions={[
+          ...(menuFor
+            ? [
+                {
+                  key: 'open',
+                  label: 'Open playlist',
+                  icon: 'playlist-play',
+                  onPress: () => openPlaylist(menuFor),
+                },
+              ]
+            : []),
+          ...(menuFor?.isOwn
+            ? [
+                {
+                  key: 'delete',
+                  label: 'Delete playlist',
+                  icon: 'delete-outline',
+                  onPress: () => setConfirmDelete(menuFor),
+                },
+              ]
+            : []),
+        ]}
+      />
+      <ConfirmModal
+        visible={confirmDelete != null}
+        title="Delete this playlist?"
+        message={`"${confirmDelete?.playlist.title ?? ''}" and its list of recordings will be removed. The recordings themselves stay in the catalogue. This cannot be undone.`}
+        confirmLabel="Delete"
+        busy={deleting}
+        onConfirm={() => void handleDelete()}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </View>
   );
 }
@@ -137,4 +204,5 @@ const styles = StyleSheet.create({
   topBarTitle: { fontSize: 17, fontWeight: '600', color: lightColors.text },
   topBarSpacer: { width: 26 },
   listPad: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, flexGrow: 1 },
+  errorLine: { color: lightColors.accent, fontSize: 13, paddingBottom: spacing.sm },
 });

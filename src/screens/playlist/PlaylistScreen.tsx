@@ -13,7 +13,9 @@ import type { PlaylistDetailItem } from '../../features/library/types';
 import type { LibraryRootStackParamList } from '../../features/library/screenTypes';
 import { goBackOrTab } from '../../navigation/safeBack';
 import { StackTabBar } from '../../components/layout/StackTabBar';
-import { ScreenLoading, ScreenMessage } from '../../features/library/components/ScreenMessage';
+import { ScreenMessage } from '../../features/library/components/ScreenMessage';
+import { SkeletonCard } from '../../components/video/SkeletonCard';
+import { OFFICIAL_CHANNEL } from '../../features/search/config';
 import { SwipeableRow } from '../../features/library/components/SwipeableRow';
 import { VideoListRow } from '../../features/library/components/VideoListRow';
 import { ROW_LIST_PERF } from '../../lib/listPerf';
@@ -71,6 +73,7 @@ export function PlaylistScreen({ navigation, route }: Props) {
       const row = (
         <VideoListRow
           video={item.video}
+          channelLine={OFFICIAL_CHANNEL.title}
           metaLine={`#${item.item.position + 1}`}
           onPress={(video) => navigation.navigate('Watch', { videoRowId: video.id })}
           actionIcon={isOwner ? 'close' : undefined}
@@ -114,7 +117,9 @@ export function PlaylistScreen({ navigation, route }: Props) {
         {detail.items.length === 1 ? 'recording' : 'recordings'}
         {totalSeconds > 0 ? ` · ${formatClock(totalSeconds)} total` : ''}
       </Text>
-      {actionError ? <Text style={styles.errorLine}>{actionError}</Text> : null}
+      {actionError || detailState.error ? (
+        <Text style={styles.errorLine}>{actionError ?? detailState.error}</Text>
+      ) : null}
       {detail.items.length > 0 ? (
         <Pressable
           style={styles.playAllButton}
@@ -147,7 +152,14 @@ export function PlaylistScreen({ navigation, route }: Props) {
           message="The backend isn't configured in this build, so this playlist can't be shown."
         />
       ) : detailState.loading && !detail ? (
-        <ScreenLoading label="Loading playlist…" />
+        // Skeletons in the real geometry (cover + rows), not a lone
+        // "Loading…" label on a blank page.
+        <View style={styles.listPad}>
+          <View style={styles.coverSkeleton} />
+          <SkeletonCard variant="row" />
+          <SkeletonCard variant="row" />
+          <SkeletonCard variant="row" />
+        </View>
       ) : detailState.error && !detail ? (
         <ScreenMessage title="Could not load this playlist" message={detailState.error} actionLabel="Try again" onAction={detailState.reload} />
       ) : detailState.notFound || !detail ? (
@@ -193,6 +205,13 @@ const styles = StyleSheet.create({
   topBarSpacer: { width: 24 },
   listPad: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, flexGrow: 1 },
   header: { paddingBottom: spacing.md },
+  coverSkeleton: {
+    width: '100%',
+    aspectRatio: layout.thumbnailAspectRatio,
+    borderRadius: radii.card,
+    backgroundColor: lightColors.surfaceVariant,
+    marginBottom: spacing.md,
+  },
   cover: {
     width: '100%',
     aspectRatio: layout.thumbnailAspectRatio,

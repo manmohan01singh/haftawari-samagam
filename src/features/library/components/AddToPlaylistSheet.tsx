@@ -92,7 +92,22 @@ export function AddToPlaylistSheet({ visible, userId, videoId, onClose, onChange
   const handleCreate = async (title: string, isPublic: boolean) => {
     if (!userId || !videoId) throw new Error('Sign in to create a playlist.');
     const playlist = await createPlaylist(userId, title, isPublic);
-    await addVideoToPlaylist(playlist.id, videoId);
+    try {
+      await addVideoToPlaylist(playlist.id, videoId);
+    } catch (e) {
+      // The playlist now EXISTS. Throwing here would keep the create
+      // sheet open, and a retry would create a duplicate playlist.
+      // Instead: close the create sheet (resolve), show the new
+      // playlist unchecked in this sheet, and surface the add error
+      // here where the user can simply tap the checkbox to retry.
+      setRows((prev) => [{ playlist, itemCount: 0, containsVideo: false }, ...prev]);
+      setError(
+        e instanceof Error
+          ? `Playlist created, but the recording could not be added: ${e.message}`
+          : 'Playlist created, but the recording could not be added.',
+      );
+      return;
+    }
     setRows((prev) => [{ playlist, itemCount: 1, containsVideo: true }, ...prev]);
     onChanged?.();
   };
@@ -116,6 +131,15 @@ export function AddToPlaylistSheet({ visible, userId, videoId, onClose, onChange
             </Pressable>
           </View>
 
+          {!userId || !videoId ? (
+            // Honest signed-out state: previously this fell through to
+            // "You have no playlists yet" and a New-playlist flow that
+            // could only fail with a sign-in error.
+            <Text style={styles.emptyText}>
+              Sign in to save recordings to your playlists.
+            </Text>
+          ) : (
+            <>
           <Pressable style={styles.newRow} onPress={() => setCreateOpen(true)} accessibilityRole="button">
             <MaterialIcons name="add" size={24} color={lightColors.text} />
             <Text style={styles.newText}>New playlist</Text>
@@ -124,8 +148,10 @@ export function AddToPlaylistSheet({ visible, userId, videoId, onClose, onChange
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
           {loading ? (
-            <View style={styles.loadingBox}>
-              <ActivityIndicator color={lightColors.text} />
+            <View style={styles.loadingBox} accessibilityLabel="Loading your playlists">
+              <View style={styles.skeletonRow} />
+              <View style={styles.skeletonRow} />
+              <View style={styles.skeletonRow} />
             </View>
           ) : rows.length === 0 ? (
             <Text style={styles.emptyText}>You have no playlists yet. Create one above.</Text>
@@ -165,6 +191,8 @@ export function AddToPlaylistSheet({ visible, userId, videoId, onClose, onChange
                 </Pressable>
               )}
             />
+          )}
+            </>
           )}
         </View>
       </View>
@@ -211,7 +239,12 @@ const styles = StyleSheet.create({
   },
   newText: { fontSize: 15, fontWeight: '500', color: lightColors.text },
   error: { color: lightColors.accent, fontSize: 13, marginTop: spacing.sm },
-  loadingBox: { paddingVertical: spacing.xxl, alignItems: 'center' },
+  loadingBox: { paddingVertical: spacing.lg, gap: spacing.md },
+  skeletonRow: {
+    height: 44,
+    borderRadius: radii.card,
+    backgroundColor: lightColors.surfaceVariant,
+  },
   emptyText: { fontSize: 14, color: lightColors.textSecondary, paddingVertical: spacing.lg },
   list: { flexGrow: 0 },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md },

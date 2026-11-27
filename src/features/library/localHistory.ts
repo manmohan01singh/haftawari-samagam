@@ -40,11 +40,15 @@ async function readAll(): Promise<LocalHistoryEntry[]> {
   }
 }
 
-async function writeAll(entries: LocalHistoryEntry[]): Promise<void> {
+async function writeAll(entries: LocalHistoryEntry[]): Promise<boolean> {
   try {
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+    return true;
   } catch {
     // Storage full/blocked: local history is best-effort, never a crash.
+    // Report failure so destructive callers (remove / clear) can roll
+    // back their optimistic UI instead of pretending it worked.
+    return false;
   }
 }
 
@@ -62,24 +66,29 @@ export async function fetchLocalHistory(): Promise<LocalHistoryEntry[]> {
   return readAll();
 }
 
-export async function removeLocalHistoryEntry(youtubeVideoId: string): Promise<void> {
+/** Resolves true when the removal was actually persisted. */
+export async function removeLocalHistoryEntry(youtubeVideoId: string): Promise<boolean> {
   const entries = await readAll();
-  await writeAll(entries.filter((e) => e.youtubeVideoId !== youtubeVideoId));
+  return writeAll(entries.filter((e) => e.youtubeVideoId !== youtubeVideoId));
 }
 
-export async function clearLocalHistory(): Promise<void> {
-  await writeAll([]);
+/** Resolves true when the clear was actually persisted. */
+export async function clearLocalHistory(): Promise<boolean> {
+  return writeAll([]);
 }
 
 /** Hook form for screens: reload() refetches from storage (call on focus). */
 export function useLocalHistory(): {
   entries: LocalHistoryEntry[];
   loading: boolean;
+  refreshing: boolean;
   reload: () => void;
+  refresh: () => void;
   setEntries: (next: LocalHistoryEntry[]) => void;
 } {
   const [entries, setEntries] = useState<LocalHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const reload = useCallback(() => {
     void readAll()
@@ -87,10 +96,20 @@ export function useLocalHistory(): {
       .finally(() => setLoading(false));
   }, []);
 
+  const refresh = useCallback(() => {
+    setRefreshing(true);
+    void readAll()
+      .then(setEntries)
+      .finally(() => {
+        setLoading(false);
+        setRefreshing(false);
+      });
+  }, []);
+
   useEffect(() => {
     const t = setTimeout(reload, 0);
     return () => clearTimeout(t);
   }, [reload]);
 
-  return { entries, loading, reload, setEntries };
+  return { entries, loading, refreshing, reload, refresh, setEntries };
 }

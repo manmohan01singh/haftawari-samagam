@@ -10,7 +10,13 @@ import { listThumbnailUrl } from '../../../components/video/cardData';
 
 interface VideoListRowProps {
   video: Video;
-  /** Grey line under the title (real data only — dates, counts). */
+  /**
+   * Channel line under the title (reference rows always carry one).
+   * Catalogue rows all belong to the one official channel, so callers
+   * pass its real API-verified title — never an invented name.
+   */
+  channelLine?: string;
+  /** Grey line under the channel line (real data only — dates, counts). */
   metaLine?: string;
   /** Resume position in seconds (history rows); shown when > 0. */
   resumePositionSeconds?: number;
@@ -29,6 +35,7 @@ interface VideoListRowProps {
  */
 export const VideoListRow = memo(function VideoListRow({
   video,
+  channelLine,
   metaLine,
   resumePositionSeconds,
   onPress,
@@ -78,6 +85,11 @@ export const VideoListRow = memo(function VideoListRow({
         <Text style={styles.title} numberOfLines={2}>
           {video.title}
         </Text>
+        {channelLine ? (
+          <Text style={styles.meta} numberOfLines={1}>
+            {channelLine}
+          </Text>
+        ) : null}
         {metaParts.length > 0 ? (
           <Text style={styles.meta} numberOfLines={1}>
             {metaParts.join(' · ')}
