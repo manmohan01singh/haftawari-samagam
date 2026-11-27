@@ -784,6 +784,8 @@ export function WatchScreen({ route, navigation }: Props) {
     <View style={styles.container}>
       {player}
       <FlatList
+        style={styles.list}
+        contentContainerStyle={styles.listContent}
         data={upNextItems}
         renderItem={renderUpNext}
         keyExtractor={keyExtractor}
@@ -883,9 +885,19 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: lightColors.background },
   playerWrap: {
     width: '100%',
+    // Wide screens (round-3 live check, desktop 1919px): an uncapped
+    // full-width 16:9 player is ~1080px tall — taller than the
+    // viewport — and the sheet/Up Next below it became unreachable
+    // (wheel events land on the iframe). Cap the watch column at
+    // 1100px, centred, like YouTube's desktop watch column; phone
+    // widths (≤1100) are completely unaffected.
+    maxWidth: 1100,
+    alignSelf: 'center',
     aspectRatio: layout.thumbnailAspectRatio,
     backgroundColor: lightColors.playerBackground,
   },
+  list: { flex: 1 },
+  listContent: { width: '100%', maxWidth: 1100, alignSelf: 'center' },
   playerThumb: { width: '100%', height: '100%', backgroundColor: lightColors.playerBackground },
   // Back control (round-3): lives in the sheet's header zone, above
   // the title — a plain dark arrow on white, 36dp target, icon's left
@@ -1006,6 +1018,8 @@ const styles = StyleSheet.create({
   },
   playerSkeleton: {
     width: '100%',
+    maxWidth: 1100,
+    alignSelf: 'center',
     aspectRatio: layout.thumbnailAspectRatio,
     backgroundColor: lightColors.surfaceVariant,
     alignItems: 'center',
