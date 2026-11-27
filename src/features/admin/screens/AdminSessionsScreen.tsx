@@ -11,8 +11,11 @@ import {
   createSession,
   listPublishedVideos,
   listSessionsWithVideo,
+  updateSessionTitle,
   type SessionWithVideo,
 } from '../adminService';
+import { shareContent, shareFeedback } from '../../../lib/share';
+import { sessionShareUrl } from '../../../navigation/linking';
 import { AdminGate, type AdminContext } from '../components/AdminGate';
 import {
   AdminButton,
@@ -225,12 +228,56 @@ function SessionsContent({ ctx }: { ctx: AdminContext }) {
       setStartTime('');
       setEndDate('');
       setEndTime('');
-      setNotice(`Session scheduled for ${formatDateTime(startIso)}.`);
+      setNotice(
+        `Session scheduled for ${formatDateTime(startIso)}. Use "Share app link" on its card below to send the sangat a link that opens this session in the app.`,
+      );
     } catch (err) {
       setFormError(friendlyError(err));
     } finally {
       setCreating(false);
     }
+  };
+
+  // Edit-title state (Phase 13): which session's title is being
+  // edited + the draft text. The create form always had a title
+  // field; existing sessions previously could not be retitled at all
+  // (their cards only offered Cancel).
+  const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
+  const [titleDraft, setTitleDraft] = useState('');
+
+  const onSaveTitle = async (session: SessionWithVideo) => {
+    setBusyId(session.id);
+    setError(null);
+    setNotice(null);
+    try {
+      const next = titleDraft.trim() ? titleDraft.trim() : null;
+      await updateSessionTitle(session, next, ctx.userId);
+      setSessions((prev) =>
+        (prev ?? []).map((s) => (s.id === session.id ? { ...s, title: next } : s)),
+      );
+      setEditingTitleId(null);
+      setNotice(
+        next
+          ? `Session title updated to "${next}".`
+          : 'Session title cleared — the recording title will be shown.',
+      );
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  // Share the session's app link (Phase 13): the deep link that
+  // opens THIS app on the session (…/session/<id>) — the admin sends
+  // it to the sangat instead of a YouTube link.
+  const onShareSession = async (session: SessionWithVideo) => {
+    const outcome = await shareContent(
+      session.title ?? session.video?.title ?? 'Samagam',
+      sessionShareUrl(session.id),
+    );
+    const feedback = shareFeedback(outcome);
+    if (feedback) setNotice(feedback);
   };
 
   const onCancel = async (session: SessionWithVideo) => {
@@ -428,6 +475,46 @@ function SessionsContent({ ctx }: { ctx: AdminContext }) {
                   {session.video ? (
                     <Text style={styles.meta}>Recording: {session.video.title}</Text>
                   ) : null}
+                  {editingTitleId === session.id ? (
+                    <View style={styles.titleEditor}>
+                      <TextInput
+                        style={adminStyles.input}
+                        value={titleDraft}
+                        onChangeText={setTitleDraft}
+                        placeholder="Session title (blank = recording title)"
+                        placeholderTextColor={colors.textSecondary}
+                      />
+                      <View style={styles.actions}>
+                        <AdminButton
+                          title={busyId === session.id ? 'Saving…' : 'Save title'}
+                          variant="primary"
+                          disabled={busyId === session.id}
+                          onPress={() => void onSaveTitle(session)}
+                        />
+                        <AdminButton
+                          title="Discard"
+                          disabled={busyId === session.id}
+                          onPress={() => setEditingTitleId(null)}
+                        />
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={styles.actions}>
+                      <AdminButton
+                        title="Edit title"
+                        disabled={busyId === session.id}
+                        onPress={() => {
+                          setTitleDraft(session.title ?? '');
+                          setEditingTitleId(session.id);
+                        }}
+                      />
+                      <AdminButton
+                        title="Share app link"
+                        disabled={busyId === session.id}
+                        onPress={() => void onShareSession(session)}
+                      />
+                    </View>
+                  )}
                   {status === 'upcoming' || status === 'now_playing' ? (
                     <View style={styles.actions}>
                       <ConfirmButton
@@ -491,5 +578,6 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   cardTitle: { ...typography.cardTitle, color: colors.text },
   meta: { ...typography.metadata, color: colors.textSecondary },
-  actions: { flexDirection: 'row', marginTop: spacing.sm },
+  actions: { flexDirection: 'row', marginTop: spacing.sm, gap: spacing.sm, flexWrap: 'wrap' },
+  titleEditor: { gap: spacing.sm, marginTop: spacing.sm },
 });

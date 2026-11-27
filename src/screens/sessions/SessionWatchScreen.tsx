@@ -14,6 +14,9 @@ import {
 import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { EmptyState } from '../../components/common/EmptyState';
+import { Toast, useToast } from '../../components/common/Toast';
+import { shareContent, shareFeedback } from '../../lib/share';
+import { sessionShareUrl } from '../../navigation/linking';
 import { goBackOrTab } from '../../navigation/safeBack';
 import { StackHeader, BackButton } from '../../components/layout/StackHeader';
 import { ChatPreviewCard, SessionChat } from '../../features/chat/components';
@@ -100,6 +103,19 @@ export function SessionWatchScreen({ route, navigation }: Props) {
   // so the iframe/WebView source never changes after first render —
   // ongoing sync is the drift-correction seek's job, not the src's.
   const [chatOpen, setChatOpen] = useState(false);
+  const { toast, showToast } = useToast();
+
+  // Share (Phase 13): the link is THIS app's deep link for this
+  // session (…/session/<id>), so sangat who tap it land in the app
+  // on this Samagam — never a youtube.com URL. The shared title is
+  // the session's own title (admin-set, else the recording's).
+  const onShareSession = useCallback(() => {
+    const shareTitle = item?.session.title ?? item?.video?.title ?? 'Samagam';
+    void shareContent(shareTitle, sessionShareUrl(sessionId)).then((outcome) => {
+      const feedback = shareFeedback(outcome);
+      if (feedback) showToast(feedback);
+    });
+  }, [item, sessionId, showToast]);
 
   const embedRef = useRef<YouTubeEmbedHandle>(null);
   const playerTimeRef = useRef<number | null>(null);
@@ -490,6 +506,18 @@ export function SessionWatchScreen({ route, navigation }: Props) {
               : formatSessionDateTime(session.scheduled_start_at)}
         </Text>
 
+        <Pressable
+          onPress={onShareSession}
+          style={({ pressed }) => [styles.syncButton, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Share this Samagam"
+        >
+          <View style={styles.shareInner}>
+            <MaterialIcons name="share" size={16} color={colors.text} />
+            <Text style={styles.syncButtonText}>Share this Samagam</Text>
+          </View>
+        </Pressable>
+
         {isPlaying ? (
           <Pressable
             onPress={seekToSessionPosition}
@@ -619,6 +647,7 @@ export function SessionWatchScreen({ route, navigation }: Props) {
           </View>
         </View>
       </Modal>
+      <Toast message={toast} />
     </View>
   );
 }
@@ -715,6 +744,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     justifyContent: 'center',
   },
   syncButtonText: { fontSize: 13, fontWeight: '600', color: colors.text },
+  shareInner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   actionRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.lg },
   joinPill: {
     backgroundColor: colors.subscribeBackground,

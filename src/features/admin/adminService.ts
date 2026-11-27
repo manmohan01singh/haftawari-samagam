@@ -358,6 +358,31 @@ export async function createSession(
   return session;
 }
 
+/**
+ * Change a session's own title (Phase 13). The sessions.title column
+ * has existed since 0001 and the create form already writes it; this
+ * is the EDIT path for sessions that already exist. An empty title
+ * clears back to null (screens fall back to the recording's title).
+ * RLS (sessions_admin_write) enforces admin-only server-side.
+ */
+export async function updateSessionTitle(
+  session: SamagamSession,
+  title: string | null,
+  actorId: string,
+): Promise<void> {
+  const supabase = requireSupabase();
+  const { error } = await supabase
+    .from('sessions')
+    .update({ title, updated_at: new Date().toISOString() })
+    .eq('id', session.id);
+  if (error) throw error;
+  await writeAuditLog(actorId, 'session.update_title', 'session', session.id, {
+    video_id: session.video_id,
+    title,
+    scheduled_start_at: session.scheduled_start_at,
+  });
+}
+
 export async function cancelSession(session: SamagamSession, actorId: string): Promise<void> {
   const supabase = requireSupabase();
   const { error } = await supabase

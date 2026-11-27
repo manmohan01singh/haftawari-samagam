@@ -27,6 +27,12 @@ import {
 } from '../../components/video/cardData';
 import { useAuth } from '../../features/auth';
 import { ChatPreviewCard, SessionChat } from '../../features/chat/components';
+import {
+  CommentsPreviewRow,
+  VideoCommentsSheet,
+  useVideoEngagement,
+} from '../../features/watch';
+import { sessionShareUrl, watchShareUrl } from '../../navigation/linking';
 import { useCurrentChatUser } from '../../features/chat/useSessionChat';
 import { joinPresence, leavePresence } from '../../features/presence/presenceService';
 import { useChannelFollow, useOfficialChannel } from '../../features/channel';
@@ -157,6 +163,29 @@ export function WatchScreen({ route, navigation }: Props) {
       void leavePresence(channel);
     };
   }, [sessionId, chatUser]);
+  // Comments + like engagement for THIS video (Phase 13): keyed by
+  // the resolved YouTube id, so catalogue rows and API-only videos
+  // behave identically. Identity comes from the chat user resolution
+  // already running on this screen (real profile name + own avatar).
+  const engagementUser = useMemo(
+    () => (chatUser ? { id: chatUser.id, displayName: chatUser.displayName } : null),
+    [chatUser],
+  );
+  const engagement = useVideoEngagement(
+    resolved?.youtubeVideoId ?? null,
+    resolved?.row?.id ?? null,
+    engagementUser,
+  );
+  const {
+    commentsStatus,
+    comments,
+    commentCount,
+    likeStatus,
+    likeCount,
+    likedByMe,
+    toggleLike,
+  } = engagement;
+
   // Up Next items: local catalogue rows first; when the catalogue is
   // thin, real channel uploads from the YouTube API fill the list
   // (QA issue 58) — same compact-row rendering either way.
@@ -180,13 +209,17 @@ export function WatchScreen({ route, navigation }: Props) {
   const [readyFor, setReadyFor] = useState<string | null>(null);
   const playerReady = resolved != null && readyFor === resolved.youtubeVideoId;
   const [savedState, setSavedState] = useState<{ rowId: string; saved: boolean } | null>(null);
-  // Like/Dislike (round-3): NO state at all. The pair previously kept
-  // a local toggle that rendered a FILLED black thumb — a persistent
-  // "you liked this" claim with no backend behind it, i.e. fabricated
-  // data (app-watch-live2.jpg). The icons now stay outline-only and a
-  // tap answers honestly via toast that nothing was recorded. The
-  // real like count, when the API provides one, lives in the meta
-  // line — that is YouTube's count, not the user's action.
+  // Like (Phase 13): REAL state now — migration 0005's video_likes
+  // table (one row per member per video, keyed by youtube_video_id).
+  // The toggle is optimistic, persisted, and rolled back on failure;
+  // the count beside the thumb is the app's own real like-row count
+  // (the meta line separately carries YouTube's count from the API).
+  // Until 0005 is applied the hook reports 'unavailable' and a tap
+  // answers honestly via toast that nothing was recorded — the
+  // round-3 rule (no filled-thumb claim without a backend) still
+  // holds. Dislike remains that honest toast: there is no dislike
+  // backend and YouTube shows no dislike count either.
+  const [commentsOpen, setCommentsOpen] = useState(false);
   // "Save to playlist" target row id (P10): the main ⋮ menu targets
   // the current video's row; an Up Next row's ⋮ menu targets THAT
   // row. One sheet, whichever id is set.
@@ -475,16 +508,47 @@ export function WatchScreen({ route, navigation }: Props) {
     return () => clearTimeout(t);
   }, [resolved]);
 
+  // Share (Phase 13): the link opens THIS app, not youtube.com — a
+  // session watch shares the session's own deep link (the tapped
+  // link lands on that Samagam in the app), a plain recording shares
+  // its Watch deep link. Playback inside still uses the official
+  // embed; only the doorway is ours.
   const onShare = useCallback(() => {
     if (!resolved) return;
-    void shareContent(
-      resolved.title,
-      `https://www.youtube.com/watch?v=${resolved.youtubeVideoId}`,
-    ).then((outcome) => {
+    const url = sessionId
+      ? sessionShareUrl(sessionId)
+      : watchShareUrl({
+          videoRowId: resolved.row?.id ?? videoRowId,
+          youtubeVideoId: resolved.youtubeVideoId,
+        });
+    void shareContent(resolved.title, url).then((outcome) => {
       const feedback = shareFeedback(outcome);
       if (feedback) showToast(feedback);
     });
-  }, [resolved, showToast]);
+  }, [resolved, sessionId, videoRowId, showToast]);
+
+  // Like tap: signed-out goes to SignIn (same gating as Save); the
+  // unavailable backend (migration 0005 pending) answers honestly;
+  // otherwise the hook's optimistic persisted toggle runs and only a
+  // failure speaks.
+  const onToggleLike = useCallback(() => {
+    if (!resolved) return;
+    if (!user) {
+      navigation.navigate('SignIn');
+      return;
+    }
+    if (likeStatus === 'unavailable') {
+      showToast('Likes are not available yet — nothing was recorded');
+      return;
+    }
+    void toggleLike().then((outcome) => {
+      if (outcome === 'unavailable') {
+        showToast('Likes are not available yet — nothing was recorded');
+      } else if (outcome === 'failed') {
+        showToast('Could not save your like — please try again');
+      }
+    });
+  }, [resolved, user, likeStatus, toggleLike, navigation, showToast]);
 
   const onToggleSave = useCallback(() => {
     if (!user || !resolved?.row) return;
@@ -498,13 +562,14 @@ export function WatchScreen({ route, navigation }: Props) {
 
   const renderUpNext = useCallback(
     ({ item }: { item: UpNextItem }) => {
-      const shareItem = (title: string, youtubeVideoId: string) => {
-        void shareContent(title, `https://www.youtube.com/watch?v=${youtubeVideoId}`).then(
-          (outcome) => {
-            const feedback = shareFeedback(outcome);
-            if (feedback) showToast(feedback);
-          },
-        );
+      const shareItem = (
+        title: string,
+        params: { videoRowId?: string; youtubeVideoId?: string },
+      ) => {
+        void shareContent(title, watchShareUrl(params)).then((outcome) => {
+          const feedback = shareFeedback(outcome);
+          if (feedback) showToast(feedback);
+        });
       };
       // Mini mode: an Up Next tap loads the video IN PLACE and
       // re-expands — pushing a second Watch screen would stack two
@@ -544,7 +609,7 @@ export function WatchScreen({ route, navigation }: Props) {
             variant="upNext"
             data={data}
             onPress={() => openItem({ youtubeVideoId: item.meta.youtubeVideoId })}
-            onShare={() => shareItem(item.meta.title, item.meta.youtubeVideoId)}
+            onShare={() => shareItem(item.meta.title, { youtubeVideoId: item.meta.youtubeVideoId })}
             onChannelPress={() =>
               navigation.navigate('Channel', { channelId: officialChannel?.channelId })
             }
@@ -553,7 +618,7 @@ export function WatchScreen({ route, navigation }: Props) {
                 key: 'share',
                 label: 'Share',
                 icon: 'share',
-                onPress: () => shareItem(item.meta.title, item.meta.youtubeVideoId),
+                onPress: () => shareItem(item.meta.title, { youtubeVideoId: item.meta.youtubeVideoId }),
               },
               {
                 key: 'channel',
@@ -573,7 +638,7 @@ export function WatchScreen({ route, navigation }: Props) {
           variant="upNext"
           data={data}
           onPress={() => openItem({ videoRowId: item.video.id })}
-          onShare={() => shareItem(item.video.title, item.video.youtube_video_id)}
+          onShare={() => shareItem(item.video.title, { videoRowId: item.video.id })}
           onChannelPress={() =>
             navigation.navigate('Channel', { channelId: officialChannel?.channelId })
           }
@@ -582,7 +647,7 @@ export function WatchScreen({ route, navigation }: Props) {
               key: 'share',
               label: 'Share',
               icon: 'share',
-              onPress: () => shareItem(item.video.title, item.video.youtube_video_id),
+              onPress: () => shareItem(item.video.title, { videoRowId: item.video.id }),
             },
             {
               key: 'save',
@@ -810,13 +875,16 @@ export function WatchScreen({ route, navigation }: Props) {
               chevron-down). It toggles the device-local follow state
               (see useChannelFollow above) — it is NOT labelled
               "Subscribed" because there is no subscription backend.
-              Right-aligned icon-only group: Like / Dislike / Share /
-              Save / ⋮, 24px, no counts, no labels. The reference's
-              sparkle (Ask) slot is NOT rendered: this app has no Ask
-              backend, and a dead sparkle would be a fake action —
-              flagged in the QA report. Like/Dislike keep the row's
-              geometry but hold NO state (round-3): outline icons
-              only, a tap toasts honestly that nothing is recorded. */}
+              Right-aligned icon group: Like / Dislike / Share /
+              Save / ⋮, 24px. The reference's sparkle (Ask) slot is
+              NOT rendered: this app has no Ask backend, and a dead
+              sparkle would be a fake action — flagged in the QA
+              report. Like is REAL since Phase 13 (video_likes,
+              migration 0005): filled thumb when the member's like
+              row exists, the app's real like count beside it when
+              non-zero; while the migration is pending it falls back
+              to the round-3 honest toast. Dislike still holds no
+              state — no backend, honest toast only. */}
           <View style={styles.actionRow}>
             <Pressable
               style={styles.channelPill}
@@ -841,12 +909,21 @@ export function WatchScreen({ route, navigation }: Props) {
             </Pressable>
             <View style={styles.actions}>
               <Pressable
-                onPress={() => showToast('Likes are not available in this app yet — nothing was recorded')}
+                onPress={onToggleLike}
                 hitSlop={ICON_HIT_SLOP}
                 accessibilityLabel="Like"
                 accessibilityRole="button"
+                accessibilityState={{ selected: likedByMe }}
+                style={styles.likeButton}
               >
-                <MaterialIcons name="thumb-up-off-alt" size={24} color={colors.text} />
+                <MaterialIcons
+                  name={likedByMe ? 'thumb-up' : 'thumb-up-off-alt'}
+                  size={24}
+                  color={colors.text}
+                />
+                {likeStatus === 'ready' && likeCount > 0 ? (
+                  <Text style={styles.likeCount}>{formatCount(likeCount)}</Text>
+                ) : null}
               </Pressable>
               <Pressable
                 onPress={() => showToast('Dislikes are not available in this app yet — nothing was recorded')}
@@ -947,6 +1024,22 @@ export function WatchScreen({ route, navigation }: Props) {
               </Pressable>
             )
           ) : null}
+
+          {/* Comments (Phase 13): the YouTube-pattern entry under
+              the description — real count + newest-comment preview,
+              opening the VideoCommentsSheet (root-level modal
+              below). This is the RECORDING's comments (public,
+              video_comments); a session watch ALSO keeps its Live
+              chat card above — the two are different data and are
+              never merged. */}
+          <CommentsPreviewRow
+            status={commentsStatus}
+            count={commentCount}
+            topComment={comments[0] ?? null}
+            ownUserId={chatUser?.id ?? null}
+            ownAvatarUrl={chatUser?.avatarUrl ?? null}
+            onPress={() => setCommentsOpen(true)}
+          />
         </View>
       </View>
     );
@@ -969,6 +1062,14 @@ export function WatchScreen({ route, navigation }: Props) {
     sheetPanResponder,
     colors,
     styles,
+    onToggleLike,
+    commentsStatus,
+    commentCount,
+    comments,
+    chatUser,
+    likeStatus,
+    likeCount,
+    likedByMe,
   ]);
 
   if (loading) {
@@ -1133,6 +1234,45 @@ export function WatchScreen({ route, navigation }: Props) {
           </View>
         </Modal>
       ) : null}
+      {/* Comments sheet (Phase 13) — the recording's own comments,
+          reachable from the CommentsPreviewRow in the sheet above.
+          Same Modal host pattern as the chat sheet. Signed-out
+          posting is impossible by design: the sheet shows a sign-in
+          prompt instead of a composer. */}
+      <Modal
+        visible={commentsOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setCommentsOpen(false)}
+      >
+        <View style={styles.chatBackdrop}>
+          <Pressable
+            style={styles.chatBackdropTap}
+            onPress={() => setCommentsOpen(false)}
+            accessibilityLabel="Close comments"
+            accessibilityRole="button"
+          />
+          <View style={styles.chatSheetHost}>
+            <VideoCommentsSheet
+              engagement={engagement}
+              user={
+                chatUser
+                  ? {
+                      id: chatUser.id,
+                      displayName: chatUser.displayName,
+                      avatarUrl: chatUser.avatarUrl ?? null,
+                    }
+                  : null
+              }
+              onClose={() => setCommentsOpen(false)}
+              onSignInPress={() => {
+                setCommentsOpen(false);
+                navigation.navigate('SignIn');
+              }}
+            />
+          </View>
+        </View>
+      </Modal>
       {/* "Save to playlist" sheet (library stream) — archive rows and
           signed-in users only, matching the action button's gating.
           The target is whichever row opened it: the current video
@@ -1298,6 +1438,10 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingVertical: 9,
   },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 20, flexShrink: 0 },
+  // Like (Phase 13): thumb + the app's real like count on one tap
+  // target; the count text inherits the row's 24px icon rhythm.
+  likeButton: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  likeCount: { fontSize: 13, fontWeight: '600', color: colors.text },
   descriptionBox: {
     backgroundColor: colors.surfaceVariant,
     borderRadius: radii.card,
