@@ -65,8 +65,8 @@
       /* Static first-paint shell (QA issues 1/2/4): shown by the
          browser BEFORE any JavaScript runs, so a cold load is never a
          blank grey page. React replaces #root's contents on mount.
-         Pure CSS — no images, no JS, ~0 cost. Colours mirror the app
-         theme (white surface, #f2f2f2 skeleton, red play mark). */
+         Pure CSS — no JS, ~0 cost. Colours mirror the app
+         theme (white surface, #f2f2f2 skeleton, own brand mark). */
       .app-splash {
         position: absolute;
         inset: 0;
@@ -85,20 +85,10 @@
       }
       .app-splash-mark {
         width: 30px;
-        height: 21px;
-        border-radius: 6px;
-        background-color: #ff0000;
-        position: relative;
+        height: 30px;
+        border-radius: 8px;
         flex: none;
-      }
-      .app-splash-mark::after {
-        content: '';
-        position: absolute;
-        left: 11px;
-        top: 5px;
-        border-left: 9px solid #ffffff;
-        border-top: 5.5px solid transparent;
-        border-bottom: 5.5px solid transparent;
+        display: block;
       }
       .app-splash-name {
         font-size: 19px;
@@ -160,7 +150,7 @@
     <div id="root">
       <div class="app-splash" aria-hidden="true">
         <div class="app-splash-bar">
-          <div class="app-splash-mark"></div>
+          <img class="app-splash-mark" src="brand-mark.png" alt="" />
           <div class="app-splash-name">Haftawari Samagam</div>
         </div>
         <div class="app-splash-status">
@@ -183,6 +173,6 @@
         </div>
       </div>
     </div>
-  <script src="/haftawari-samagam/_expo/static/js/web/index-1eaa414cbe0e3376f0ea4b840fefaec4.js" defer></script>
+  <script src="/haftawari-samagam/_expo/static/js/web/index-4fff68c4470020b0407a894589b53d48.js" defer></script>
 </body>
 </html>
