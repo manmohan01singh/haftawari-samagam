@@ -299,6 +299,15 @@ const CALL_SCAN_CAP = 40;
  * budget proving it on every scroll step.
  */
 const LIVE_SCAN_PAGES = 2;
+/**
+ * Live-filter LIFETIME scan cap per channel: live broadcasts sit
+ * at the head of the uploads playlist, so after 3 lifetime pages a
+ * channel is declared drained FOR THE LIVE FILTER — otherwise the
+ * feed never reports exhausted and the footer spinner runs forever
+ * under the last live card (verified live, 27 Nov 2026: 7 live
+ * cards, all from page 1, spinner still hunting page 5+).
+ */
+const LIVE_TOTAL_SCAN_CAP = 3;
 
 interface ChannelCursor {
   channel: AppChannel;
@@ -310,6 +319,8 @@ interface ChannelCursor {
   primed: boolean;
   /** Token priming (one direct page-1 fetch to learn the token) has run. */
   tokenPrimed: boolean;
+  /** Pages absorbed over the pager's whole life (live-filter cap). */
+  totalScans: number;
   exhausted: boolean;
   /**
    * A fetch failed during the current next() call. The channel is
@@ -406,6 +417,7 @@ export function createHomeFeedPager({ channels, filter }: HomeFeedPagerOptions):
       nextPageToken: null,
       primed: false,
       tokenPrimed: false,
+      totalScans: 0,
       exhausted: !isYouTubeConfigured,
       failed: false,
     }));
@@ -437,6 +449,12 @@ export function createHomeFeedPager({ channels, filter }: HomeFeedPagerOptions):
   async function fillBuffer(cursor: ChannelCursor): Promise<boolean> {
     if (cursor.buffer.length > 0) return true;
     if (cursor.exhausted || cursor.failed) return false;
+    if (filter.kind === 'live' && cursor.totalScans >= LIVE_TOTAL_SCAN_CAP) {
+      // Live-filter lifetime cap (see LIVE_TOTAL_SCAN_CAP): nothing
+      // live lives this deep in a channel's uploads.
+      cursor.exhausted = true;
+      return false;
+    }
     let scans = 0;
     while (
       cursor.buffer.length === 0 &&
@@ -457,6 +475,7 @@ export function createHomeFeedPager({ channels, filter }: HomeFeedPagerOptions):
           absorb(cursor, videos);
           scans++;
           callScansUsed++;
+          cursor.totalScans++;
           // A short first page means the uploads playlist has no
           // second page; a full one needs token priming below.
           if (videos.length < 25) cursor.exhausted = true;
@@ -484,6 +503,7 @@ export function createHomeFeedPager({ channels, filter }: HomeFeedPagerOptions):
         absorb(cursor, page.videos);
         scans++;
         callScansUsed++;
+        cursor.totalScans++;
       } catch {
         // Transient failure (quota blip / network): pause THIS
         // channel for the rest of this next() call only. It is NOT

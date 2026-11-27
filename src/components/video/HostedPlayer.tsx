@@ -2,6 +2,7 @@ import React, {
   forwardRef,
   memo,
   useCallback,
+  useEffect,
   useImperativeHandle,
   useMemo,
   useRef,
@@ -9,6 +10,7 @@ import React, {
 } from 'react';
 import {
   ActivityIndicator,
+  Modal,
   PanResponder,
   Pressable,
   StyleSheet,
@@ -61,6 +63,8 @@ export interface HostedPlayerProps {
 }
 
 const RATES = [1, 1.25, 1.5, 2, 0.75];
+/** Speed choices as the settings sheet lists them (ascending, YouTube order). */
+const RATE_OPTIONS = [0.75, 1, 1.25, 1.5, 2];
 
 function formatClock(totalSeconds: number): string {
   const s = Math.max(0, Math.floor(totalSeconds));
@@ -115,6 +119,21 @@ export const HostedPlayer = memo(
     const [scrubbing, setScrubbing] = useState<number | null>(null);
     const [rateIndex, setRateIndex] = useState(0);
     const trackWidth = useRef(0);
+    // YouTube-style control chrome (Phase C parity): the controls
+    // auto-hide while playing, a tap toggles them, a double-tap on
+    // the left/right third seeks ∓10s, and the gear opens a settings
+    // sheet (Quality / Playback speed / Captions) modelled on the
+    // real YouTube sheet — only rows that are TRUE for our own
+    // hosted files are shown (one original quality; no caption
+    // tracks exist, so Captions honestly reads Unavailable).
+    const [controlsVisible, setControlsVisible] = useState(true);
+    const [sheetOpen, setSheetOpen] = useState(false);
+    const [sheetView, setSheetView] = useState<'menu' | 'speed' | 'quality'>('menu');
+    const [seekFlash, setSeekFlash] = useState<'back' | 'fwd' | null>(null);
+    const [videoHeight, setVideoHeight] = useState<number | null>(null);
+    const lastTapRef = useRef<{ at: number; side: 'back' | 'fwd' } | null>(null);
+    const toggleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const seekFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const player = useVideoPlayer(uri, (p) => {
       p.timeUpdateEventInterval = 1;
@@ -142,6 +161,13 @@ export const HostedPlayer = memo(
         if (initialStart > 0) player.currentTime = initialStart;
         if (autoplay) player.play();
         callbacks.current.onReady?.();
+      }
+      if (next === 'readyToPlay') {
+        // The REAL rendition height for the settings sheet's
+        // Quality row (e.g. 1080 → "1080p") — read from the loaded
+        // track, never assumed.
+        const h = player.videoTrack?.size?.height;
+        if (h && h > 0) setVideoHeight(Math.round(h));
       }
       if (
         next === 'readyToPlay' &&
@@ -234,6 +260,93 @@ export const HostedPlayer = memo(
     const progress = duration > 0 ? Math.min(1, displayTime / duration) : 0;
     const buffering = status === 'loading' || refreshing;
 
+    // ── YouTube-style chrome behaviour ─────────────────────────────
+    const [controlsEpoch, setControlsEpoch] = useState(0);
+    const pokeControls = useCallback(() => {
+      setControlsVisible(true);
+      setControlsEpoch((n) => n + 1);
+    }, []);
+
+    // Auto-hide while playing (paused, sheet-open or mid-scrub
+    // keeps the chrome up). The epoch restarts the countdown on
+    // every poke.
+    useEffect(() => {
+      if (!controlsVisible || !isPlaying || sheetOpen || scrubbing != null) return;
+      const t = setTimeout(() => setControlsVisible(false), 3200);
+      return () => clearTimeout(t);
+    }, [controlsVisible, controlsEpoch, isPlaying, sheetOpen, scrubbing]);
+
+    useEffect(
+      () => () => {
+        if (toggleTimerRef.current) clearTimeout(toggleTimerRef.current);
+        if (seekFlashTimerRef.current) clearTimeout(seekFlashTimerRef.current);
+      },
+      [],
+    );
+
+    const seekBy = useCallback(
+      (delta: number) => {
+        const upper = duration > 0 ? duration : Number.MAX_SAFE_INTEGER;
+        const target = Math.min(Math.max(0, positionRef.current + delta), upper);
+        player.currentTime = target;
+        positionRef.current = target;
+        setCurrentTime(target);
+      },
+      [player, duration],
+    );
+
+    const tapWidthRef = useRef(0);
+    const handleVideoTap = useCallback(
+      (e: GestureResponderEvent) => {
+        const now = Date.now();
+        const w = tapWidthRef.current;
+        const x = e.nativeEvent.locationX;
+        const side: 'back' | 'fwd' | 'mid' =
+          w > 0 && x < w / 3 ? 'back' : w > 0 && x > (2 * w) / 3 ? 'fwd' : 'mid';
+        const last = lastTapRef.current;
+        if (showScrubber && side !== 'mid' && last && last.side === side && now - last.at < 300) {
+          // Double-tap seek ∓10 s (the YouTube gesture). Only where
+          // seeking is allowed at all (showScrubber) — during a live
+          // Samagam the group position is authoritative.
+          lastTapRef.current = null;
+          if (toggleTimerRef.current) {
+            clearTimeout(toggleTimerRef.current);
+            toggleTimerRef.current = null;
+          }
+          seekBy(side === 'fwd' ? 10 : -10);
+          setSeekFlash(side);
+          if (seekFlashTimerRef.current) clearTimeout(seekFlashTimerRef.current);
+          seekFlashTimerRef.current = setTimeout(() => setSeekFlash(null), 550);
+          return;
+        }
+        lastTapRef.current = side === 'mid' ? null : { at: now, side };
+        // Delay the toggle a beat so a double-tap doesn't flicker
+        // the chrome before the seek lands.
+        if (toggleTimerRef.current) clearTimeout(toggleTimerRef.current);
+        toggleTimerRef.current = setTimeout(() => {
+          setControlsVisible((v) => !v);
+          setControlsEpoch((n) => n + 1);
+        }, 290);
+      },
+      [seekBy, showScrubber],
+    );
+
+    const openSettings = useCallback(() => {
+      setSheetView('menu');
+      setSheetOpen(true);
+      pokeControls();
+    }, [pokeControls]);
+
+    const chooseRate = useCallback(
+      (rate: number) => {
+        player.playbackRate = rate;
+        const idx = RATES.indexOf(rate);
+        if (idx >= 0) setRateIndex(idx);
+        setSheetOpen(false);
+      },
+      [player],
+    );
+
     if (errorMessage) {
       return (
         <View style={[styles.wrap, styles.errorWrap]}>
@@ -253,75 +366,266 @@ export const HostedPlayer = memo(
           nativeControls={false}
           allowsPictureInPicture
         />
+        {/* Tap layer: single tap toggles the chrome, double-tap on
+            the outer thirds seeks ∓10 s (YouTube gestures). Sits
+            above the video, below every control. */}
+        <Pressable
+          style={styles.tapLayer}
+          onLayout={(e) => {
+            tapWidthRef.current = e.nativeEvent.layout.width;
+          }}
+          onPress={handleVideoTap}
+          accessibilityRole="button"
+          accessibilityLabel="Toggle player controls"
+        />
+        {seekFlash ? (
+          <View
+            style={[styles.seekFlash, seekFlash === 'back' ? styles.seekFlashLeft : styles.seekFlashRight]}
+            pointerEvents="none"
+          >
+            <MaterialIcons name={seekFlash === 'back' ? 'replay-10' : 'forward-10'} size={30} color="#FFFFFF" />
+            <Text style={styles.seekFlashText}>
+              {seekFlash === 'back' ? '10 seconds back' : '10 seconds forward'}
+            </Text>
+          </View>
+        ) : null}
         {buffering ? (
           <View style={styles.buffering} pointerEvents="none">
             <ActivityIndicator color="#FFFFFF" size="large" />
           </View>
         ) : null}
-        <View style={styles.controls}>
-          <Pressable
-            onPress={() => (isPlaying ? player.pause() : player.play())}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
-            style={styles.controlButton}
-          >
-            <MaterialIcons name={isPlaying ? 'pause' : 'play-arrow'} size={26} color="#FFFFFF" />
-          </Pressable>
-          <Text style={styles.timeText}>
-            {formatClock(displayTime)} / {formatClock(duration)}
-          </Text>
-          {showScrubber ? (
-            <View
-              style={styles.track}
-              onLayout={(e) => {
-                trackWidth.current = e.nativeEvent.layout.width;
-              }}
-              {...scrubResponder.panHandlers}
-            >
-              <View style={styles.trackBackground} />
-              <View style={[styles.trackFill, { width: `${progress * 100}%` }]} />
-              <View style={[styles.trackThumb, { left: `${progress * 100}%` }]} />
+        {controlsVisible ? (
+          <>
+            {/* Top bar: mute + the settings gear (YouTube places its
+                player actions top-right). */}
+            <View style={styles.topBar} pointerEvents="box-none">
+              <Pressable
+                onPress={() => {
+                  player.muted = !player.muted;
+                  pokeControls();
+                }}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={player.muted ? 'Unmute' : 'Mute'}
+                style={styles.controlButton}
+              >
+                <MaterialIcons
+                  name={player.muted ? 'volume-off' : 'volume-up'}
+                  size={22}
+                  color="#FFFFFF"
+                />
+              </Pressable>
+              <Pressable
+                onPress={openSettings}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Player settings"
+                style={styles.controlButton}
+              >
+                <MaterialIcons name="settings" size={22} color="#FFFFFF" />
+              </Pressable>
             </View>
-          ) : (
-            <View style={styles.trackSpacer} />
-          )}
-          <Pressable
-            onPress={() => {
-              const next = (rateIndex + 1) % RATES.length;
-              setRateIndex(next);
-              player.playbackRate = RATES[next];
-            }}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Playback speed"
-            style={styles.controlButton}
-          >
-            <Text style={styles.rateText}>{RATES[rateIndex]}×</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => player.muted = !player.muted}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={player.muted ? 'Unmute' : 'Mute'}
-            style={styles.controlButton}
-          >
-            <MaterialIcons
-              name={player.muted ? 'volume-off' : 'volume-up'}
-              size={22}
-              color="#FFFFFF"
+            {/* Centre transport: ∓10 s around a large play/pause
+                (YouTube's centre cluster). Seek buttons exist only
+                where seeking is allowed (not during a live Samagam). */}
+            <View style={styles.centerRow} pointerEvents="box-none">
+              {showScrubber ? (
+                <Pressable
+                  onPress={() => {
+                    seekBy(-10);
+                    pokeControls();
+                  }}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Back 10 seconds"
+                  style={styles.centerSideButton}
+                >
+                  <MaterialIcons name="replay-10" size={26} color="#FFFFFF" />
+                </Pressable>
+              ) : (
+                <View style={styles.centerSideSpacer} />
+              )}
+              <Pressable
+                onPress={() => {
+                  if (isPlaying) player.pause();
+                  else player.play();
+                  pokeControls();
+                }}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
+                style={styles.centerPlayButton}
+              >
+                <MaterialIcons name={isPlaying ? 'pause' : 'play-arrow'} size={40} color="#FFFFFF" />
+              </Pressable>
+              {showScrubber ? (
+                <Pressable
+                  onPress={() => {
+                    seekBy(10);
+                    pokeControls();
+                  }}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Forward 10 seconds"
+                  style={styles.centerSideButton}
+                >
+                  <MaterialIcons name="forward-10" size={26} color="#FFFFFF" />
+                </Pressable>
+              ) : (
+                <View style={styles.centerSideSpacer} />
+              )}
+            </View>
+          </>
+        ) : null}
+        {controlsVisible ? (
+          <View style={styles.controls}>
+            <Text style={styles.timeText}>
+              {formatClock(displayTime)} / {formatClock(duration)}
+            </Text>
+            {showScrubber ? (
+              <View
+                style={styles.track}
+                onLayout={(e) => {
+                  trackWidth.current = e.nativeEvent.layout.width;
+                }}
+                {...scrubResponder.panHandlers}
+              >
+                <View style={styles.trackBackground} />
+                <View style={[styles.trackFill, { width: `${progress * 100}%` }]} />
+                <View style={[styles.trackThumb, { left: `${progress * 100}%` }]} />
+              </View>
+            ) : (
+              <View style={styles.trackSpacer} />
+            )}
+            <Pressable
+              onPress={() => {
+                pokeControls();
+                void viewRef.current?.enterFullscreen();
+              }}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Fullscreen"
+              style={styles.controlButton}
+            >
+              <MaterialIcons name="fullscreen" size={24} color="#FFFFFF" />
+            </Pressable>
+          </View>
+        ) : showScrubber ? (
+          // Chrome hidden: YouTube still shows the thin red
+          // progress line at the very bottom.
+          <View style={styles.miniProgress} pointerEvents="none">
+            <View style={[styles.miniProgressFill, { width: `${progress * 100}%` }]} />
+          </View>
+        ) : null}
+        {/* Settings sheet (YouTube gear menu): Quality / Playback
+            speed / Captions — only what is true for our own hosted
+            files. One original quality (the real track height when
+            the player reports it); captions honestly Unavailable. */}
+        <Modal
+          visible={sheetOpen}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setSheetOpen(false)}
+        >
+          <View style={styles.sheetBackdrop}>
+            <Pressable
+              style={styles.sheetBackdropTap}
+              onPress={() => setSheetOpen(false)}
+              accessibilityLabel="Close settings"
             />
-          </Pressable>
-          <Pressable
-            onPress={() => void viewRef.current?.enterFullscreen()}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Fullscreen"
-            style={styles.controlButton}
-          >
-            <MaterialIcons name="fullscreen" size={24} color="#FFFFFF" />
-          </Pressable>
-        </View>
+            <View style={styles.sheet}>
+              <View style={styles.sheetHandle} />
+              {sheetView === 'menu' ? (
+                <>
+                  <Pressable
+                    style={styles.sheetRow}
+                    onPress={() => setSheetView('quality')}
+                    accessibilityRole="button"
+                  >
+                    <MaterialIcons name="tune" size={22} color="#FFFFFF" />
+                    <Text style={styles.sheetRowLabel}>Quality</Text>
+                    <Text style={styles.sheetRowValue}>
+                      {videoHeight ? `${videoHeight}p` : 'Original'}
+                    </Text>
+                    <MaterialIcons name="chevron-right" size={20} color="#AAAAAA" />
+                  </Pressable>
+                  <Pressable
+                    style={[styles.sheetRow, !showScrubber && styles.sheetRowDim]}
+                    onPress={() => {
+                      if (showScrubber) setSheetView('speed');
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Playback speed"
+                  >
+                    <MaterialIcons name="slow-motion-video" size={22} color="#FFFFFF" />
+                    <Text style={styles.sheetRowLabel}>Playback speed</Text>
+                    <Text style={styles.sheetRowValue}>
+                      {showScrubber ? `${RATES[rateIndex]}×` : 'Locked'}
+                    </Text>
+                    <MaterialIcons name="chevron-right" size={20} color="#AAAAAA" />
+                  </Pressable>
+                  <View style={styles.sheetRow}>
+                    <MaterialIcons name="closed-caption" size={22} color="#777777" />
+                    <Text style={[styles.sheetRowLabel, styles.sheetRowDimText]}>Captions</Text>
+                    <Text style={styles.sheetRowDimText}>Unavailable</Text>
+                    <MaterialIcons name="chevron-right" size={20} color="#555555" />
+                  </View>
+                </>
+              ) : sheetView === 'speed' ? (
+                <>
+                  <Pressable
+                    style={styles.sheetBackRow}
+                    onPress={() => setSheetView('menu')}
+                    accessibilityRole="button"
+                    accessibilityLabel="Back to settings"
+                  >
+                    <MaterialIcons name="arrow-back" size={20} color="#FFFFFF" />
+                    <Text style={styles.sheetBackLabel}>Playback speed</Text>
+                  </Pressable>
+                  {RATE_OPTIONS.map((rate) => (
+                    <Pressable
+                      key={rate}
+                      style={styles.sheetRow}
+                      onPress={() => chooseRate(rate)}
+                      accessibilityRole="button"
+                    >
+                      <View style={styles.sheetCheck}>
+                        {RATES[rateIndex] === rate ? (
+                          <MaterialIcons name="check" size={18} color="#FFFFFF" />
+                        ) : null}
+                      </View>
+                      <Text style={styles.sheetRowLabel}>{rate === 1 ? 'Normal' : `${rate}×`}</Text>
+                    </Pressable>
+                  ))}
+                </>
+              ) : (
+                <>
+                  <Pressable
+                    style={styles.sheetBackRow}
+                    onPress={() => setSheetView('menu')}
+                    accessibilityRole="button"
+                    accessibilityLabel="Back to settings"
+                  >
+                    <MaterialIcons name="arrow-back" size={20} color="#FFFFFF" />
+                    <Text style={styles.sheetBackLabel}>Quality</Text>
+                  </Pressable>
+                  <View style={styles.sheetRow}>
+                    <View style={styles.sheetCheck}>
+                      <MaterialIcons name="check" size={18} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.sheetRowLabel}>
+                      {videoHeight ? `${videoHeight}p` : 'Original'}
+                    </Text>
+                  </View>
+                  <Text style={styles.sheetNote}>
+                    This recording is hosted as one original file, so there is a single
+                    quality — the original, exactly as it was given to us.
+                  </Text>
+                </>
+              )}
+            </View>
+          </View>
+        </Modal>
       </View>
     );
   }),
@@ -363,7 +667,107 @@ const createStyles = (colors: ThemeColors) =>
       justifyContent: 'center',
     },
     timeText: { color: '#FFFFFF', fontSize: 12, fontVariant: ['tabular-nums'] },
-    rateText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
+    tapLayer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+    seekFlash: {
+      position: 'absolute',
+      top: 0,
+      bottom: 0,
+      width: '40%',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: spacing.xs,
+    },
+    seekFlashLeft: { left: 0 },
+    seekFlashRight: { right: 0 },
+    seekFlashText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600' },
+    topBar: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'flex-end',
+      gap: spacing.xs,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+    },
+    centerRow: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: spacing.xl,
+    },
+    centerPlayButton: {
+      width: 68,
+      height: 68,
+      borderRadius: 34,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    centerSideButton: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      backgroundColor: 'rgba(0,0,0,0.45)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    centerSideSpacer: { width: 48, height: 48 },
+    miniProgress: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      height: 3,
+      backgroundColor: 'rgba(255,255,255,0.25)',
+    },
+    miniProgressFill: { height: 3, backgroundColor: '#FF0000' },
+    sheetBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
+    sheetBackdropTap: { flex: 1 },
+    sheet: {
+      backgroundColor: '#212121',
+      borderTopLeftRadius: 16,
+      borderTopRightRadius: 16,
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.sm,
+      paddingBottom: spacing.xxl,
+    },
+    sheetHandle: {
+      width: 36,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: '#555555',
+      alignSelf: 'center',
+      marginBottom: spacing.md,
+    },
+    sheetRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      minHeight: 52,
+      paddingVertical: spacing.sm,
+    },
+    sheetRowDim: { opacity: 0.55 },
+    sheetRowLabel: { flex: 1, color: '#FFFFFF', fontSize: 15 },
+    sheetRowValue: { color: '#AAAAAA', fontSize: 13 },
+    sheetRowDimText: { color: '#777777', fontSize: 15 },
+    sheetBackRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      minHeight: 48,
+      paddingVertical: spacing.sm,
+    },
+    sheetBackLabel: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
+    sheetCheck: { width: 24, alignItems: 'center' },
+    sheetNote: { color: '#AAAAAA', fontSize: 13, lineHeight: 19, paddingVertical: spacing.sm },
     track: { flex: 1, height: 28, justifyContent: 'center' },
     trackSpacer: { flex: 1 },
     trackBackground: {
