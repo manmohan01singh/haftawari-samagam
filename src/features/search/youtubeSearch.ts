@@ -1,5 +1,7 @@
 /**
- * YouTube Data API v3 leg of search — the official channel only.
+ * YouTube Data API v3 leg of search — every active panel channel
+ * (the engine fans out per channel; the single-channel helpers keep
+ * the official channel as their default for back-compat).
  *
  * QUOTA (see docs/SEARCH.md): search.list costs 100 units per call — by
  * far the most expensive call we make. It is therefore:
@@ -406,15 +408,17 @@ interface VideosFullDetailsResponse {
 }
 
 /**
- * The channel's latest 100 uploads (2 playlistItems pages = 2 units),
- * cached 6h. This is the fallback's raw material: real API data,
- * newest first — NOT a query-matched set on its own.
+ * One channel's latest 100 uploads (2 playlistItems pages = 2 units),
+ * cached 6h per channel. This is the fallback's raw material: real
+ * API data, newest first — NOT a query-matched set on its own.
  */
-async function fetchRecentUploads(signal?: AbortSignal): Promise<UploadItem[]> {
-  const cached = await readCache<UploadItem[]>(UPLOADS_CACHE_KEY, UPLOADS_CACHE_TTL_MS);
+async function fetchRecentUploadsFor(channelId: string, signal?: AbortSignal): Promise<UploadItem[]> {
+  const cacheKey =
+    channelId === OFFICIAL_CHANNEL.id ? UPLOADS_CACHE_KEY : `${UPLOADS_CACHE_KEY}:${channelId}`;
+  const cached = await readCache<UploadItem[]>(cacheKey, UPLOADS_CACHE_TTL_MS);
   if (cached) return cached;
 
-  const playlistId = uploadsPlaylistId(OFFICIAL_CHANNEL.id);
+  const playlistId = uploadsPlaylistId(channelId);
   const uploads: UploadItem[] = [];
   let pageToken = '';
   for (let page = 0; page < 2; page++) {
@@ -436,7 +440,7 @@ async function fetchRecentUploads(signal?: AbortSignal): Promise<UploadItem[]> {
     pageToken = data.nextPageToken ?? '';
     if (!pageToken) break;
   }
-  await writeCache(UPLOADS_CACHE_KEY, uploads);
+  await writeCache(cacheKey, uploads);
   return uploads;
 }
 
@@ -449,11 +453,12 @@ async function fetchRecentUploads(signal?: AbortSignal): Promise<UploadItem[]> {
  * uploads — so callers MUST label these results as fallback matches
  * (the engine does, via `youtubeFallback`).
  */
-export async function searchUploadsFallback(
+export async function searchUploadsFallbackFor(
+  channelId: string,
   queryText: string,
   signal?: AbortSignal,
 ): Promise<VideoResult[]> {
-  const uploads = await fetchRecentUploads(signal);
+  const uploads = await fetchRecentUploadsFor(channelId, signal);
   const ranked = rankByTitle(queryText, uploads, (upload) => upload.title, DEFAULT_THRESHOLD);
   if (ranked.length === 0) return [];
 
@@ -487,6 +492,14 @@ export async function searchUploadsFallback(
     });
   }
   return results;
+}
+
+/** Back-compat wrapper: the uploads fallback for the official channel. */
+export async function searchUploadsFallback(
+  queryText: string,
+  signal?: AbortSignal,
+): Promise<VideoResult[]> {
+  return searchUploadsFallbackFor(OFFICIAL_CHANNEL.id, queryText, signal);
 }
 
 /** Outcome of the channel video leg: results, or a classified failure. */

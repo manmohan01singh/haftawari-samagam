@@ -5,8 +5,8 @@
  * original official channel keeps its hand-tuned alias list from
  * config.ts (merged in when its row is present); other channels match
  * on the aliases the admin seeded plus their title/handle. When the
- * table is unreachable the channels service already falls back to the
- * single original channel, so search degrades to its old behaviour.
+ * table is unreachable the channels service falls back to the
+ * built-in sangat registry, so search keeps covering those channels.
  */
 
 import { fetchActiveChannels } from '../channels/channelsService';
@@ -17,8 +17,16 @@ import type { ChannelIdentity } from './youtubeSearch';
  * Cap on how many channels the 100-unit search.list leg fans out to
  * per query. The channel CARD has no such cap (matching is local and
  * free); the cap only bounds quota — see docs/CHANNELS.md.
+ *
+ * The cap MUST cover the built-in sangat registry (Bhai Gursharan
+ * Singh Ji official, Amritvela Trust Live, Amritvela Trust,
+ * Sakhiyan = 4): at 3 the fourth channel (Sakhiyan) was silently
+ * dropped from the fan-out and its uploads could never appear in
+ * search results (Phase 11 fix). A channel beyond the cap gets no
+ * search.list leg (it is still card-matched locally), so raise this
+ * if the registry grows.
  */
-export const MAX_YOUTUBE_SEARCH_CHANNELS = 3;
+export const MAX_YOUTUBE_SEARCH_CHANNELS = 4;
 
 export async function loadSearchChannels(): Promise<ChannelIdentity[]> {
   const active = await fetchActiveChannels().catch(() => []);
