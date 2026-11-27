@@ -98,6 +98,31 @@ export interface ChatMessage {
   created_at: string;
 }
 
+/**
+ * A real member comment on a recorded video
+ * (supabase/migrations/0005_video_comments.sql). Keyed by
+ * youtube_video_id — the identifier every watch resolves to —
+ * because most watches are API-only videos with no catalogue row;
+ * video_id carries the catalogue row id when one exists.
+ */
+export interface VideoComment {
+  id: string;
+  youtube_video_id: string;
+  video_id: string | null;
+  user_id: string;
+  body: string;
+  is_removed: boolean;
+  created_at: string;
+}
+
+/** A real member like on a recorded video (migration 0005). */
+export interface VideoLike {
+  youtube_video_id: string;
+  video_id: string | null;
+  user_id: string;
+  created_at: string;
+}
+
 export interface WatchHistoryEntry {
   user_id: string;
   video_id: string;

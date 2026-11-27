@@ -117,3 +117,44 @@ function createWebLinking(): LinkingOptions<RootStackParamList> {
 
 export const appLinking: LinkingOptions<RootStackParamList> | undefined =
   Platform.OS === 'web' ? createWebLinking() : undefined;
+
+// ── Shareable app links (Phase 13) ───────────────────────────────────
+/**
+ * Canonical deployed PWA origin+base, used on native where there is
+ * no window: a shared link must land in THIS app, and the PWA is the
+ * app's public home (the APK has no custom scheme configured — see
+ * the linking note above). On web the CURRENT origin + the base the
+ * app was actually loaded under wins, so links shared from a dev
+ * server or a future custom domain stay on that origin.
+ */
+const APP_WEB_BASE_URL = 'https://manmohan01singh.github.io/haftawari-samagam';
+
+export function appUrlForPath(path: string): string {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    return `${window.location.origin}${deployedBase()}${path}`;
+  }
+  return `${APP_WEB_BASE_URL}${path}`;
+}
+
+/** Deep link that opens THIS app on a Samagam session (SessionWatch). */
+export function sessionShareUrl(sessionId: string): string {
+  return appUrlForPath(`/session/${encodeURIComponent(sessionId)}`);
+}
+
+/**
+ * Deep link that opens THIS app on a recording (Watch). Mirrors the
+ * linking config: Watch is the plain `watch` path and its params
+ * travel as query params, exactly as React Navigation parses them.
+ */
+export function watchShareUrl(params: {
+  videoRowId?: string | null;
+  youtubeVideoId?: string | null;
+  sessionId?: string | null;
+}): string {
+  const query = new URLSearchParams();
+  if (params.videoRowId) query.set('videoRowId', params.videoRowId);
+  if (params.youtubeVideoId) query.set('youtubeVideoId', params.youtubeVideoId);
+  if (params.sessionId) query.set('sessionId', params.sessionId);
+  const qs = query.toString();
+  return appUrlForPath(qs ? `/watch?${qs}` : '/watch');
+}
