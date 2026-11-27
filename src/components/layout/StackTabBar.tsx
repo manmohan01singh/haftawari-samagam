@@ -44,7 +44,13 @@ export function StackTabBar({ navigation, activeTab = null }: StackTabBarProps) 
     { key: 'Home', label: 'Home', icon: 'home' },
     { key: 'Subscriptions', label: 'Subscriptions', icon: 'subscriptions' },
     { key: CREATE_KEY, label: 'Official channel', kind: 'create' },
-    { key: 'Library', label: 'You', kind: 'avatar', avatarInitial: initial },
+    {
+      key: 'Library',
+      label: 'You',
+      kind: 'avatar',
+      avatarUrl: profile?.avatar_url ?? null,
+      avatarInitial: initial,
+    },
   ];
 
   return <BottomNav items={items} activeKey={activeTab ?? ''} onPress={onPress} />;

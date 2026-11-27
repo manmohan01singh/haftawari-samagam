@@ -16,6 +16,13 @@ export type ParticipantState = 'joined' | 'left';
 export interface Profile {
   id: string; // auth.users id
   display_name: string | null;
+  /**
+   * Real profile photo URL (migration 0004) — e.g. the Google avatar
+   * synced from auth user metadata. Optional in the type because rows
+   * fetched before 0004 is applied have no such key at runtime; the
+   * app merges the metadata avatar in that case (see AuthContext).
+   */
+  avatar_url?: string | null;
   role: UserRole;
   created_at: string;
   updated_at: string;

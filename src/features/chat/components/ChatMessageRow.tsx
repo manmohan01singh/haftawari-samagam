@@ -6,6 +6,13 @@ import { ChatAvatar } from './ChatAvatar';
 
 interface ChatMessageRowProps {
   message: ChatMessageWithAuthor;
+  /**
+   * The signed-in user's own profile photo, passed by the host ONLY
+   * for the user's own rows. Other participants' avatar data does
+   * not exist in the chat payload (names only), so their rows keep
+   * the coloured initial — never a fabricated photo.
+   */
+  ownAvatarUrl?: string | null;
 }
 
 /** Honest fallback when a member's name is not knowable to the caller. */
@@ -18,11 +25,18 @@ export const UNKNOWN_AUTHOR_LABEL = 'Sangat member';
  * align with the name, not the avatar). Vertical rhythm ≈11px between
  * rows. Emoji in the body render inline at text size (plain Text).
  */
-export const ChatMessageRow = React.memo(function ChatMessageRow({ message }: ChatMessageRowProps) {
+export const ChatMessageRow = React.memo(function ChatMessageRow({
+  message,
+  ownAvatarUrl,
+}: ChatMessageRowProps) {
   const name = message.author.displayName?.trim() ? message.author.displayName : UNKNOWN_AUTHOR_LABEL;
   return (
     <View style={styles.row}>
-      <ChatAvatar userId={message.user_id} displayName={message.author.displayName} />
+      <ChatAvatar
+        userId={message.user_id}
+        displayName={message.author.displayName}
+        avatarUrl={ownAvatarUrl ?? null}
+      />
       <Text style={styles.textBlock}>
         <Text style={styles.name}>{name}</Text>
         <Text style={styles.gap}>{'  '}</Text>

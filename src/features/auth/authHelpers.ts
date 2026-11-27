@@ -42,6 +42,7 @@ export type AuthErrorKind =
   | 'rate_limit'
   | 'network'
   | 'weak_password'
+  | 'oauth'
   | 'other';
 
 export interface FriendlyAuthError {
@@ -113,6 +114,29 @@ export function friendlyAuthError(error: unknown): FriendlyAuthError {
       message: 'Could not reach the sign-in service. Check your internet connection and try again.',
     };
   }
+  if (
+    code.includes('provider') ||
+    msg.includes('provider is not enabled') ||
+    msg.includes('unsupported provider')
+  ) {
+    return {
+      kind: 'oauth',
+      message:
+        'Google sign-in is not switched on yet. Please sign in with your email and password for now.',
+    };
+  }
+  if (msg.includes('access_denied') || code.includes('access_denied')) {
+    return {
+      kind: 'oauth',
+      message: 'Google sign-in was cancelled before it finished. Tap "Continue with Google" to try again.',
+    };
+  }
+  if (code.includes('oauth') || msg.includes('oauth')) {
+    return {
+      kind: 'oauth',
+      message: "Google sign-in didn't complete. Please try again.",
+    };
+  }
   if (msg.includes('password should be') || msg.includes('weak password') || code.includes('weak_password')) {
     return {
       kind: 'weak_password',
@@ -134,13 +158,34 @@ export function friendlyAuthError(error: unknown): FriendlyAuthError {
 }
 
 /**
- * Human message for a FAILED email-link landing (expired / already
- * used confirmation or recovery link), from the URL snapshot taken
- * in src/lib/supabase.ts. Returns null when there was no link error.
+ * Human message for a FAILED auth landing (expired / already used
+ * email link, or a Google OAuth return that came back with an error),
+ * from the URL snapshot taken in src/lib/supabase.ts. Returns null
+ * when there was no landing error.
+ *
+ * OAuth failures are told apart from email-link failures by the raw
+ * `error` param and the error code/description: GoTrue sends values
+ * like error=access_denied (the user closed the Google picker) and
+ * codes/descriptions mentioning "oauth" for provider-side failures.
  */
-export function authLinkErrorMessage(errorCode: string | null, errorDescription: string | null): string | null {
-  if (!errorCode && !errorDescription) return null;
-  if (errorCode === 'otp_expired' || (errorDescription ?? '').toLowerCase().includes('expired')) {
+export function authLinkErrorMessage(
+  error: string | null,
+  errorCode: string | null,
+  errorDescription: string | null,
+): string | null {
+  if (!error && !errorCode && !errorDescription) return null;
+  const desc = (errorDescription ?? '').toLowerCase();
+  const looksOAuth =
+    (error ?? '').toLowerCase().includes('oauth') ||
+    (errorCode ?? '').toLowerCase().includes('oauth') ||
+    desc.includes('oauth');
+  if (error === 'access_denied' && !desc.includes('expired')) {
+    return 'Google sign-in was cancelled before it finished. Tap "Continue with Google" to try again.';
+  }
+  if (looksOAuth) {
+    return "Google sign-in didn't complete — please try again. If it keeps happening, sign in with your email and password instead.";
+  }
+  if (errorCode === 'otp_expired' || desc.includes('expired')) {
     return 'That email link has expired or was already used. Sign in below — or request a fresh link with "Forgot password?" / resend.';
   }
   return 'That email link could not be used. Please try signing in, or request a fresh link.';

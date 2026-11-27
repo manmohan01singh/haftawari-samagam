@@ -10,6 +10,7 @@ import { OFFICIAL_CHANNEL_ID } from '../../lib/youtube';
 import { goBackOrTab } from '../../navigation/safeBack';
 import { StackTabBar } from '../../components/layout/StackTabBar';
 import { Toast, useToast } from '../../components/common/Toast';
+import { UserAvatar } from '../../components/common/UserAvatar';
 import type { RootStackParamList } from '../../navigation/types';
 import { lightColors, radii, spacing } from '../../theme';
 
@@ -118,9 +119,13 @@ export function SettingsScreen({ navigation }: Props) {
             accessibilityRole="button"
             accessibilityLabel="Account"
           >
-            <View style={styles.avatar}>
-              <Text style={styles.avatarInitial}>{initial}</Text>
-            </View>
+            {profile?.avatar_url ? (
+              <UserAvatar avatarUrl={profile.avatar_url} initial={initial} size={40} initialFontSize={17} />
+            ) : (
+              <View style={styles.avatar}>
+                <Text style={styles.avatarInitial}>{initial}</Text>
+              </View>
+            )}
             <View style={styles.profileLines}>
               <Text style={styles.profileName} numberOfLines={1}>
                 {displayName}

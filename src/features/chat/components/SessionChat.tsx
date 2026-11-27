@@ -18,6 +18,7 @@ import { useSessionChat, type ChatUser } from '../useSessionChat';
 import { ICON_HIT_SLOP, SMALL_ICON_HIT_SLOP } from '../../../lib/touch';
 import type { ChatMessageWithAuthor } from '../types';
 import { ChatMessageRow } from './ChatMessageRow';
+import { ChatAvatar } from './ChatAvatar';
 
 export interface SessionChatProps {
   sessionId: string;
@@ -123,8 +124,15 @@ export function SessionChat({
   const invertedMessages = useMemo(() => chat.messages.slice().reverse(), [chat.messages]);
 
   const renderItem = useCallback(
-    ({ item }: { item: ChatMessageWithAuthor }) => <ChatMessageRow message={item} />,
-    [],
+    ({ item }: { item: ChatMessageWithAuthor }) => (
+      <ChatMessageRow
+        message={item}
+        ownAvatarUrl={
+          chat.user && item.user_id === chat.user.id ? (chat.user.avatarUrl ?? null) : null
+        }
+      />
+    ),
+    [chat.user],
   );
   const keyExtractor = useCallback((item: ChatMessageWithAuthor) => item.id, []);
 
@@ -290,13 +298,23 @@ export function SessionChat({
               respectful — moderators may remove messages.
             </Text>
           </View>
-          {identityName ? (
-            <Text style={styles.identityLine}>Chat publicly as {identityName}</Text>
-          ) : (
-            <Text style={styles.identityLine}>
-              Chat publicly — no display name is set on your profile.
-            </Text>
-          )}
+          <View style={styles.identityRow}>
+            {chat.user ? (
+              <ChatAvatar
+                userId={chat.user.id}
+                displayName={identityName}
+                avatarUrl={chat.user.avatarUrl ?? null}
+                size={24}
+              />
+            ) : null}
+            {identityName ? (
+              <Text style={styles.identityText}>Chat publicly as {identityName}</Text>
+            ) : (
+              <Text style={styles.identityText}>
+                Chat publicly — no display name is set on your profile.
+              </Text>
+            )}
+          </View>
           {chat.sendError ? (
             <Text style={styles.errorText} accessibilityRole="alert">
               {chat.sendError} Your draft is kept below — tap Send to retry.
@@ -467,11 +485,17 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     color: lightColors.text,
   },
-  identityLine: {
-    ...typography.metadata,
-    color: lightColors.textSecondary,
+  identityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     marginHorizontal: spacing.lg,
     marginTop: spacing.sm,
+  },
+  identityText: {
+    ...typography.metadata,
+    color: lightColors.textSecondary,
+    flex: 1,
   },
   errorText: {
     ...typography.metadata,

@@ -4,6 +4,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { goBackOrTab } from '../../navigation/safeBack';
 import { StackTabBar } from '../../components/layout/StackTabBar';
+import { UserAvatar } from '../../components/common/UserAvatar';
 import { useAuth } from '../../features/auth';
 import { lightColors, radii, spacing, typography } from '../../theme';
 import type { RootStackParamList } from '../../navigation/types';
@@ -51,10 +52,13 @@ export function AccountScreen({ navigation }: Props) {
         ) : user ? (
           <>
             <View style={styles.profileBlock}>
-              <View style={[styles.avatar, styles.avatarFallback]}>
-                <Text style={styles.avatarInitial}>
-                  {(profile?.display_name ?? user.email ?? '?').charAt(0).toUpperCase()}
-                </Text>
+              <View style={styles.avatarWrap}>
+                <UserAvatar
+                  avatarUrl={profile?.avatar_url ?? null}
+                  initial={(profile?.display_name ?? user.email ?? '?').charAt(0).toUpperCase()}
+                  size={72}
+                  initialFontSize={28}
+                />
               </View>
               <Text style={styles.name}>{profile?.display_name ?? 'Sangat member'}</Text>
               <Text style={styles.meta}>{user.email}</Text>
@@ -139,13 +143,7 @@ const styles = StyleSheet.create({
   topBarTitle: { fontSize: 17, fontWeight: '600', color: lightColors.text },
   content: { padding: spacing.lg },
   profileBlock: { alignItems: 'center', paddingVertical: spacing.lg },
-  avatar: { width: 72, height: 72, borderRadius: 36, marginBottom: spacing.md },
-  avatarFallback: {
-    backgroundColor: lightColors.surfaceVariant,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarInitial: { fontSize: 28, fontWeight: '600', color: lightColors.textSecondary },
+  avatarWrap: { marginBottom: spacing.md },
   name: { fontSize: 20, fontWeight: '700', color: lightColors.text, textAlign: 'center' },
   meta: {
     ...typography.body,

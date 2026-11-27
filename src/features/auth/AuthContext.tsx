@@ -10,6 +10,11 @@ import React, {
 import type { Session, User } from '@supabase/supabase-js';
 import { authCallbackInfo, isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { authLinkErrorMessage } from './authHelpers';
+import {
+  extractMetadataProfile,
+  mergeProfileWithMetadata,
+  syncProfileFromMetadata,
+} from './profileSync';
 import type { Profile } from '../../types/database';
 
 /**
@@ -117,18 +122,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     () => authCallbackInfo.type === 'recovery',
   );
   const [linkError] = useState<string | null>(() =>
-    authLinkErrorMessage(authCallbackInfo.errorCode, authCallbackInfo.errorDescription),
+    authLinkErrorMessage(
+      authCallbackInfo.error,
+      authCallbackInfo.errorCode,
+      authCallbackInfo.errorDescription,
+    ),
   );
   const profileForUser = useRef<string | null>(null);
 
   const clearPasswordRecovery = useCallback(() => setPasswordRecovery(false), []);
 
-  const loadProfile = useCallback(async (userId: string) => {
+  const loadProfile = useCallback(async (user: User) => {
     if (!supabase) return;
-    const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+    const { data } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
     // Ignore stale responses if the signed-in user changed meanwhile.
-    if (profileForUser.current === userId) {
-      setProfile((data as Profile | null) ?? null);
+    if (profileForUser.current !== user.id) return;
+    const row = (data as Profile | null) ?? null;
+    // Expose the metadata-merged row immediately: a Google user's DP
+    // shows even before the sync write lands — and even before
+    // migration 0004 adds the avatar_url column (see profileSync).
+    setProfile(mergeProfileWithMetadata(row, extractMetadataProfile(user)));
+    // Persist the metadata name/photo onto the row (no-op when the
+    // metadata carries neither, e.g. a plain email account). The
+    // guard is re-checked so a sign-out mid-sync cannot resurrect a
+    // stale profile.
+    const synced = await syncProfileFromMetadata(user, row);
+    if (profileForUser.current === user.id && synced) {
+      setProfile(synced);
     }
   }, []);
 
@@ -150,8 +170,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       setSession(next);
       profileForUser.current = next?.user.id ?? null;
-      if (next?.user.id) {
-        void loadProfile(next.user.id);
+      if (next?.user) {
+        void loadProfile(next.user);
       } else {
         setProfile(null);
       }
@@ -164,7 +184,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!active) return;
         setSession(data.session);
         profileForUser.current = data.session?.user.id ?? null;
-        if (data.session?.user.id) void loadProfile(data.session.user.id);
+        if (data.session?.user) void loadProfile(data.session.user);
         setLoading(false);
         if (data.session) cleanAuthParamsFromUrl();
       })
@@ -193,7 +213,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const refreshProfile = useCallback(async () => {
-    if (session?.user.id) await loadProfile(session.user.id);
+    if (session?.user) await loadProfile(session.user);
   }, [loadProfile, session]);
 
   const value = useMemo<AuthState>(

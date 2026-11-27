@@ -62,11 +62,20 @@ export const BottomNav = memo(function BottomNav({ items, activeKey, onPress }: 
               </View>
             ) : item.kind === 'avatar' ? (
               item.avatarUrl ? (
-                <Image
-                  source={{ uri: item.avatarUrl }}
+                <NavAvatarImage
+                  uri={item.avatarUrl}
                   style={[styles.avatar, active && styles.avatarActive]}
-                  contentFit="cover"
-                  cachePolicy="memory-disk"
+                  fallback={
+                    item.avatarInitial ? (
+                      <View style={[styles.avatar, styles.avatarFallback, active && styles.avatarActive]}>
+                        <Text style={styles.avatarInitial}>{item.avatarInitial}</Text>
+                      </View>
+                    ) : (
+                      <View style={[styles.avatar, styles.avatarFallback, active && styles.avatarActive]}>
+                        <MaterialIcons name="person" size={18} color={lightColors.textSecondary} />
+                      </View>
+                    )
+                  }
                 />
               ) : item.avatarInitial ? (
                 <View style={[styles.avatar, styles.avatarFallback, active && styles.avatarActive]}>
@@ -99,6 +108,34 @@ export const BottomNav = memo(function BottomNav({ items, activeKey, onPress }: 
     </View>
   );
 });
+
+/**
+ * Avatar photo with an honest fallback: if the URL fails to load
+ * (stale Google DP URL, no network) the slot falls back to the
+ * initial/person treatment instead of a broken-image circle.
+ */
+function NavAvatarImage({
+  uri,
+  style,
+  fallback,
+}: {
+  uri: string;
+  style: React.ComponentProps<typeof Image>['style'];
+  fallback: React.ReactNode;
+}) {
+  // Remember WHICH uri failed so a changed uri gets a fresh try.
+  const [failedUri, setFailedUri] = React.useState<string | null>(null);
+  if (failedUri === uri) return <>{fallback}</>;
+  return (
+    <Image
+      source={{ uri }}
+      style={style}
+      contentFit="cover"
+      cachePolicy="memory-disk"
+      onError={() => setFailedUri(uri)}
+    />
+  );
+}
 
 const styles = StyleSheet.create({
   bar: {

@@ -233,6 +233,7 @@ export function SubscriptionsScreen({ navigation }: Props) {
       <AppHeader
         onSearchPress={() => navigation.navigate('Search')}
         onAccountPress={() => navigation.navigate('MainTabs', { screen: 'Library' })}
+        avatarUrl={profile?.avatar_url ?? null}
         avatarInitial={initial}
       />
       {/* QA44: SecondaryTabs removed — it duplicated the bottom nav. */}

@@ -26,8 +26,9 @@ export const isSupabaseConfigured: boolean = Boolean(supabaseUrl && supabaseAnon
  * synchronously at module load — i.e. at client construction, before
  * supabase-js consumes (and clears) them during its own initialize.
  *
- * Email links (confirmation / password recovery) land back on the PWA
- * base URL with the result encoded in the URL:
+ * Email links (confirmation / password recovery) and OAuth returns
+ * (Google sign-in) land back on the PWA base URL with the result
+ * encoded in the URL:
  *   success: #access_token=…&refresh_token=…&type=signup|recovery
  *   failure: #error=…&error_code=otp_expired&error_description=…
  * supabase-js surfaces a failed callback only as an initialize error
@@ -40,12 +41,14 @@ export const isSupabaseConfigured: boolean = Boolean(supabaseUrl && supabaseAnon
 export interface AuthCallbackInfo {
   /** `type` param of a successful callback: 'signup' | 'recovery' | … */
   type: string | null;
+  /** Raw `error` param of a failed callback (e.g. 'access_denied'). */
+  error: string | null;
   errorCode: string | null;
   errorDescription: string | null;
 }
 
 function snapshotAuthCallback(): AuthCallbackInfo {
-  const empty: AuthCallbackInfo = { type: null, errorCode: null, errorDescription: null };
+  const empty: AuthCallbackInfo = { type: null, error: null, errorCode: null, errorDescription: null };
   if (typeof window === 'undefined' || !window.location) return empty;
   try {
     const params = new URLSearchParams();
@@ -56,6 +59,7 @@ function snapshotAuthCallback(): AuthCallbackInfo {
     }
     return {
       type: params.get('type'),
+      error: params.get('error'),
       errorCode: params.get('error_code'),
       errorDescription: params.get('error_description'),
     };

@@ -15,6 +15,8 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { branding } from '../../config/branding';
 import { goBackOrTab } from '../../navigation/safeBack';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
+import { GoogleSignInButton } from '../../features/auth/components/GoogleSignInButton';
+import { OrDivider } from '../../features/auth/components/OrDivider';
 import { authRedirectUrl, friendlyAuthError } from '../../features/auth/authHelpers';
 import { lightColors, radii, spacing, typography } from '../../theme';
 import type { RootStackParamList } from '../../navigation/types';
@@ -143,6 +145,8 @@ export function SignUpScreen({ navigation }: Props) {
         </View>
       ) : (
         <>
+          <GoogleSignInButton onError={setError} />
+          <OrDivider />
           <Text style={styles.label}>Display name (optional)</Text>
           <TextInput
             style={styles.input}
