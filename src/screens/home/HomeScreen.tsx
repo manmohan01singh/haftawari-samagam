@@ -6,6 +6,7 @@ import { useScrollToTop } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppHeader } from '../../components/layout/AppHeader';
+import { useWebPullToRefresh } from '../../components/gesture/WebPullToRefresh';
 import { ChipsRow } from '../../components/layout/ChipsRow';
 import { Toast, useToast } from '../../components/common/Toast';
 import { AddToPlaylistSheet } from '../../features/library';
@@ -271,6 +272,12 @@ export function HomeScreen({ navigation }: Props) {
     void loadInitial();
   }, [loadInitial]);
 
+  // Web pull-to-refresh (gestures round): react-native-web's
+  // RefreshControl is a no-op stub, so the FlatList's own
+  // refreshing/onRefresh below can never fire in the PWA. This hook
+  // restores the pull gesture on web (native keeps the real control).
+  const ptr = useWebPullToRefresh({ onRefresh, refreshing });
+
   const onEndReached = useCallback(() => {
     if (loadingRef.current || exhausted || loading || videos.length === 0) return;
     loadingRef.current = true;
@@ -518,9 +525,12 @@ export function HomeScreen({ navigation }: Props) {
           }
         />
       ) : (
-        <FlatList
-          ref={feedRef}
-          data={visibleVideos}
+        <View style={styles.ptrWrap}>
+          {ptr.indicator}
+          <FlatList
+            {...ptr.listProps}
+            ref={feedRef}
+            data={visibleVideos}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
           // The bottom bar is an OVERLAY now (blur material): the
@@ -544,8 +554,9 @@ export function HomeScreen({ navigation }: Props) {
               </View>
             ) : undefined
           }
-          {...FEED_LIST_PERF}
-        />
+            {...FEED_LIST_PERF}
+          />
+        </View>
       )}
       {error && videos.length > 0 ? <Text style={styles.inlineError}>{error}</Text> : null}
       <AddToPlaylistSheet
@@ -565,6 +576,9 @@ const styles = StyleSheet.create({
   // chips/sessions rows. White-on-white made the feed read as one
   // unbroken sheet with no card separation.
   container: { flex: 1, backgroundColor: '#F8F8F8' },
+  // Web pull-to-refresh wrapper: fills the feed area under the
+  // header block; the indicator anchors to it.
+  ptrWrap: { flex: 1 },
   // Translucent now: AppHeader carries the blur material; the tab
   // row below it sits on the same near-white translucent tone so the
   // whole top block reads as one glass bar (no solid white slab).

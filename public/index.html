@@ -60,6 +60,24 @@
         touch-action: manipulation;
         -webkit-tap-highlight-color: transparent;
       }
+      /* Gesture hygiene (UX Fix 2, gestures round): a drag must never
+         turn into a text selection or a long-press callout — the live
+         audit caught a pull-down on the Home header selecting the
+         title text (blue highlight) instead of gesturing, which is
+         exactly the kind of fight that makes drags feel broken.
+         App-shell text is not selectable; real inputs stay selectable
+         so search/chat fields behave normally. */
+      body {
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+      }
+      input,
+      textarea,
+      [contenteditable='true'] {
+        -webkit-user-select: text;
+        user-select: text;
+      }
     </style>
     <style id="app-splash">
       /* Static first-paint shell (QA issues 1/2/4): shown by the
