@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { EmptyState } from '../../components/common/EmptyState';
@@ -34,7 +35,7 @@ import {
   type YouTubeVideoMetadata,
 } from '../../lib/youtube';
 import { apiCardData as baseApiCardData, formatDateLine } from '../../components/video/cardData';
-import { nativeApp, radii, spacing, useTheme, type ThemeColors } from '../../theme';
+import { layout, nativeApp, radii, spacing, useTheme, type ThemeColors } from '../../theme';
 import type { RootStackParamList } from '../../navigation/types';
 import { FEED_LIST_PERF } from '../../lib/listPerf';
 
@@ -59,6 +60,7 @@ const liveSearchCache = new Map<string, { at: number; items: YouTubeVideoMetadat
 export function ChannelScreen({ route, navigation }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
   const channelId = route.params.channelId ?? OFFICIAL_CHANNEL_ID;
   const isOfficial = channelId === OFFICIAL_CHANNEL_ID;
   const official = useOfficialChannel();
@@ -286,18 +288,23 @@ export function ChannelScreen({ route, navigation }: Props) {
           accessibilityLabel={liveNow ? `Watch live: ${liveNow.title}` : undefined}
         >
           <View style={styles.avatarWrap}>
-            {channel.avatarUrl ? (
-              <Image
-                source={{ uri: channel.avatarUrl }}
-                style={[styles.avatar, liveNow && styles.avatarLiveRing]}
-                contentFit="cover"
-                cachePolicy="memory-disk"
-              />
-            ) : (
-              <View style={[styles.avatar, styles.avatarFallback, liveNow && styles.avatarLiveRing]}>
-                <Text style={styles.avatarInitial}>{channel.title.charAt(0)}</Text>
-              </View>
-            )}
+            {/* Round clip wrapper (see SubscriptionsScreen rail): the
+                image's own borderRadius does not reliably clip on
+                Android; the live ring lives on this wrapper. */}
+            <View style={[styles.avatarClip, liveNow && styles.avatarLiveRing]}>
+              {channel.avatarUrl ? (
+                <Image
+                  source={{ uri: channel.avatarUrl }}
+                  style={styles.avatar}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                />
+              ) : (
+                <View style={[styles.avatar, styles.avatarFallback]}>
+                  <Text style={styles.avatarInitial}>{channel.title.charAt(0)}</Text>
+                </View>
+              )}
+            </View>
             {liveNow ? (
               <View style={styles.avatarLivePill} pointerEvents="none">
                 <Text style={styles.avatarLiveText}>LIVE</Text>
@@ -459,7 +466,7 @@ export function ChannelScreen({ route, navigation }: Props) {
         renderItem={renderVideo}
         keyExtractor={keyExtractor}
         ListHeaderComponent={header ?? undefined}
-        contentContainerStyle={styles.listPad}
+        contentContainerStyle={[styles.listPad, { paddingBottom: layout.bottomNavHeight + insets.bottom + 24 }]}
         onEndReached={tab === 'videos' ? loadMore : undefined}
         onEndReachedThreshold={0.6}
         ListFooterComponent={
@@ -584,10 +591,15 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   nameRow: { flexDirection: 'row', alignItems: 'flex-start' },
   verifiedBadge: { marginLeft: spacing.xs, marginTop: 5, flexShrink: 0 },
   identityActions: { marginTop: spacing.lg },
-  avatar: {
+  avatarClip: {
     width: nativeApp.searchChannel.avatarSize, // 88 — ref-3 channel block
     height: nativeApp.searchChannel.avatarSize,
     borderRadius: nativeApp.searchChannel.avatarSize / 2,
+    overflow: 'hidden',
+  },
+  avatar: {
+    width: nativeApp.searchChannel.avatarSize,
+    height: nativeApp.searchChannel.avatarSize,
   },
   avatarFallback: {
     backgroundColor: colors.surfaceVariant,

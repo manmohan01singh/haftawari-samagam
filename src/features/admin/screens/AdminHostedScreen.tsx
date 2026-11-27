@@ -6,6 +6,7 @@ import { radii, spacing, typography, useTheme, type ThemeColors } from '../../..
 import type { HostedAsset, Video } from '../../../types/database';
 import {
   createHostedVideoDraft,
+  createSession,
   invokeR2Admin,
   listHostedVideoBundles,
   saveContentAuthorization,
@@ -15,6 +16,7 @@ import {
   verifyHostedAsset,
   type HostedVideoBundle,
 } from '../adminService';
+import * as DocumentPicker from 'expo-document-picker';
 import { AdminGate, type AdminContext } from '../components/AdminGate';
 import {
   AdminButton,
@@ -210,21 +212,21 @@ function ManagePanel({
   const asset = bundle.asset;
   const hasAuthorization = bundle.authorizations.length > 0;
 
-  const [rightsHolder, setRightsHolder] = useState('');
+  // Simplified permission step (user request, 27 Nov 2026): ONE
+  // confirmation + an optional note. The database publish gate still
+  // requires the recorded authorization row — this only removes the
+  // four-field form, not the record itself.
+  const [permissionConfirmed, setPermissionConfirmed] = useState(false);
   const [permissionNote, setPermissionNote] = useState('');
-  const [permissionReference, setPermissionReference] = useState('');
-  const [permissionDate, setPermissionDate] = useState('');
   const [savingAuthz, setSavingAuthz] = useState(false);
 
   const [uploadPct, setUploadPct] = useState<number | null>(null);
-  const [hlsKey, setHlsKey] = useState(asset?.hls_master_key ?? '');
-  const [durationText, setDurationText] = useState(
-    asset?.duration_seconds != null ? String(asset.duration_seconds) : '',
-  );
-  const [publishAt, setPublishAt] = useState(asset?.publish_at ?? '');
-  const [expiresAt, setExpiresAt] = useState(asset?.expires_at ?? '');
-  const [replacementOf, setReplacementOf] = useState<string | null>(asset?.replacement_of ?? null);
   const [busy, setBusy] = useState(false);
+  // Inline scheduling (step 5): date/time text fields, same pattern
+  // as the Sessions admin — defaults to today at 16:00.
+  const [sessionDate, setSessionDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [sessionTime, setSessionTime] = useState('16:00');
+  const [sessionDurationMin, setSessionDurationMin] = useState('');
   const [onlyCopyWarning, setOnlyCopyWarning] = useState(false);
 
   const run = async (action: () => Promise<void>, done: string) => {
@@ -244,21 +246,23 @@ function ManagePanel({
 
   const onSaveAuthorization = () =>
     run(async () => {
+      if (!permissionConfirmed) {
+        throw new Error('Tick the confirmation first — publishing stays locked without it.');
+      }
       await saveContentAuthorization(
         video.id,
         {
-          rightsHolder: rightsHolder.trim(),
-          permissionNote: permissionNote.trim(),
-          permissionReference: permissionReference.trim() || null,
-          permissionDate: permissionDate.trim(),
+          rightsHolder: 'Rights holder (confirmed by admin)',
+          permissionNote:
+            permissionNote.trim() || 'Permission confirmed by the admin in the app.',
+          permissionReference: null,
+          permissionDate: new Date().toISOString().slice(0, 10),
         },
         ctx.userId,
       );
-      setRightsHolder('');
+      setPermissionConfirmed(false);
       setPermissionNote('');
-      setPermissionReference('');
-      setPermissionDate('');
-    }, 'Authorization recorded. Publishing is now unlocked for this recording.');
+    }, 'Permission recorded. Publishing is now unlocked for this recording.');
 
   const onFilePicked = async (file: File) => {
     const safeName = file.name.replace(/[^A-Za-z0-9._-]+/g, '_');
@@ -281,7 +285,58 @@ function ManagePanel({
         },
         ctx.userId,
       );
-      onNotice('Original uploaded. Transcode it to HLS (see docs/HOSTED_VIDEO.md), then set the HLS master key and mark the asset ready.');
+      onNotice('Original uploaded. Now tap "Verify & make ready" below.');
+      await onChanged();
+    } catch (err) {
+      onError(
+        err instanceof HostedNotConfiguredError
+          ? 'Hosting is not configured yet (R2_NOT_CONFIGURED) — finish the Cloudflare R2 setup before uploading.'
+          : displayError(err),
+      );
+    } finally {
+      setUploadPct(null);
+      setBusy(false);
+    }
+  };
+
+  // Native (phone) upload — the admin's primary path (user request,
+  // 27 Nov 2026: uploads must work from the mobile app itself, not
+  // only from a web dashboard on a computer).
+  const pickFileNative = async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ['video/mp4', 'video/webm', 'video/quicktime'],
+      copyToCacheDirectory: true,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    const picked = result.assets[0];
+    const safeName = picked.name.replace(/[^A-Za-z0-9._-]+/g, '_');
+    const key = `hosted/${video.id}/${safeName}`;
+    setBusy(true);
+    onError(null);
+    onNotice(null);
+    setUploadPct(0);
+    try {
+      await uploadOriginalToR2(
+        {
+          uri: picked.uri,
+          name: picked.name,
+          mimeType: picked.mimeType ?? null,
+          size: picked.size ?? 0,
+        },
+        key,
+        (p) => setUploadPct(Math.floor((p.loadedBytes / Math.max(1, p.totalBytes)) * 100)),
+      );
+      await upsertHostedAsset(
+        video.id,
+        {
+          r2ObjectKey: key,
+          originalFilename: picked.name,
+          contentType: picked.mimeType ?? null,
+          sizeBytes: picked.size ?? null,
+        },
+        ctx.userId,
+      );
+      onNotice('Original uploaded. Now tap "Verify & make ready" below.');
       await onChanged();
     } catch (err) {
       onError(
@@ -308,41 +363,45 @@ function ManagePanel({
     input.click();
   };
 
-  const onSaveAssetFields = () =>
+  // ONE ready step (simplified flow): the server verifies the
+  // uploaded object in R2 (existence, measured size, media type,
+  // file signature), then the asset is marked ready as a DIRECT-FILE
+  // asset — its playback key is the original file itself, so no HLS
+  // transcode or manual key entry is needed. r2-playback signs that
+  // single object for members; r2-admin's delete path already treats
+  // hls_master_key === r2_object_key as the same object.
+  const onVerifyAndReady = () =>
     run(async () => {
       if (!asset) throw new Error('Upload the original file first.');
+      await verifyHostedAsset(asset.id, ctx.userId);
       await updateHostedAsset(
         asset,
+        { status: 'ready', hlsMasterKey: asset.r2_object_key },
+        ctx.userId,
+      );
+    }, 'Verified in R2 and marked ready. You can publish now.');
+
+  const onScheduleSession = () =>
+    run(async () => {
+      const start = new Date(`${sessionDate.trim()}T${sessionTime.trim()}:00`);
+      if (Number.isNaN(start.getTime())) {
+        throw new Error('Enter the date as YYYY-MM-DD and the time as HH:MM (24-hour).');
+      }
+      const durationMin = sessionDurationMin.trim() ? Number(sessionDurationMin.trim()) : null;
+      const end =
+        durationMin && durationMin > 0
+          ? new Date(start.getTime() + durationMin * 60_000)
+          : null;
+      await createSession(
         {
-          hlsMasterKey: hlsKey.trim() || null,
-          durationSeconds: durationText.trim() ? Number(durationText.trim()) : null,
-          publishAt: publishAt.trim() || null,
-          expiresAt: expiresAt.trim() || null,
-          replacementOf,
+          videoId: video.id,
+          title: null,
+          scheduledStartAt: start.toISOString(),
+          scheduledEndAt: end ? end.toISOString() : null,
         },
         ctx.userId,
       );
-    }, 'Asset details saved.');
-
-  const onSetStatus = (status: 'processing' | 'ready' | 'failed') =>
-    run(async () => {
-      if (!asset) throw new Error('Upload the original file first.');
-      if (status === 'ready') {
-        if (!hlsKey.trim()) {
-          throw new Error('Set the HLS master playlist key before marking the asset ready.');
-        }
-        // Verify BEFORE ready: the server HEADs the object in R2 and
-        // overwrites size/type with measured values. If the object is
-        // missing, oversized or a disallowed type this throws, the
-        // error shows above, and the status is NOT changed.
-        await verifyHostedAsset(asset.id, ctx.userId);
-      }
-      await updateHostedAsset(
-        asset,
-        { status, hlsMasterKey: hlsKey.trim() || null },
-        ctx.userId,
-      );
-    }, status === 'ready' ? 'Verified in R2 and marked ready.' : `Asset marked ${status}.`);
+    }, `Session scheduled for ${sessionDate.trim()} at ${sessionTime.trim()} — it will show as UPCOMING, then NOW PLAYING at that time.`);
 
   const onDeleteAsset = (confirmOnlyCopy: boolean) =>
     run(async () => {
@@ -368,29 +427,40 @@ function ManagePanel({
     <View style={styles.panel}>
       <SectionTitle>Manage: {video.title}</SectionTitle>
 
-      {/* ── Authorization (the publish gate) ── */}
-      <Text style={styles.subhead}>1 · Rights holder authorization (required to publish)</Text>
+      {/* ── Permission (the publish gate, one-tap form) ── */}
+      <Text style={styles.subhead}>1 · Permission (required to publish)</Text>
       {bundle.authorizations.map((a) => (
         <Text key={a.id} style={styles.meta}>
           {a.rights_holder} · {a.permission_date}
           {a.permission_reference ? ` · ${a.permission_reference}` : ''}
         </Text>
       ))}
-      <TextInput style={adminStyles.input} value={rightsHolder} onChangeText={setRightsHolder} placeholder="Rights holder (e.g. channel name / sewadaar)" placeholderTextColor={colors.textSecondary} />
-      <TextInput style={adminStyles.input} value={permissionNote} onChangeText={setPermissionNote} placeholder="Permission note (what was agreed, with whom)" placeholderTextColor={colors.textSecondary} />
-      <TextInput style={adminStyles.input} value={permissionReference} onChangeText={setPermissionReference} placeholder="Reference (optional — message/email/file reference)" placeholderTextColor={colors.textSecondary} />
-      <TextInput style={adminStyles.input} value={permissionDate} onChangeText={setPermissionDate} placeholder="Permission date (YYYY-MM-DD)" placeholderTextColor={colors.textSecondary} autoCapitalize="none" />
-      <AdminButton
-        title={savingAuthz ? 'Saving…' : 'Save authorization'}
-        variant="primary"
-        disabled={
-          savingAuthz || busy || !rightsHolder.trim() || !permissionNote.trim() || !permissionDate.trim()
-        }
-        onPress={() => {
-          setSavingAuthz(true);
-          void onSaveAuthorization().finally(() => setSavingAuthz(false));
-        }}
-      />
+      {hasAuthorization ? (
+        <Text style={styles.help}>Permission is recorded — publishing is unlocked.</Text>
+      ) : (
+        <>
+          <AdminButton
+            title={
+              permissionConfirmed
+                ? '☑ I have the rights holder\u2019s permission for this recording'
+                : '☐ I have the rights holder\u2019s permission for this recording'
+            }
+            variant={permissionConfirmed ? 'primary' : 'secondary'}
+            disabled={busy}
+            onPress={() => setPermissionConfirmed((v) => !v)}
+          />
+          <TextInput style={adminStyles.input} value={permissionNote} onChangeText={setPermissionNote} placeholder="Note (optional — who gave permission, when)" placeholderTextColor={colors.textSecondary} />
+          <AdminButton
+            title={savingAuthz ? 'Saving…' : 'Save permission'}
+            variant="primary"
+            disabled={savingAuthz || busy || !permissionConfirmed}
+            onPress={() => {
+              setSavingAuthz(true);
+              void onSaveAuthorization().finally(() => setSavingAuthz(false));
+            }}
+          />
+        </>
+      )}
 
       {/* ── Upload ── */}
       <Text style={styles.subhead}>2 · Original file</Text>
@@ -411,35 +481,28 @@ function ManagePanel({
           onPress={pickFileWeb}
         />
       ) : (
-        <Text style={styles.help}>
-          Uploads run from the web admin — open this dashboard in a browser on the computer that
-          holds the original file.
-        </Text>
+        <AdminButton
+          title={uploadPct != null ? `Uploading… ${uploadPct}%` : asset ? 'Upload a new original' : 'Choose video file from this phone & upload'}
+          variant="primary"
+          disabled={busy || uploadPct != null}
+          onPress={() => void pickFileNative()}
+        />
       )}
 
-      {/* ── HLS + rotation fields ── */}
-      <Text style={styles.subhead}>3 · HLS + rotation</Text>
-      <TextInput style={adminStyles.input} value={hlsKey} onChangeText={setHlsKey} placeholder="HLS master key (e.g. hosted/<id>/hls/master.m3u8)" placeholderTextColor={colors.textSecondary} autoCapitalize="none" autoCorrect={false} />
-      <TextInput style={adminStyles.input} value={durationText} onChangeText={setDurationText} placeholder="Duration in seconds (optional)" placeholderTextColor={colors.textSecondary} keyboardType="numeric" />
-      <TextInput style={adminStyles.input} value={publishAt} onChangeText={setPublishAt} placeholder="Publish at (ISO 8601, optional)" placeholderTextColor={colors.textSecondary} autoCapitalize="none" />
-      <TextInput style={adminStyles.input} value={expiresAt} onChangeText={setExpiresAt} placeholder="Expires at (ISO 8601, optional — rotation)" placeholderTextColor={colors.textSecondary} autoCapitalize="none" />
-      <Text style={styles.meta}>Replacement of (this asset replaces an older one):</Text>
-      <View style={styles.pickerOptions}>
-        {[null, ...allAssets.filter((a) => a.id !== asset?.id).map((a) => a.id)].map((id) => (
-          <AdminButton
-            key={id ?? 'none'}
-            title={id == null ? 'None' : id.slice(0, 8)}
-            variant={replacementOf === id ? 'primary' : 'secondary'}
-            disabled={busy}
-            onPress={() => setReplacementOf(id)}
-          />
-        ))}
-      </View>
+      {/* ── Make ready (direct-file: no transcode step) ── */}
+      <Text style={styles.subhead}>3 · Make ready</Text>
+      <Text style={styles.help}>
+        One tap: the server checks the uploaded file in Cloudflare (real video, size, type) and
+        marks it ready to publish. The file plays as-is in the app&apos;s own player — no extra
+        conversion step.
+      </Text>
       <View style={styles.actions}>
-        <AdminButton title="Save asset details" disabled={busy || !asset} onPress={onSaveAssetFields} />
-        <AdminButton title="Mark processing" disabled={busy || !asset} onPress={() => onSetStatus('processing')} />
-        <AdminButton title="Mark ready" variant="primary" disabled={busy || !asset} onPress={() => onSetStatus('ready')} />
-        <AdminButton title="Mark failed" disabled={busy || !asset} onPress={() => onSetStatus('failed')} />
+        <AdminButton
+          title={asset?.status === 'ready' ? 'Ready ✓ (verify again)' : 'Verify & make ready'}
+          variant="primary"
+          disabled={busy || !asset}
+          onPress={onVerifyAndReady}
+        />
       </View>
 
       {/* ── Publish ── */}
@@ -475,8 +538,26 @@ function ManagePanel({
         )}
       </View>
 
+      {/* ── Schedule the Samagam (goes live on its own) ── */}
+      <Text style={styles.subhead}>5 · Schedule the Samagam</Text>
+      {video.publish_state === 'published' ? (
+        <>
+          <Text style={styles.help}>
+            Set the day and time once — at that time the recording starts for everyone as NOW
+            PLAYING, with live chat and the real sangat count. You do not need to be here when it
+            starts.
+          </Text>
+          <TextInput style={adminStyles.input} value={sessionDate} onChangeText={setSessionDate} placeholder="Date (YYYY-MM-DD)" placeholderTextColor={colors.textSecondary} autoCapitalize="none" />
+          <TextInput style={adminStyles.input} value={sessionTime} onChangeText={setSessionTime} placeholder="Start time (HH:MM, 24-hour)" placeholderTextColor={colors.textSecondary} autoCapitalize="none" />
+          <TextInput style={adminStyles.input} value={sessionDurationMin} onChangeText={setSessionDurationMin} placeholder="Duration in minutes (optional — e.g. 135)" placeholderTextColor={colors.textSecondary} keyboardType="numeric" />
+          <AdminButton title="Schedule Samagam session" variant="primary" disabled={busy} onPress={onScheduleSession} />
+        </>
+      ) : (
+        <Text style={styles.help}>Publish first (step 4) — then you can schedule the Samagam from here.</Text>
+      )}
+
       {/* ── R2 danger zone ── */}
-      <Text style={styles.subhead}>5 · Storage actions (R2)</Text>
+      <Text style={styles.subhead}>6 · Storage actions (R2)</Text>
       <View style={styles.actions}>
         <AdminButton title="Rotate to ready replacement" disabled={busy || !asset} onPress={onReplaceAsset} />
         <ConfirmButton

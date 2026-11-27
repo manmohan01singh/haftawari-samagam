@@ -7,6 +7,8 @@ import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppHeader } from '../../components/layout/AppHeader';
+import { BarBlurBackground } from '../../components/layout/BarBlurBackground';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Toast, useToast } from '../../components/common/Toast';
 import { shareContent, shareFeedback } from '../../lib/share';
 import { EmptyState } from '../../components/common/EmptyState';
@@ -69,6 +71,7 @@ const FILTERS: { key: UploadFilter; label: string }[] = [
  */
 export function SubscriptionsScreen({ navigation }: Props) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { user, profile } = useAuth();
   const listRef = useRef<FlatList<YouTubeVideoMetadata>>(null);
@@ -291,7 +294,11 @@ export function SubscriptionsScreen({ navigation }: Props) {
   const isLoading = channelsLoading || loading || (channels.length > 0 && followedIds === null);
 
   const header = (
-    <View>
+    <View style={styles.headerZone}>
+      {/* Blur material behind the rail + heading zone (user request,
+          27 Nov 2026: the selected-channel header should carry the
+          same glass blur as the app bars). */}
+      <BarBlurBackground />
       {/* Avatar rail — every followed channel. */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
         {followedChannels.map((c) => {
@@ -316,13 +323,20 @@ export function SubscriptionsScreen({ navigation }: Props) {
               accessibilityState={{ selected: isSelected }}
             >
               <View style={[styles.railAvatarWrap, isSelected && styles.railAvatarSelected]}>
-                {avatar ? (
-                  <Image source={{ uri: avatar }} style={styles.railAvatar} contentFit="cover" cachePolicy="memory-disk" />
-                ) : (
-                  <View style={[styles.railAvatar, styles.avatarFallback]}>
-                    <Text style={styles.avatarInitial}>{c.title.charAt(0)}</Text>
-                  </View>
-                )}
+                {/* Clip wrapper: expo-image's own borderRadius does
+                    not reliably clip on Android (first-APK report:
+                    a wide channel logo rendered square with a square
+                    selection outline). overflow:hidden on a round
+                    wrapper clips deterministically on every platform. */}
+                <View style={styles.railAvatarClip}>
+                  {avatar ? (
+                    <Image source={{ uri: avatar }} style={styles.railAvatar} contentFit="cover" cachePolicy="memory-disk" />
+                  ) : (
+                    <View style={[styles.railAvatar, styles.avatarFallback]}>
+                      <Text style={styles.avatarInitial}>{c.title.charAt(0)}</Text>
+                    </View>
+                  )}
+                </View>
                 {isLiveNow ? <View style={styles.liveDot} /> : null}
               </View>
               <Text style={styles.railName} numberOfLines={1}>
@@ -436,7 +450,7 @@ export function SubscriptionsScreen({ navigation }: Props) {
           keyExtractor={keyExtractor}
           renderItem={renderItem}
           ListHeaderComponent={header}
-          contentContainerStyle={styles.listPad}
+          contentContainerStyle={[styles.listPad, { paddingBottom: layout.bottomNavHeight + insets.bottom + 24 }]}
           columnWrapperStyle={columns > 1 ? styles.columnWrapper : undefined}
           ListEmptyComponent={
             <EmptyState
@@ -472,7 +486,14 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     gap: spacing.lg,
   },
   railItem: { width: 76, alignItems: 'center' },
-  railAvatarWrap: { position: 'relative', borderRadius: nativeApp.avatarRail.avatarSize / 2 + 3, padding: 3 },
+  headerZone: { position: 'relative', overflow: 'hidden' },
+  railAvatarWrap: { position: 'relative', borderRadius: nativeApp.avatarRail.avatarSize / 2 + 3, padding: 3, alignItems: 'center', justifyContent: 'center' },
+  railAvatarClip: {
+    width: nativeApp.avatarRail.avatarSize,
+    height: nativeApp.avatarRail.avatarSize,
+    borderRadius: nativeApp.avatarRail.avatarSize / 2,
+    overflow: 'hidden',
+  },
   railAvatarSelected: { borderWidth: 2, borderColor: colors.text, padding: 1 },
   railAvatar: {
     width: nativeApp.avatarRail.avatarSize,

@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Image } from 'expo-image';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
@@ -60,6 +61,10 @@ const HISTORY_CARD_WIDTH = Math.round(Dimensions.get('window').width * 0.36);
  */
 export function LibraryScreen({ navigation }: Props) {
   const { colors } = useTheme();
+  // This tab has its own header row (not AppHeader): it must carry
+  // the top inset itself, and the scroll content must clear the
+  // overlay bottom bar INCLUDING the device inset (first-APK fix).
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { user, loading: authLoading } = useCurrentUser();
   const scrollRef = React.useRef<React.ElementRef<typeof ScrollView>>(null);
@@ -191,7 +196,7 @@ export function LibraryScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerRow}>
+      <View style={[styles.headerRow, { paddingTop: insets.top, height: layout.headerHeight + insets.top }]}>
         <Pressable
           style={styles.accountsPill}
           onPress={() => navigation.navigate('Account')}
@@ -214,7 +219,7 @@ export function LibraryScreen({ navigation }: Props) {
       <ScrollView
         ref={scrollRef}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: layout.bottomNavHeight + insets.bottom + 24 }]}
       >
         {!isSupabaseConfigured ? (
           <Text style={styles.emptyLine}>

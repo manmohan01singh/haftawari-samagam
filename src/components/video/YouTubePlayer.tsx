@@ -38,11 +38,20 @@ export function YouTubePlayer({ youtubeVideoId }: YouTubePlayerProps) {
   // thumbnail + spinner until the WebView finishes its first load,
   // removed immediately afterwards — never over the playing embed.
   const [loaded, setLoaded] = useState(false);
-  const embedUrl = `https://www.youtube.com/embed/${encodeURIComponent(youtubeVideoId)}?rel=0&playsinline=1`;
+  // Error 153 fix (first-APK device report, 27 Nov 2026): loading the
+  // bare embed URL as the WebView's top-level document gives the
+  // player an opaque origin and no Referer, and YouTube now refuses
+  // with "Video player configuration error" (error 153). The embed
+  // must live in a real page served from a youtube.com origin: an
+  // inline document with baseUrl https://www.youtube.com plus the
+  // matching `origin` embed parameter is the documented, permanent
+  // shape — the player itself remains YouTube's own, untouched.
+  const embedUrl = `https://www.youtube.com/embed/${encodeURIComponent(youtubeVideoId)}?rel=0&playsinline=1&origin=https://www.youtube.com`;
+  const embedHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"><style>html,body{margin:0;padding:0;background:#000;height:100%;overflow:hidden}iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:0}</style></head><body><iframe src="${embedUrl}" allow="accelerometer; autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></body></html>`;
   return (
     <View style={styles.wrap}>
       <WebView
-        source={{ uri: embedUrl }}
+        source={{ html: embedHtml, baseUrl: 'https://www.youtube.com' }}
         onLoadEnd={() => setLoaded(true)}
         style={styles.webview}
         allowsFullscreenVideo

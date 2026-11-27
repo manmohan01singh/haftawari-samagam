@@ -29,9 +29,19 @@ interface PlaybackResponse {
 
 /** Mint a fresh signed playback URL for a published hosted video. */
 export async function fetchHostedPlaybackUrl(videoId: string): Promise<string> {
+  // Direct-file assets (the phone-upload flow): when the asset's
+  // playback key is the original file itself rather than an .m3u8
+  // playlist, ask r2-playback for a signed URL for that one object —
+  // the player streams the MP4/WebM progressively, no HLS transcode
+  // step needed. Playlist assets keep the master-playlist flow.
+  const asset = await fetchHostedAsset(videoId).catch(() => null);
+  const directKey =
+    asset?.hls_master_key && !asset.hls_master_key.endsWith('.m3u8')
+      ? asset.hls_master_key
+      : null;
   const supabase = requireSupabase();
   const { data, error } = await supabase.functions.invoke<PlaybackResponse>('r2-playback', {
-    body: { video_id: videoId },
+    body: directKey ? { video_id: videoId, key: directKey } : { video_id: videoId },
   });
   if (error) {
     // supabase-js wraps non-2xx responses; the function's JSON body is

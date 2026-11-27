@@ -1,6 +1,7 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import { useScrollToTop } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
@@ -150,6 +151,7 @@ const HomeFeedCell = memo(function HomeFeedCell({
  */
 export function HomeScreen({ navigation }: Props) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { user, profile } = useAuth();
   // QA 89: tapping the Home tab while already on Home scrolls the
@@ -594,7 +596,7 @@ export function HomeScreen({ navigation }: Props) {
             // feed scrolls under it, so the last cards need clearance
             // ≥ the bar height (56) + breathing room, or the bar would
             // cover them at the end of the list.
-            contentContainerStyle={styles.feedContent}
+            contentContainerStyle={[styles.feedContent, { paddingBottom: layout.bottomNavHeight + insets.bottom + 24 }]}
             onEndReached={onEndReached}
             onEndReachedThreshold={0.6}
             refreshing={refreshing}
