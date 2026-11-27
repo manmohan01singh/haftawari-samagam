@@ -988,12 +988,31 @@ export function WatchScreen({ route, navigation }: Props) {
             </View>
           ) : null}
 
+          {/* Comments (Phase 13) sit ABOVE the description (user
+              change request, 27 Nov, verified on his phone on build
+              5e3ed9ae: "description nu comments de upro remove karke
+              thale rehn de"). The row is the YouTube-pattern entry —
+              real count + newest-comment preview, opening the
+              VideoCommentsSheet (root-level modal below). This is
+              the RECORDING's comments (public, video_comments); a
+              session watch ALSO keeps its Live chat card above —
+              the two are different data and are never merged. */}
+          <CommentsPreviewRow
+            status={commentsStatus}
+            count={commentCount}
+            topComment={comments[0] ?? null}
+            ownUserId={chatUser?.id ?? null}
+            ownAvatarUrl={chatUser?.avatarUrl ?? null}
+            onPress={() => setCommentsOpen(true)}
+          />
+
           {/* QA issues 55/65: a description PREVIEW box is visible in
               the collapsed state (2 lines, tap to expand); in the
               expanded state the box carries its own visible
               "Show less" collapse affordance — previously "less" was
               hidden inside the meta line only. Links inside the
-              expanded description are tappable (LinkedText, QA 40). */}
+              expanded description are tappable (LinkedText, QA 40).
+              Position: BELOW the Comments row (see above). */}
           {resolved.description ? (
             expanded ? (
               <View style={styles.descriptionBox}>
@@ -1025,21 +1044,6 @@ export function WatchScreen({ route, navigation }: Props) {
             )
           ) : null}
 
-          {/* Comments (Phase 13): the YouTube-pattern entry under
-              the description — real count + newest-comment preview,
-              opening the VideoCommentsSheet (root-level modal
-              below). This is the RECORDING's comments (public,
-              video_comments); a session watch ALSO keeps its Live
-              chat card above — the two are different data and are
-              never merged. */}
-          <CommentsPreviewRow
-            status={commentsStatus}
-            count={commentCount}
-            topComment={comments[0] ?? null}
-            ownUserId={chatUser?.id ?? null}
-            ownAvatarUrl={chatUser?.avatarUrl ?? null}
-            onPress={() => setCommentsOpen(true)}
-          />
         </View>
       </View>
     );
