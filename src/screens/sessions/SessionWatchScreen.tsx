@@ -21,6 +21,8 @@ import { goBackOrTab } from '../../navigation/safeBack';
 import { StackHeader, BackButton } from '../../components/layout/StackHeader';
 import { ChatPreviewCard, SessionChat } from '../../features/chat/components';
 import { joinPresence, leavePresence } from '../../features/presence/presenceService';
+import { useOfficialChannel } from '../../features/channel';
+import { formatCount } from '../../lib/format';
 import { SessionStatusBadge } from '../../features/sessions/components/SessionStatusBadge';
 import {
   YouTubeEmbed,
@@ -54,7 +56,6 @@ import {
   type SessionWithVideo,
 } from '../../features/sessions/sessionService';
 import { deriveOffsetSeconds, deriveStatus } from '../../features/sessions/stateMachine';
-import { SESSION_LABELS } from '../../features/sessions/types';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import {
   layout,
@@ -111,6 +112,10 @@ export function SessionWatchScreen({ route, navigation }: Props) {
   const [joinBusy, setJoinBusy] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [joinedCount, setJoinedCount] = useState<number | null>(null);
+  // Channel identity for the sheet's channel row (YouTube-live
+  // parity, user request 27 Nov): catalogue sessions belong to the
+  // official channel — the same source Watch uses for archive rows.
+  const officialChannel = useOfficialChannel();
   const [presenceCount, setPresenceCount] = useState<number | null>(null);
   const [playerReady, setPlayerReady] = useState(false);
   // NOTE (UX perf pass): this screen passes the live offsetSeconds as
@@ -569,29 +574,31 @@ export function SessionWatchScreen({ route, navigation }: Props) {
           {title}
         </Text>
 
+        {/* YouTube-live meta line: the red NOW PLAYING badge chip
+            (SessionStatusBadge — red like YouTube's LIVE chip, words
+            stay truthful) with the REAL presence count as
+            "N watching" beside it, exactly where YouTube puts it. */}
         <View style={styles.metaRow}>
           {status && status !== 'cancelled' ? (
-            <Text
-              style={[
-                styles.statusText,
-                isPlaying && styles.statusPlaying,
-              ]}
-            >
-              {SESSION_LABELS[status]}
-            </Text>
+            <SessionStatusBadge status={status} />
           ) : (
             <Text style={styles.statusText}>CANCELLED</Text>
           )}
+          {isPlaying && presenceCount != null ? (
+            <Text style={styles.watchingText}>{presenceCount} watching</Text>
+          ) : null}
         </View>
 
         {/* Presence vs roster, honestly side by side: "here now" is the
             REAL Realtime presence count (people in this room right
             now); "joined" is the REAL session_participants roster
             count (people who tapped Join). They measure different
-            things and are never merged into one number. */}
-        {presenceCount != null || joinedCount != null ? (
+            things and are never merged into one number. While NOW
+            PLAYING the presence count already reads as "N watching"
+            in the meta line, so its chip is not repeated here. */}
+        {(!isPlaying && presenceCount != null) || joinedCount != null ? (
           <View style={styles.countsRow}>
-            {presenceCount != null ? (
+            {!isPlaying && presenceCount != null ? (
               <View style={styles.countChip}>
                 <View style={styles.presenceDot} />
                 <Text style={styles.countChipText}>{presenceCount} here now</Text>
@@ -614,6 +621,52 @@ export function SessionWatchScreen({ route, navigation }: Props) {
               : formatSessionDateTime(session.scheduled_start_at)}
         </Text>
 
+        {/* Channel row (YouTube-live parity): round-clipped avatar,
+            channel name, real subscriber count; the whole row opens
+            the Channel page — the live feels like it comes from this
+            channel because in this app's catalogue it does (same
+            official-channel source as the Watch screen). */}
+        {officialChannel ? (
+          <Pressable
+            style={styles.channelRow}
+            onPress={() => navigation.navigate('Channel', { channelId: officialChannel.channelId })}
+            accessibilityRole="button"
+            accessibilityLabel={`View channel ${officialChannel.title}`}
+          >
+            <View style={styles.channelAvatarClip}>
+              {officialChannel.avatarUrl ? (
+                <Image
+                  source={{ uri: officialChannel.avatarUrl }}
+                  style={styles.channelAvatar}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                />
+              ) : (
+                <View style={[styles.channelAvatar, styles.avatarFallback]}>
+                  <Text style={styles.avatarInitial}>
+                    {officialChannel.title.charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+              )}
+            </View>
+            <View style={styles.channelLines}>
+              <Text style={styles.channelNameText} numberOfLines={1} ellipsizeMode="tail">
+                {officialChannel.title}
+              </Text>
+              {officialChannel.subscriberCount != null ? (
+                <Text style={styles.channelMeta} numberOfLines={1}>
+                  {`${formatCount(officialChannel.subscriberCount)} subscribers`}
+                </Text>
+              ) : null}
+            </View>
+          </Pressable>
+        ) : null}
+
+        {/* Action row (YouTube-live parity): Share + Sync side by
+            side as pills, not stacked full-width buttons. Share sends
+            THIS app's session deep link — sangat opening it land in
+            this same live Samagam. */}
+        <View style={styles.liveActionRow}>
         <Pressable
           onPress={onShareSession}
           style={({ pressed }) => [styles.syncButton, pressed && styles.pressed]}
@@ -649,6 +702,7 @@ export function SessionWatchScreen({ route, navigation }: Props) {
             <Text style={styles.syncButtonText}>Watch again from the start</Text>
           </Pressable>
         ) : null}
+        </View>
 
         {/* Join / Leave — real session_participants rows. The pill is
             only offered while joining is meaningful (upcoming / now
@@ -706,12 +760,6 @@ export function SessionWatchScreen({ route, navigation }: Props) {
           <Text style={styles.note}>This Samagam was cancelled.</Text>
         ) : null}
 
-        {video?.description ? (
-          <View style={styles.descriptionBox}>
-            <Text style={styles.descriptionText}>{video.description}</Text>
-          </View>
-        ) : null}
-
         {/* Live chat (chat stream): preview card on the sheet; tapping
             it opens the full SessionChat bottom sheet. The count is the
             REAL presence count when known, else the joined roster
@@ -726,6 +774,14 @@ export function SessionWatchScreen({ route, navigation }: Props) {
             prominent={isPlaying}
           />
         </View>
+
+        {/* Description BELOW the chat (user's standing preference:
+            comments/chat first, description after — same as Watch). */}
+        {video?.description ? (
+          <View style={styles.descriptionBox}>
+            <Text style={styles.descriptionText}>{video.description}</Text>
+          </View>
+        ) : null}
       </ScrollView>
 
       <Modal
@@ -828,22 +884,55 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   sheetContent: { padding: spacing.lg, paddingBottom: spacing.xxl },
   backRow: { flexDirection: 'row', alignItems: 'center' },
   title: { ...typography.watchTitle, fontWeight: '600', color: colors.text },
-  metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.sm, flexWrap: 'wrap' },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.sm,
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
   statusText: {
     fontSize: 13,
     fontWeight: '700',
     letterSpacing: 0.4,
     color: colors.textSecondary,
   },
-  statusPlaying: { color: colors.accent },
+  watchingText: { fontSize: 13, fontWeight: '600', color: colors.text },
+  channelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.lg,
+    gap: spacing.md,
+  },
+  channelAvatarClip: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  channelAvatar: { width: 40, height: 40 },
+  avatarFallback: {
+    backgroundColor: colors.surfaceVariant,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitial: { fontSize: 16, fontWeight: '600', color: colors.textSecondary },
+  channelLines: { flex: 1, minWidth: 0 },
+  channelNameText: { fontSize: 15, fontWeight: '600', color: colors.text },
+  channelMeta: { fontSize: 13, color: colors.textSecondary, marginTop: 1 },
+  liveActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
   scheduleLine: {
     ...typography.channelName,
     color: colors.textSecondary,
     marginTop: spacing.xs,
   },
   syncButton: {
-    alignSelf: 'flex-start',
-    marginTop: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radii.pill,
