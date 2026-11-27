@@ -1,6 +1,14 @@
+/* eslint-disable react-hooks/refs --
+ * P9/W4: the sheet height is an Animated.Value held in a ref; the
+ * PanResponder handlers touch the Animated value / expanded ref ONLY
+ * inside gesture callbacks and effects, never during render (same
+ * stable-instance pattern as SwipeableRow, where this rule is also
+ * disabled). The react-hooks/refs rule cannot prove that, so it is
+ * disabled for this file only. */
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   FlatList,
   KeyboardAvoidingView,
   PanResponder,
@@ -46,6 +54,10 @@ export interface SessionChatProps {
 
 const MAX_MESSAGE_LENGTH = 1000;
 
+// The sheet root needs an animated height (P9/W4) — KeyboardAvoidingView's
+// own style typing rejects Animated values, so wrap it once.
+const AnimatedKeyboardAvoidingView = Animated.createAnimatedComponent(KeyboardAvoidingView);
+
 /**
  * Session live chat — the bottom-sheet UI of screenshot 07, built on
  * real data only:
@@ -89,14 +101,43 @@ export function SessionChat({
   // Drag is claimed ONLY by the handle/header region (move-based, so
   // taps on × still land) — the message list scrolls independently.
   const { height: windowHeight } = useWindowDimensions();
-  const [expanded, setExpanded] = useState(false);
-  const [dragDy, setDragDy] = useState(0);
-  const baseHeight =
-    windowHeight *
-    (expanded
-      ? nativeApp.chatSheet.expandedHeightRatio
-      : nativeApp.chatSheet.defaultHeightRatio);
-  const sheetHeight = Math.max(240, Math.min(windowHeight * 0.98, baseHeight - dragDy));
+  // Expanded/collapsed lives in a ref: the height is animated, so a
+  // state flip (and its re-render) is no longer what moves the sheet.
+  const expandedRef = useRef(false);
+  const clampHeight = useCallback(
+    (h: number) => Math.max(240, Math.min(windowHeight * 0.98, h)),
+    [windowHeight],
+  );
+  const baseHeightFor = useCallback(
+    (exp: boolean) =>
+      windowHeight *
+      (exp ? nativeApp.chatSheet.expandedHeightRatio : nativeApp.chatSheet.defaultHeightRatio),
+    [windowHeight],
+  );
+  // P9/W4: the sheet height is an Animated.Value. Drag moves it with
+  // setValue (no re-render per move); release springs it to the snap
+  // target (damping 26 / stiffness 260 per the audit's animation
+  // spec). Height cannot use the native driver, so
+  // useNativeDriver:false — the spring still runs on the JS thread at
+  // frame cadence and the layout follows it.
+  const heightAnim = useRef(new Animated.Value(clampHeight(baseHeightFor(false)))).current;
+  // Keep the animated height in sync when the window itself changes
+  // (rotation / resize) outside of a drag.
+  React.useEffect(() => {
+    heightAnim.setValue(clampHeight(baseHeightFor(expandedRef.current)));
+  }, [baseHeightFor, clampHeight, heightAnim]);
+
+  const springTo = useCallback(
+    (exp: boolean) => {
+      Animated.spring(heightAnim, {
+        toValue: clampHeight(baseHeightFor(exp)),
+        damping: 26,
+        stiffness: 260,
+        useNativeDriver: false,
+      }).start();
+    },
+    [heightAnim, clampHeight, baseHeightFor],
+  );
 
   const dragResponder = useMemo(
     () =>
@@ -104,20 +145,29 @@ export function SessionChat({
         // Move-based claiming: a drag (|dy| > 4) is sheet drag; a tap
         // falls through to the handle Pressable / × button underneath.
         onMoveShouldSetPanResponder: (_evt, gesture) => Math.abs(gesture.dy) > 4,
-        onPanResponderMove: (_evt, gesture) => setDragDy(gesture.dy),
+        onPanResponderMove: (_evt, gesture) => {
+          heightAnim.setValue(clampHeight(baseHeightFor(expandedRef.current) - gesture.dy));
+        },
         onPanResponderRelease: (_evt, gesture) => {
           const threshold = nativeApp.chatSheet.dragSnapThreshold;
           if (gesture.dy > threshold) {
-            if (expanded) setExpanded(false);
-            else onClose?.();
+            if (expandedRef.current) {
+              expandedRef.current = false;
+              springTo(false);
+            } else {
+              springTo(false);
+              onClose?.();
+            }
           } else if (gesture.dy < -threshold) {
-            setExpanded(true);
+            expandedRef.current = true;
+            springTo(true);
+          } else {
+            springTo(expandedRef.current);
           }
-          setDragDy(0);
         },
-        onPanResponderTerminate: () => setDragDy(0),
+        onPanResponderTerminate: () => springTo(expandedRef.current),
       }),
-    [expanded, onClose],
+    [onClose, heightAnim, clampHeight, baseHeightFor, springTo],
   );
 
   // Inverted list: newest message first in data, rendered at the bottom.
@@ -243,8 +293,8 @@ export function SessionChat({
   }
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.sheet, { height: sheetHeight }]}
+    <AnimatedKeyboardAvoidingView
+      style={[styles.sheet, { height: heightAnim }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={keyboardVerticalOffset}
     >
@@ -364,7 +414,7 @@ export function SessionChat({
           ) : null}
         </>
       ) : null}
-    </KeyboardAvoidingView>
+    </AnimatedKeyboardAvoidingView>
   );
 }
 

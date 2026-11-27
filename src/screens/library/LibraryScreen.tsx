@@ -33,8 +33,8 @@ import { resumeRatio } from '../../features/library/format';
 import type { HistoryItem, PlaylistSummary } from '../../features/library/types';
 import type { LibraryRootStackParamList } from '../../features/library/screenTypes';
 import { CreatePlaylistSheet } from '../../features/library/components/CreatePlaylistSheet';
-import { ScreenLoading } from '../../features/library/components/ScreenMessage';
 import { listThumbnailUrl } from '../../components/video/cardData';
+import { SkeletonCard } from '../../components/video/SkeletonCard';
 import { UserAvatar } from '../../components/common/UserAvatar';
 import { removeLocalHistoryEntry, useLocalHistory } from '../../features/library/localHistory';
 import { PlaylistRow } from '../../features/library/components/PlaylistRow';
@@ -206,7 +206,24 @@ export function LibraryScreen({ navigation }: Props) {
             The backend is not configured in this build, so your library cannot be loaded.
           </Text>
         ) : authLoading ? (
-          <ScreenLoading label="Loading your library…" />
+          // P9/W4: first load shows geometry-matched skeletons (the
+          // profile block + list rows) instead of a lone spinner, so
+          // the page doesn't jump when real content lands. Per-section
+          // small spinners below are unchanged.
+          <View accessibilityLabel="Loading your library">
+            <View style={styles.profileBlock}>
+              <View style={styles.profileAvatar} />
+              <View style={styles.profileLines}>
+                <View style={styles.skeletonLineWide} />
+                <View style={styles.skeletonLineNarrow} />
+              </View>
+            </View>
+            <View style={styles.skeletonRows}>
+              <SkeletonCard variant="row" />
+              <SkeletonCard variant="row" />
+              <SkeletonCard variant="row" />
+            </View>
+          </View>
         ) : user ? (
           <>
             <View style={styles.profileBlock}>
@@ -555,6 +572,20 @@ const styles = StyleSheet.create({
   },
   profileInitial: { fontSize: 28, fontWeight: '600', color: lightColors.textSecondary },
   profileLines: { flex: 1 },
+  skeletonLineWide: {
+    height: 20,
+    width: '62%',
+    borderRadius: 4,
+    backgroundColor: lightColors.surfaceVariant,
+  },
+  skeletonLineNarrow: {
+    height: 14,
+    width: '44%',
+    borderRadius: 4,
+    backgroundColor: lightColors.surfaceVariant,
+    marginTop: spacing.sm,
+  },
+  skeletonRows: { paddingHorizontal: spacing.lg, paddingTop: spacing.xl, gap: spacing.md },
   profileName: { fontSize: 24, fontWeight: '600', color: lightColors.text },
   profileMeta: { fontSize: 14, color: lightColors.textSecondary, marginTop: 3 },
   profileButtons: {

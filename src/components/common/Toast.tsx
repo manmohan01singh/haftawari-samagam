@@ -1,5 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+/* eslint-disable react-hooks/refs, react-hooks/set-state-in-effect --
+ * P9/W4 fade in/out: the opacity Animated.Value lives in a ref and is
+ * only touched inside effects; the effect also mirrors the incoming
+ * message into local state so the pill can stay mounted while it
+ * fades out after the hook clears it. Both are effect-only patterns
+ * the two rules cannot prove safe, so they are disabled for this
+ * file only (refs precedent: SwipeableRow). */
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, StyleSheet, Text, View } from 'react-native';
 import { lightColors, radii, spacing } from '../../theme';
 
 /**
@@ -22,12 +29,41 @@ export function useToast(durationMs = 2600): {
 }
 
 export function Toast({ message }: { message: string | null }) {
-  if (!message) return null;
+  // P9/W4: fade in/out. The component keeps the last message rendered
+  // while it fades out (200ms) after `message` clears, then unmounts;
+  // fade-in is 180ms. API unchanged — callers still pass the hook's
+  // toast string (or null).
+  const opacity = useRef(new Animated.Value(0)).current;
+  const [rendered, setRendered] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (message) {
+      setRendered(message);
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 180,
+        useNativeDriver: true,
+      }).start();
+      return;
+    }
+    if (rendered) {
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (finished) setRendered(null);
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [message, opacity]);
+
+  if (!rendered) return null;
   return (
     <View style={styles.wrap} pointerEvents="none">
-      <View style={styles.pill}>
-        <Text style={styles.text}>{message}</Text>
-      </View>
+      <Animated.View style={[styles.pill, { opacity }]}>
+        <Text style={styles.text}>{rendered}</Text>
+      </Animated.View>
     </View>
   );
 }

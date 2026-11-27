@@ -35,7 +35,9 @@ export function RootNavigator() {
   }
 
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator
+      screenOptions={{ headerShown: false, animation: 'slide_from_right', animationDuration: 280 }}
+    >
       <Stack.Screen name="MainTabs" component={MainTabs} />
       <Stack.Screen name="Watch" component={WatchScreen} />
       <Stack.Screen name="Search" component={SearchScreen} />
