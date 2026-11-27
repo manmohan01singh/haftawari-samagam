@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { HostedPlayer } from './HostedPlayer';
@@ -59,8 +59,18 @@ export function HostedWatchPlayer({ videoId, thumbnailUrl, autoplay = true }: Ho
     };
   }, [videoId]);
 
+  // Silent re-mint for HostedPlayer's error recovery (long videos
+  // outlive the 15-minute signed URL; see HostedPlayer.onRefreshUri).
+  const refreshUri = useCallback(async (): Promise<string | null> => {
+    try {
+      return await fetchHostedPlaybackUrl(videoId);
+    } catch {
+      return null;
+    }
+  }, [videoId]);
+
   if (state.kind === 'ready') {
-    return <HostedPlayer uri={state.url} autoplay={autoplay} />;
+    return <HostedPlayer uri={state.url} autoplay={autoplay} onRefreshUri={refreshUri} />;
   }
 
   return (

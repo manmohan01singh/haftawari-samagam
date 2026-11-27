@@ -511,6 +511,13 @@ export function SessionWatchScreen({ route, navigation }: Props) {
               autoplay={isPlaying}
               onReady={handlePlayerReady}
               onTimeUpdate={handleTimeUpdate}
+              onRefreshUri={async () => {
+                try {
+                  return await fetchHostedPlaybackUrl(video.id);
+                } catch {
+                  return null;
+                }
+              }}
               showScrubber={!isPlaying}
             />
           ) : (

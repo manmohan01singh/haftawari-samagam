@@ -41,6 +41,16 @@ export interface HostedPlayerProps {
   onReady?: () => void;
   onError?: (message: string) => void;
   /**
+   * Re-mint a fresh playback URL after a playback error. Signed URLs
+   * are short-lived (15 min) while a samagam runs 2+ hours — a range
+   * request issued after expiry fails with 403 and surfaces as a
+   * player error. When this callback is provided, the player quietly
+   * swaps in a fresh URL and resumes at the same position (max 3
+   * attempts) instead of dying mid-samagam; only if refresh fails or
+   * is exhausted does the error state show.
+   */
+  onRefreshUri?: () => Promise<string | null>;
+  /**
    * Show the seek timeline. Session screens hide it while a session
    * is NOW PLAYING (the group position is authoritative) and show it
    * for COMPLETED replay.
@@ -77,6 +87,7 @@ export const HostedPlayer = memo(
       onTimeUpdate,
       onReady,
       onError,
+      onRefreshUri,
       showScrubber = true,
     },
     ref,
@@ -85,8 +96,15 @@ export const HostedPlayer = memo(
     const styles = useMemo(() => createStyles(colors), [colors]);
     const viewRef = useRef<VideoView>(null);
     const readyHandledFor = useRef<string | null>(null);
-    const callbacks = useRef({ onTimeUpdate, onReady, onError });
-    callbacks.current = { onTimeUpdate, onReady, onError };
+    const callbacks = useRef({ onTimeUpdate, onReady, onError, onRefreshUri });
+    callbacks.current = { onTimeUpdate, onReady, onError, onRefreshUri };
+    // Signed-URL refresh bookkeeping (see onRefreshUri): last known
+    // position / play state for a seamless resume, plus attempt caps.
+    const positionRef = useRef(0);
+    const wasPlayingRef = useRef(false);
+    const refreshCountRef = useRef(0);
+    const refreshingRef = useRef(false);
+    const [refreshing, setRefreshing] = useState(false);
 
     const [initialStart] = useState(() => Math.max(0, Math.floor(startSeconds)));
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -105,8 +123,13 @@ export const HostedPlayer = memo(
     const duration = player.duration > 0 ? player.duration : 0;
 
     useEventListener(player, 'timeUpdate', ({ currentTime: t }) => {
+      positionRef.current = t;
       setCurrentTime(t);
       callbacks.current.onTimeUpdate?.(t);
+    });
+
+    useEventListener(player, 'playingChange', ({ isPlaying: playing }) => {
+      wasPlayingRef.current = playing;
     });
 
     useEventListener(player, 'statusChange', ({ status: next, error }) => {
@@ -117,6 +140,35 @@ export const HostedPlayer = memo(
         callbacks.current.onReady?.();
       }
       if (next === 'error') {
+        // First try a silent signed-URL refresh + resume (the usual
+        // cause mid-samagam is the 15-minute signature expiring, not
+        // a broken file). Only a failed/exhausted refresh surfaces
+        // the error state.
+        const refresh = callbacks.current.onRefreshUri;
+        if (refresh && refreshCountRef.current < 3 && !refreshingRef.current) {
+          refreshingRef.current = true;
+          refreshCountRef.current += 1;
+          setRefreshing(true);
+          const resumeAt = positionRef.current;
+          const resumePlaying = wasPlayingRef.current || autoplay;
+          refresh()
+            .then(async (newUri) => {
+              if (!newUri) throw new Error('refresh returned no URL');
+              await player.replaceAsync(newUri);
+              if (resumeAt > 0) player.currentTime = resumeAt;
+              if (resumePlaying) player.play();
+            })
+            .catch(() => {
+              const message = error?.message ?? 'This recording could not be played.';
+              setErrorMessage(message);
+              callbacks.current.onError?.(message);
+            })
+            .finally(() => {
+              refreshingRef.current = false;
+              setRefreshing(false);
+            });
+          return;
+        }
         const message = error?.message ?? 'This recording could not be played.';
         setErrorMessage(message);
         callbacks.current.onError?.(message);
@@ -168,7 +220,7 @@ export const HostedPlayer = memo(
 
     const displayTime = scrubbing ?? currentTime;
     const progress = duration > 0 ? Math.min(1, displayTime / duration) : 0;
-    const buffering = status === 'loading';
+    const buffering = status === 'loading' || refreshing;
 
     if (errorMessage) {
       return (
