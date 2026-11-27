@@ -35,13 +35,24 @@ import {
 } from '../../lib/youtube';
 import { getUploadsPageCached } from '../../features/channels/channelCache';
 import { apiCardData as baseApiCardData, formatDateLine } from '../../components/video/cardData';
-import { layout, nativeApp, radii, spacing, useTheme, type ThemeColors } from '../../theme';
+import { layout, nativeApp, radii, spacing, typography, useTheme, type ThemeColors } from '../../theme';
 import type { RootStackParamList } from '../../navigation/types';
 import { FEED_LIST_PERF } from '../../lib/listPerf';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Channel'>;
 
-type ChannelTab = 'videos' | 'live';
+type ChannelTab = 'videos' | 'live' | 'about';
+
+/** Channel country code → display name ("IN" → "India") for the
+    About tab. Intl.DisplayNames is guarded: older runtimes fall
+    back to the raw code rather than crashing the tab. */
+function countryName(code: string): string {
+  try {
+    return new Intl.DisplayNames(['en'], { type: 'region' }).of(code) ?? code;
+  } catch {
+    return code;
+  }
+}
 
 /** Module-level cache for the search-based live lookup (100 quota
  *  units per call): one call per channel per 10 minutes is enough for
@@ -52,10 +63,14 @@ const liveSearchCache = new Map<string, { at: number; items: YouTubeVideoMetadat
 /**
  * Channel screen — all data live from the YouTube Data API: banner,
  * avatar, name, handle, subscriber/video counts, description, and the
- * uploads list (paginated). Tabs are Videos and Live ONLY — there is
+ * uploads list (paginated). Tabs are Videos, Live and About — there is
  * no Shorts tab (user decision, 26 Nov 2026, overriding the reference).
  * The Live tab lists the channel's own broadcasts that YouTube itself
  * reports as live now or upcoming; it is not a Samagam session label.
+ * The About tab shows the channel's own description, counts, joined
+ * date and location — all from the same channels.list response, so it
+ * costs no extra quota; joined date / location are absent from cache
+ * entries saved before they were added, and are simply omitted then.
  */
 export function ChannelScreen({ route, navigation }: Props) {
   const { colors } = useTheme();
@@ -385,6 +400,7 @@ export function ChannelScreen({ route, navigation }: Props) {
           [
             { key: 'videos', label: 'VIDEOS' },
             { key: 'live', label: 'LIVE' },
+            { key: 'about', label: 'ABOUT' },
           ] as { key: ChannelTab; label: string }[]
         ).map((t) => {
           const active = tab === t.key;
@@ -451,8 +467,9 @@ export function ChannelScreen({ route, navigation }: Props) {
   }
 
   // Uploads grid: Shorts filtered OUT with the search stream's
-  // heuristic (user ban), ghost items (no title) dropped.
-  const data = (tab === 'videos' ? uploads : mergedLive).filter(
+  // heuristic (user ban), ghost items (no title) dropped. The About
+  // tab has no list rows — its content renders from ListEmptyComponent.
+  const data = (tab === 'videos' ? uploads : tab === 'live' ? mergedLive : []).filter(
     (v) => v.title.trim().length > 0 && (tab !== 'videos' || !isShortVideo(v)),
   );
 
@@ -475,7 +492,53 @@ export function ChannelScreen({ route, navigation }: Props) {
           ) : undefined
         }
         ListEmptyComponent={
-          // QA issue 8: while the tab's data is still loading, show
+          // About tab (round-3 sweep, 27 Nov 2026): YouTube's channel
+          // page has an About section — description, counts, joined
+          // date, location. Every row is the channel's own data from
+          // channels.list; rows with no data are omitted, never
+          // invented. Links are not shown: the API exposes none.
+          tab === 'about' ? (
+            <View style={styles.aboutWrap}>
+              <Text style={styles.aboutHeading}>Description</Text>
+              {channel.description ? (
+                <LinkedText text={channel.description} style={styles.description} />
+              ) : (
+                <Text style={styles.aboutEmpty}>No description for this channel.</Text>
+              )}
+              <View style={styles.aboutStats}>
+                {channel.subscriberCount != null ? (
+                  <View style={styles.aboutRow}>
+                    <Text style={styles.aboutLabel}>Subscribers</Text>
+                    <Text style={styles.aboutValue}>{formatCount(channel.subscriberCount)}</Text>
+                  </View>
+                ) : null}
+                {channel.videoCount != null ? (
+                  <View style={styles.aboutRow}>
+                    <Text style={styles.aboutLabel}>Videos</Text>
+                    <Text style={styles.aboutValue}>{formatCount(channel.videoCount)}</Text>
+                  </View>
+                ) : null}
+                {channel.viewCount != null ? (
+                  <View style={styles.aboutRow}>
+                    <Text style={styles.aboutLabel}>Total views</Text>
+                    <Text style={styles.aboutValue}>{formatCount(channel.viewCount)}</Text>
+                  </View>
+                ) : null}
+                {channel.publishedAt ? (
+                  <View style={styles.aboutRow}>
+                    <Text style={styles.aboutLabel}>Joined</Text>
+                    <Text style={styles.aboutValue}>{formatDateLine(channel.publishedAt)}</Text>
+                  </View>
+                ) : null}
+                {channel.country ? (
+                  <View style={styles.aboutRow}>
+                    <Text style={styles.aboutLabel}>Location</Text>
+                    <Text style={styles.aboutValue}>{countryName(channel.country)}</Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+          ) : // QA issue 8: while the tab's data is still loading, show
           // skeleton rows — previously this was `undefined` (videos)
           // or a premature "No live…" message (live), i.e. a blank
           // white area / wrong state for the whole fetch.
@@ -692,6 +755,26 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   tabActive: { borderBottomWidth: 2, borderBottomColor: colors.text },
   tabLabel: { fontSize: 15, fontWeight: '500', color: colors.textSecondary },
   tabLabelActive: { color: colors.text, fontWeight: '600' },
+  aboutWrap: { paddingTop: spacing.md, paddingBottom: spacing.xl },
+  aboutHeading: {
+    ...typography.body,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: spacing.sm,
+  },
+  aboutEmpty: { ...typography.body, color: colors.textSecondary },
+  aboutStats: { marginTop: spacing.lg },
+  aboutRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  aboutLabel: { ...typography.body, color: colors.textSecondary },
+  aboutValue: { ...typography.body, fontWeight: '600', color: colors.text },
   footerSpinner: { paddingVertical: spacing.lg },
   menuBackdrop: {
     flex: 1,

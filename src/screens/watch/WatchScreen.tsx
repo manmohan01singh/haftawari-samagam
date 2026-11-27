@@ -992,7 +992,11 @@ export function WatchScreen({ route, navigation }: Props) {
           >
             <Text style={styles.metaLine} numberOfLines={expanded ? undefined : 1}>
               {metaText}
-              {metaText ? '  ' : ''}
+              {/* Round-3 sweep (27 Nov 2026): plain '  ' collapses to
+                  nothing in the web render, so the toggle read
+                  "2020less". Non-breaking spaces survive on web and
+                  native alike. */}
+              {metaText ? '\u00A0\u00A0' : ''}
               <Text style={styles.moreText}>{expanded ? 'less' : 'more'}</Text>
             </Text>
           </Pressable>

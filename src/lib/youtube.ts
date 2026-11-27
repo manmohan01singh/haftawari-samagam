@@ -210,6 +210,12 @@ export interface YouTubeChannelInfo {
   videoCount: number | null;
   viewCount: number | null;
   uploadsPlaylistId: string | null;
+  /** Channel creation date (About tab "Joined …"). Absent from
+      cache entries saved before this field existed. */
+  publishedAt: string | null;
+  /** ISO country code the channel declares (About tab location).
+      Absent from cache entries saved before this field existed. */
+  country: string | null;
 }
 
 interface ChannelsListResponse {
@@ -219,6 +225,8 @@ interface ChannelsListResponse {
       title: string;
       description: string;
       customUrl?: string;
+      publishedAt: string;
+      country?: string;
       thumbnails: ThumbnailSet;
     };
     statistics: {
@@ -272,6 +280,8 @@ function toChannelInfo(item: NonNullable<ChannelsListResponse['items']>[number])
     videoCount: stats.videoCount == null ? null : Number(stats.videoCount),
     viewCount: stats.viewCount == null ? null : Number(stats.viewCount),
     uploadsPlaylistId: item.contentDetails.relatedPlaylists.uploads ?? null,
+    publishedAt: item.snippet.publishedAt ?? null,
+    country: item.snippet.country ?? null,
   };
 }
 

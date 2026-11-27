@@ -777,7 +777,14 @@ export function SessionWatchScreen({ route, navigation }: Props) {
         ) : null}
         {isCompleted ? (
           <Text style={styles.note}>
-            This Samagam has ended. You can watch the full recording above.
+            {/* Round-3 sweep (27 Nov 2026): a signed-out guest on a
+                HOSTED recording sees "Sign in to watch this
+                recording." in the player area, so "watch the full
+                recording above" contradicted it. Hosted playback is
+                members-only; YouTube recordings play for guests. */}
+            {isHosted && !user
+              ? 'This Samagam has ended. Sign in to watch the full recording.'
+              : 'This Samagam has ended. You can watch the full recording above.'}
           </Text>
         ) : null}
         {status === 'cancelled' ? (

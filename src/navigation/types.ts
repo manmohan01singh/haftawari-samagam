@@ -31,7 +31,7 @@ export type RootStackParamList = {
   Search: undefined;
   SearchResults: { query: string };
   /** Defaults to the official channel when no id is passed. */
-  Channel: { channelId?: string; tab?: 'videos' | 'live' };
+  Channel: { channelId?: string; tab?: 'videos' | 'live' | 'about' };
   Playlist: { playlistId: string };
   /** Saved videos screen (library stream). */
   Saved: undefined;

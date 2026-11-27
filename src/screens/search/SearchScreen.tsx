@@ -230,25 +230,32 @@ export function SearchScreen({ navigation }: Props) {
                   </Pressable>
                 </View>
               ) : null}
-              {catalogue.length > 0 ? (
-                <>
-                  <Text style={styles.listHeading}>From the archive</Text>
-                  {catalogue.slice(0, 8).map((video) => (
-                    <Pressable
-                      key={video.id}
-                      style={styles.row}
-                      onPress={() => submit(video.title)}
-                      accessibilityRole="button"
-                    >
-                      <MaterialIcons name="play-circle-outline" size={22} color={colors.textSecondary} />
-                      <Text style={styles.rowText} numberOfLines={1}>
-                        {video.title}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </>
-              ) : null}
             </View>
+          }
+          ListFooterComponent={
+            // Round-3 sweep (27 Nov 2026): the archive list used to
+            // live INSIDE the ListHeaderComponent, so the DOM/visual
+            // order was heading → archive rows → the history rows the
+            // heading belonged to. Archive is a footer now: recents
+            // sit directly under their heading, archive below them.
+            catalogue.length > 0 ? (
+              <View>
+                <Text style={styles.listHeading}>From the archive</Text>
+                {catalogue.slice(0, 8).map((video) => (
+                  <Pressable
+                    key={video.id}
+                    style={styles.row}
+                    onPress={() => submit(video.title)}
+                    accessibilityRole="button"
+                  >
+                    <MaterialIcons name="play-circle-outline" size={22} color={colors.textSecondary} />
+                    <Text style={styles.rowText} numberOfLines={1}>
+                      {video.title}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : undefined
           }
         />
       ) : showSuggestions ? (
