@@ -39,7 +39,7 @@ import { sessionShareUrl, watchShareUrl } from '../../navigation/linking';
 import { useCurrentChatUser } from '../../features/chat/useSessionChat';
 import { joinPresence, leavePresence } from '../../features/presence/presenceService';
 import { useChannelFollow, useOfficialChannel } from '../../features/channel';
-import { getUploadsPageCached } from '../../features/channels/channelCache';
+import { getChannelInfoCached, getUploadsPageCached } from '../../features/channels/channelCache';
 import { usePlaybackStore, type PlaybackItem } from '../../features/playback/playbackStore';
 import { AddToPlaylistSheet } from '../../features/library';
 import { formatCount } from '../../lib/format';
@@ -48,7 +48,6 @@ import { isSupabaseConfigured } from '../../lib/supabase';
 import {
   OFFICIAL_CHANNEL_HANDLE,
   OFFICIAL_CHANNEL_ID,
-  fetchChannelById,
   fetchVideoMetadata,
   isShortVideo,
   type YouTubeChannelInfo,
@@ -450,7 +449,7 @@ export function WatchScreen({ route, navigation }: Props) {
     if (!resolved.row && !resolved.channelId) return;
     let active = true;
     const target = resolved.row ? null : resolved.channelId;
-    const promise = target ? fetchChannelById(target) : Promise.resolve(officialChannel);
+    const promise = target ? getChannelInfoCached(target) : Promise.resolve(officialChannel);
     void promise
       .then((info) => {
         if (active) setChannel(info);

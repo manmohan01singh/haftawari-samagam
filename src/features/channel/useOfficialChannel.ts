@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
-import {
-  OFFICIAL_CHANNEL_HANDLE,
-  fetchChannelByHandle,
-  type YouTubeChannelInfo,
-} from '../../lib/youtube';
+import { OFFICIAL_CHANNEL_ID, type YouTubeChannelInfo } from '../../lib/youtube';
+import { getChannelInfoCached } from '../channels/channelCache';
 
 /**
- * The official channel's real API data, fetched once and cached at
- * module level so lists, cards and headers share a single request.
- * Returns null while loading or when the API is unreachable — callers
- * render honest fallbacks (initial-letter avatars), never fake data.
+ * The official channel's real API data, shared at module level so
+ * lists, cards and headers resolve it once. Backed by the persisted
+ * channel-info cache (6h TTL, stale copy served when the API is
+ * unreachable — e.g. the day's YouTube quota is gone), so channel
+ * rows keep their real name and DP instead of rendering blank.
+ * Returns null only while loading or when nothing was ever fetched —
+ * callers render honest fallbacks (initial-letter avatars), never
+ * fake data.
  */
 let cached: YouTubeChannelInfo | null = null;
 let inflight: Promise<YouTubeChannelInfo | null> | null = null;
@@ -17,7 +18,7 @@ let inflight: Promise<YouTubeChannelInfo | null> | null = null;
 export function loadOfficialChannel(): Promise<YouTubeChannelInfo | null> {
   if (cached) return Promise.resolve(cached);
   if (!inflight) {
-    inflight = fetchChannelByHandle(OFFICIAL_CHANNEL_HANDLE)
+    inflight = getChannelInfoCached(OFFICIAL_CHANNEL_ID)
       .then((info) => {
         cached = info;
         return info;

@@ -82,8 +82,18 @@ export async function getChannelInfoCached(channelId: string): Promise<YouTubeCh
   if (cached) return cached;
   return dedupe(key, async () => {
     const info = await fetchChannelById(channelId).catch(() => null);
-    if (info) await writeCache(key, info);
-    return info;
+    if (info) {
+      await writeCache(key, info);
+      return info;
+    }
+    // The live fetch failed (e.g. the day's YouTube quota is gone):
+    // serve the last persisted copy at ANY age rather than nothing —
+    // a channel's name and DP change rarely, and a blank channel row
+    // on Watch is worse than a slightly old copy (mobile sweep,
+    // 27 Nov 2026: Watch channel row rendered an empty avatar circle
+    // and no name while Home, fed by the uploads cache, was fine).
+    const stale = await readCacheEntry<YouTubeChannelInfo>(key);
+    return stale?.value ?? null;
   });
 }
 
