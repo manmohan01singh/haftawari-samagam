@@ -12,11 +12,19 @@
  *  - Supabase + YouTube traffic: NETWORK-ONLY, never intercepted.
  *  - No video is ever cached: playback is the official YouTube embed.
  *
- * Updates: install does NOT skipWaiting on its own. The app detects a
- * waiting worker, shows a "New version available" banner, and only on
- * the user's tap posts { type: 'SKIP_WAITING' } here.
+ * Updates (v4 — the tap-to-update trap): install now calls
+ * skipWaiting() ITSELF and activate claims clients, so a new deploy
+ * takes over on the next launch without any user action. v3 waited
+ * for a banner tap ({ type: 'SKIP_WAITING' } from the app); a user
+ * who ignored the banner — or whose OLD bundle had no banner at
+ * all — stayed on the stale build indefinitely, which is exactly
+ * the owner's "I can't see any changed" report of 27 Nov 2026.
+ * The app still reloads exactly once on controllerchange
+ * (registerServiceWorker.web), so the takeover is one clean reload,
+ * never a loop. The SKIP_WAITING message handler is kept for older
+ * app bundles that still send it.
  */
-const CACHE_VERSION = 'haftawari-shell-v3';
+const CACHE_VERSION = 'haftawari-shell-v4';
 /* The web build is served under a base path (experiments.baseUrl, e.g.
  * GitHub Pages /haftawari-samagam/). Shell paths stay relative to this
  * worker's own URL — root-absolute paths would 404 under a subpath. */
@@ -24,7 +32,11 @@ const PRECACHE_ASSETS = ['./manifest.webmanifest', './icon-192.png', './icon-512
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_VERSION).then((cache) => cache.addAll(PRECACHE_ASSETS)),
+    caches
+      .open(CACHE_VERSION)
+      .then((cache) => cache.addAll(PRECACHE_ASSETS))
+      // Auto-activate: never park in "waiting" behind a banner tap.
+      .then(() => self.skipWaiting()),
   );
 });
 
