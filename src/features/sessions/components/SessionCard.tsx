@@ -51,7 +51,18 @@ export const SessionCard = memo(function SessionCard({ item, effectiveStatus, no
         {thumbnailUrl ? (
           <Image source={{ uri: thumbnailUrl }} style={styles.thumbnail} contentFit="cover" cachePolicy="memory-disk" recyclingKey={session.id} />
         ) : (
-          <View style={[styles.thumbnail, styles.thumbnailEmpty]} />
+          // No thumbnail on the row (e.g. a hosted phone recording
+          // whose admin has not added one): the brand mark, exactly
+          // as FeedCard falls back — never a bare grey rectangle
+          // (mobile sweep, 27 Nov 2026: session thumbnails read as
+          // broken blanks while Home cards showed the mark).
+          <View style={[styles.thumbnail, styles.thumbnailEmpty]}>
+            <Image
+              source={require('../../../../assets/icon.png')}
+              style={styles.thumbnailFallbackMark}
+              contentFit="contain"
+            />
+          </View>
         )}
         {/* Status badge bottom-RIGHT, matching the reference LIVE-pill
             position on shelf/feed thumbnails (REFERENCE_UI §1/§2);
@@ -95,7 +106,12 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: nativeApp.shelfCard.thumbnailRadius,
     backgroundColor: colors.surfaceVariant,
   },
-  thumbnailEmpty: { backgroundColor: colors.surfaceVariant },
+  thumbnailEmpty: {
+    backgroundColor: colors.surfaceVariant,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  thumbnailFallbackMark: { width: 56, height: 56, opacity: 0.9 },
   badgeWrap: { position: 'absolute', right: spacing.sm, bottom: spacing.sm },
   durationBadge: {
     position: 'absolute',

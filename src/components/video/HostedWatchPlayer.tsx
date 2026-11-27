@@ -90,7 +90,18 @@ export function HostedWatchPlayer({ videoId, thumbnailUrl, autoplay = true }: Ho
           contentFit="cover"
           cachePolicy="memory-disk"
         />
-      ) : null}
+      ) : (
+        // No poster: the brand mark centred, like every card
+        // fallback — a bare black void read as a broken page in
+        // the mobile sweep (27 Nov 2026).
+        <View style={styles.posterFallback}>
+          <Image
+            source={require('../../../assets/icon.png')}
+            style={styles.posterFallbackMark}
+            contentFit="contain"
+          />
+        </View>
+      )}
       <View style={styles.center}>
         {state.kind === 'loading' ? (
           <ActivityIndicator color="#FFFFFF" />
@@ -110,6 +121,16 @@ const createStyles = (colors: ThemeColors) =>
       backgroundColor: colors.playerBackground,
     },
     poster: { width: '100%', height: '100%' },
+    posterFallback: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    posterFallbackMark: { width: 72, height: 72, opacity: 0.9 },
     center: {
       position: 'absolute',
       top: 0,

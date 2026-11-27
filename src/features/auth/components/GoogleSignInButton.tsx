@@ -67,7 +67,7 @@ export function GoogleSignInButton({ onError }: GoogleSignInButtonProps) {
       accessibilityState={{ disabled: busy, busy }}
     >
       {busy ? (
-        <ActivityIndicator size="small" color={colors.textSecondary} />
+        <ActivityIndicator size="small" color="#1F1F1F" />
       ) : (
         <GoogleGIcon size={20} />
       )}
@@ -91,6 +91,10 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     gap: spacing.md,
   },
   buttonBusy: { opacity: 0.7 },
-  label: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '600', color: colors.text },
+  // The button itself is ALWAYS white (Google's brand geometry),
+  // so the label must be a fixed dark colour — colors.text is
+  // near-white in the dark theme, which made the label pale grey
+  // on white and barely readable (mobile sweep, 27 Nov 2026).
+  label: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '600', color: '#1F1F1F' },
   spacer: { width: 20 },
 });

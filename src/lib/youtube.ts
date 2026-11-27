@@ -47,7 +47,19 @@ async function apiGet<T>(path: string, fetchImpl: typeof fetch = fetch): Promise
   const separator = path.includes('?') ? '&' : '?';
   const response = await fetchImpl(`${API_BASE}/${path}${separator}key=${encodeURIComponent(key)}`);
   if (!response.ok) {
-    throw new Error(`YouTube Data API request failed with HTTP ${response.status}.`);
+    // Human wording, never the raw HTTP string: screens surface
+    // this message directly (mobile sweep, 27 Nov 2026: the Channel
+    // page showed "YouTube Data API request failed with HTTP 403"
+    // when the app's daily YouTube quota ran out). The quota case
+    // gets its own honest explanation; everything else stays
+    // generic rather than guessing a cause.
+    const body = await response.text().catch(() => '');
+    if (body.includes('quotaExceeded') || body.includes('dailyLimitExceeded')) {
+      throw new Error(
+        "YouTube's daily limit for this app has been reached. Please try again tomorrow.",
+      );
+    }
+    throw new Error('YouTube could not be reached just now. Please try again in a little while.');
   }
   return (await response.json()) as T;
 }

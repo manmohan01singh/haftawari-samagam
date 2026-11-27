@@ -1023,7 +1023,9 @@ export function WatchScreen({ route, navigation }: Props) {
                 sessionId={sessionId}
                 participantCount={presenceCount ?? undefined}
                 onPress={() => setChatOpen(true)}
-                onSignInPress={() => navigation.navigate('SignIn')}
+                // Same rule as the session page: the sheet opens and
+                // shows its own sign-in state; its button navigates.
+                onSignInPress={() => setChatOpen(true)}
               />
             </View>
           ) : null}

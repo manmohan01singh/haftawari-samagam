@@ -533,7 +533,9 @@ export function SessionWatchScreen({ route, navigation }: Props) {
               {thumbnailUrl ? (
                 <Image source={{ uri: thumbnailUrl }} style={styles.thumbnail} contentFit="cover" cachePolicy="memory-disk" />
               ) : (
-                <View style={[styles.thumbnail, styles.thumbnailEmpty]} />
+                <View style={[styles.thumbnail, styles.thumbnailEmpty]}>
+                  <Image source={require('../../../assets/icon.png')} style={styles.thumbnailFallbackMark} contentFit="contain" />
+                </View>
               )}
               {hostedError ? (
                 <View style={styles.thumbnailBadge}>
@@ -557,7 +559,9 @@ export function SessionWatchScreen({ route, navigation }: Props) {
             {thumbnailUrl ? (
               <Image source={{ uri: thumbnailUrl }} style={styles.thumbnail} contentFit="cover" cachePolicy="memory-disk" />
             ) : (
-              <View style={[styles.thumbnail, styles.thumbnailEmpty]} />
+              <View style={[styles.thumbnail, styles.thumbnailEmpty]}>
+                <Image source={require('../../../assets/icon.png')} style={styles.thumbnailFallbackMark} contentFit="contain" />
+              </View>
             )}
             {status !== 'cancelled' ? (
               <View style={styles.thumbnailBadge}>
@@ -790,7 +794,12 @@ export function SessionWatchScreen({ route, navigation }: Props) {
             sessionId={sessionId}
             participantCount={presenceCount ?? joinedCount ?? undefined}
             onPress={() => setChatOpen(true)}
-            onSignInPress={() => navigation.navigate('SignIn')}
+            // Signed-out taps open the SHEET (which shows its own
+            // "Sign in to chat" state with the button) instead of
+            // bouncing straight to the sign-in page — YouTube opens
+            // the chat panel and prompts inside it (mobile sweep,
+            // 27 Nov 2026). The sheet's button still navigates.
+            onSignInPress={() => setChatOpen(true)}
             prominent={isPlaying}
           />
         </View>
@@ -891,7 +900,12 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     aspectRatio: layout.thumbnailAspectRatio,
     backgroundColor: colors.playerBackground,
   },
-  thumbnailEmpty: { backgroundColor: colors.surfaceVariant },
+  thumbnailEmpty: {
+    backgroundColor: colors.surfaceVariant,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  thumbnailFallbackMark: { width: 72, height: 72, opacity: 0.9 },
   thumbnailBadge: { position: 'absolute', left: spacing.sm, bottom: spacing.sm },
   hostedErrorText: { ...typography.body, color: '#FFFFFF', backgroundColor: 'rgba(0,0,0,0.65)', paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radii.badge, overflow: 'hidden' },
   sheet: {

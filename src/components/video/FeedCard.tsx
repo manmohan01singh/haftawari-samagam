@@ -119,7 +119,6 @@ export const FeedCard = memo(function FeedCard({
     // thumbnail at left (~40% width, radius 8, duration/LIVE chip on
     // it), title + channel/meta lines at right, ⋮ at the far right.
     // (QA issue 61: titles use explicit tail ellipsis.)
-    const metaParts = [data.channelLine, data.metaLine].filter(Boolean);
     return (
       <>
       <Pressable
@@ -159,9 +158,19 @@ export const FeedCard = memo(function FeedCard({
           <Text style={styles.upNextTitle} numberOfLines={2} ellipsizeMode="tail">
             {data.title}
           </Text>
-          {metaParts.length > 0 ? (
-            <Text style={styles.upNextMeta} numberOfLines={2} ellipsizeMode="tail">
-              {metaParts.join('\n')}
+          {/* Channel line and meta as SEPARATE single-line texts:
+              joined into one 2-line Text, a long handle
+              (@bhaigursharansinghjiofficial) wrapped MID-WORD onto
+              the second line instead of ellipsizing (mobile sweep,
+              27 Nov 2026). One line each → tail ellipsis works. */}
+          {data.channelLine ? (
+            <Text style={styles.upNextMeta} numberOfLines={1} ellipsizeMode="tail">
+              {data.channelLine}
+            </Text>
+          ) : null}
+          {data.metaLine ? (
+            <Text style={styles.upNextMetaSub} numberOfLines={1} ellipsizeMode="tail">
+              {data.metaLine}
             </Text>
           ) : null}
         </View>
@@ -380,6 +389,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   upNextLiveBadge: { borderRadius: radii.liveBadge },
   upNextTitle: { fontSize: 15, lineHeight: 20, fontWeight: '600', color: colors.text },
   upNextMeta: { fontSize: 13, lineHeight: 18, color: colors.textSecondary, marginTop: 3 },
+  upNextMetaSub: { fontSize: 13, lineHeight: 18, color: colors.textSecondary },
   // Phase 9 W2 (audit D15): the kebab's own box is ≥44×44 — the old
   // 20px glyph + hitSlop 8 gave a ≈36px target, below the minimum.
   moreButton: { marginTop: 1, minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
