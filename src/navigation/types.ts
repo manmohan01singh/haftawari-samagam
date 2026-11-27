@@ -49,6 +49,8 @@ export type RootStackParamList = {
   SessionWatch: { sessionId: string };
   History: undefined;
   Settings: undefined;
+  /** In-app help page (Settings → Help). */
+  Help: undefined;
   Account: undefined;
   /** Edit the signed-in user's own display name (profiles row). */
   EditProfile: undefined;

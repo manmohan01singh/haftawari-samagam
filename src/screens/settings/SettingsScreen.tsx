@@ -66,6 +66,9 @@ const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
  *    screens. Admin dashboard row for admins only.
  *  - Sign out: confirmation, busy state, error toast on failure, and
  *    on success the user is taken back to the Home tab.
+ *  - Help: an in-app help page (how sessions, watching, accounts,
+ *    saving, comments, theme and search work) — every line states
+ *    something the app really does; no support contact is invented.
  *  - About: app name + real version (from app.json) and the honest
  *    playback note.
  *
@@ -309,6 +312,17 @@ export function SettingsScreen({ navigation }: Props) {
             <Text style={styles.signOutText}>Sign out</Text>
           </Pressable>
         ) : null}
+
+        <Pressable
+          style={styles.row}
+          onPress={() => navigation.navigate('Help')}
+          accessibilityRole="button"
+          accessibilityLabel="Help"
+        >
+          <MaterialIcons name="help-outline" size={24} color={colors.text} />
+          <Text style={styles.rowText}>Help</Text>
+          <MaterialIcons name="chevron-right" size={22} color={colors.textSecondary} />
+        </Pressable>
 
         <Text style={styles.sectionLabel}>About</Text>
         <View style={styles.aboutRow}>
