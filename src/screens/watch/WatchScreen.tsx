@@ -421,6 +421,9 @@ export function WatchScreen({ route, navigation }: Props) {
           navigation.setParams({
             videoRowId: params.videoRowId,
             youtubeVideoId: params.youtubeVideoId,
+            // A session Watch opened with a sessionId must not keep
+            // that session's chat bound to a different video.
+            sessionId: undefined,
           });
           setMini(false);
         } else if (params.videoRowId) {
