@@ -153,22 +153,29 @@ async function runLegs(
     youtubePromise = Promise.resolve([]);
   } else {
     // Fan out per channel (capped for quota), merging every leg. The
-    // leg counts as skipped only when EVERY channel's search failed.
+    // legs run SEQUENTIALLY, not in parallel: Google throttles this
+    // project's search.list in bursts (a separate "Search Queries"
+    // rate metric — diagnosed live 2026-11-27), so firing up to 3
+    // searches at the same instant risks losing all of them, while
+    // spaced calls succeed. The leg counts as skipped only when EVERY
+    // channel's search failed.
     const targets = channels.slice(0, MAX_YOUTUBE_SEARCH_CHANNELS);
-    youtubePromise = Promise.all(
-      targets.map((identity) =>
-        searchChannelVideosFor(identity.id, query, options.signal).then(
-          (results) => ({ ok: true as const, results }),
-          (error: unknown) => {
-            if (error instanceof Error && error.name === 'AbortError') throw error;
-            return { ok: false as const, results: [] as VideoResult[] };
-          },
-        ),
-      ),
-    ).then((legs) => {
-      if (targets.length > 0 && legs.every((leg) => !leg.ok)) youtubeSkipped = true;
-      return legs.flatMap((leg) => leg.results);
-    });
+    youtubePromise = (async () => {
+      const merged: VideoResult[] = [];
+      let anyOk = false;
+      for (const identity of targets) {
+        try {
+          const results = await searchChannelVideosFor(identity.id, query, options.signal);
+          anyOk = true;
+          merged.push(...results);
+        } catch (error) {
+          if (error instanceof Error && error.name === 'AbortError') throw error;
+          // This channel's leg failed; others may still answer.
+        }
+      }
+      if (targets.length > 0 && !anyOk) youtubeSkipped = true;
+      return merged;
+    })();
   }
   const [local, channel, youtube] = await Promise.all([localPromise, channelPromise, youtubePromise]);
   return { channel, videos: mergeRanked(local, youtube, options.limit ?? 25), youtubeSkipped };
