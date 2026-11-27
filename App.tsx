@@ -8,6 +8,7 @@ import { appLinking } from './src/navigation/linking';
 import { AuthProvider } from './src/features/auth';
 import { registerServiceWorker } from './src/lib/registerServiceWorker';
 import { PwaBanners } from './src/components/pwa/PwaBanners';
+import { AppErrorBoundary } from './src/components/common/AppErrorBoundary';
 
 /**
  * Haftawari Samagam.
@@ -26,7 +27,9 @@ export default function App() {
     <SafeAreaProvider>
       <AuthProvider>
         <NavigationContainer linking={appLinking}>
-          <RootNavigator />
+          <AppErrorBoundary>
+            <RootNavigator />
+          </AppErrorBoundary>
           <StatusBar style="auto" />
         </NavigationContainer>
         <PwaBanners />
