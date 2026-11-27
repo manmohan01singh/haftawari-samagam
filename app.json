@@ -2,10 +2,8 @@
   "expo": {
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#640B19",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#000000",
+        "foregroundImage": "./assets/android-icon-foreground.png"
       },
       "package": "com.haftawarisamagam.app",
       "predictiveBackGestureEnabled": false
@@ -41,9 +39,9 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 180,
           "resizeMode": "contain",
-          "backgroundColor": "#FFFFFF",
+          "backgroundColor": "#000000",
           "dark": {
-            "backgroundColor": "#0F0F0F"
+            "backgroundColor": "#000000"
           }
         }
       ],
