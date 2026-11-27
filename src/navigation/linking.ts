@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import {
+  findFocusedRoute,
   getPathFromState as navGetPathFromState,
   getStateFromPath as navGetStateFromPath,
   type LinkingOptions,
@@ -37,6 +38,20 @@ import type { RootStackParamList } from './types';
  * and re-apply it to every generated path, and strip it when parsing.
  * Verified with a 9/9 browser-history test (URLs keep the base,
  * Back/Forward stay inside the app).
+ *
+ * Deployment-base fix, part 2 (night work, 27 Nov): the 9/9 test only
+ * covered IN-APP navigation. A FRESH DEEP ENTRY (typing or opening
+ * …/haftawari-samagam/admin) still lost the base — the bar ended at
+ * github.io/admin, twice verified in the cloud browser. Root cause,
+ * proven in the installed @react-navigation source: getStateFromPath
+ * stamps the focused route with `route.path` = the path it was parsed
+ * from, and useLinking's getPathForRoute reuses that stamped path
+ * VERBATIM for the address bar on mount, bypassing getPathFromState.
+ * Because this wrapper strips the base before parsing, the stamped
+ * path was base-less. So getStateFromPath now re-attaches the base to
+ * the stamped path after parsing (only when the incoming URL actually
+ * carried the base); the re-parse check inside getPathForRoute strips
+ * it again, still matches, and the bar keeps the full subpath URL.
  */
 const DEPLOY_BASE = '/haftawari-samagam';
 
@@ -60,11 +75,21 @@ function createWebLinking(): LinkingOptions<RootStackParamList> {
           getStateFromPath: (
             path: string,
             config: Parameters<typeof navGetStateFromPath>[1],
-          ) =>
-            navGetStateFromPath(
-              path.startsWith(base) ? path.slice(base.length) || '/' : path,
-              config,
-            ),
+          ) => {
+            const stripped = path.startsWith(base) ? path.slice(base.length) || '/' : path;
+            const state = navGetStateFromPath(stripped, config);
+            // Part 2 (see header): the parser stamps the focused
+            // route with `route.path` = the path it was parsed from,
+            // and the address bar is rewritten from that stamp on
+            // mount — bypassing getPathFromState. Re-attach the base
+            // to the stamp when the incoming URL carried it, so a
+            // deep entry keeps the full subpath URL.
+            if (state && stripped !== path) {
+              const focused = findFocusedRoute(state);
+              if (focused?.path) focused.path = `${base}${focused.path}`;
+            }
+            return state;
+          },
           getPathFromState: (
             state: Parameters<typeof navGetPathFromState>[0],
             config: Parameters<typeof navGetPathFromState>[1],
