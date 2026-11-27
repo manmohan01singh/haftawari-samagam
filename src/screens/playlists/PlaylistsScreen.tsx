@@ -12,6 +12,7 @@ import { ConfirmModal } from '../../features/library/components/ConfirmModal';
 import type { PlaylistSummary } from '../../features/library/types';
 import type { LibraryRootStackParamList } from '../../features/library/screenTypes';
 import { goBackOrTab } from '../../navigation/safeBack';
+import { StackHeader } from '../../components/layout/StackHeader';
 import { StackTabBar } from '../../components/layout/StackTabBar';
 import { CreatePlaylistSheet } from '../../features/library/components/CreatePlaylistSheet';
 import { PlaylistRow } from '../../features/library/components/PlaylistRow';
@@ -91,24 +92,22 @@ export function PlaylistsScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.topBar}>
-        <Pressable onPress={() => goBackOrTab(navigation, 'Library')} hitSlop={10} accessibilityLabel="Back" accessibilityRole="button">
-          <MaterialIcons name="arrow-back" size={24} color={lightColors.text} />
-        </Pressable>
-        <Text style={styles.topBarTitle}>Playlists</Text>
-        {user ? (
-          <Pressable
-            onPress={() => setCreateOpen(true)}
-            hitSlop={10}
-            accessibilityLabel="Create a new playlist"
-            accessibilityRole="button"
-          >
-            <MaterialIcons name="add" size={26} color={lightColors.text} />
-          </Pressable>
-        ) : (
-          <View style={styles.topBarSpacer} />
-        )}
-      </View>
+      <StackHeader
+        title="Playlists"
+        onBack={() => goBackOrTab(navigation, 'Library')}
+        right={
+          user ? (
+            <Pressable
+              onPress={() => setCreateOpen(true)}
+              hitSlop={10}
+              accessibilityLabel="Create a new playlist"
+              accessibilityRole="button"
+            >
+              <MaterialIcons name="add" size={26} color={lightColors.text} />
+            </Pressable>
+          ) : undefined
+        }
+      />
 
       {!isSupabaseConfigured ? (
         <ScreenMessage
@@ -194,15 +193,6 @@ export function PlaylistsScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: lightColors.background },
-  topBar: {
-    height: 52,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-  },
-  topBarTitle: { fontSize: 17, fontWeight: '600', color: lightColors.text },
-  topBarSpacer: { width: 26 },
   listPad: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, flexGrow: 1 },
   errorLine: { color: lightColors.accent, fontSize: 13, paddingBottom: spacing.sm },
 });

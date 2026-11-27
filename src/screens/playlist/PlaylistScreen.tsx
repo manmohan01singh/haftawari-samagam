@@ -12,6 +12,7 @@ import { formatClock } from '../../features/library/format';
 import type { PlaylistDetailItem } from '../../features/library/types';
 import type { LibraryRootStackParamList } from '../../features/library/screenTypes';
 import { goBackOrTab } from '../../navigation/safeBack';
+import { StackHeader } from '../../components/layout/StackHeader';
 import { StackTabBar } from '../../components/layout/StackTabBar';
 import { ScreenMessage } from '../../features/library/components/ScreenMessage';
 import { SkeletonCard } from '../../components/video/SkeletonCard';
@@ -136,15 +137,10 @@ export function PlaylistScreen({ navigation, route }: Props) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.topBar}>
-        <Pressable onPress={() => goBackOrTab(navigation, 'Library')} hitSlop={10} accessibilityLabel="Back" accessibilityRole="button">
-          <MaterialIcons name="arrow-back" size={24} color={lightColors.text} />
-        </Pressable>
-        <Text style={styles.topBarTitle} numberOfLines={1}>
-          {detail?.playlist.title ?? 'Playlist'}
-        </Text>
-        <View style={styles.topBarSpacer} />
-      </View>
+      <StackHeader
+        title={detail?.playlist.title ?? 'Playlist'}
+        onBack={() => goBackOrTab(navigation, 'Library')}
+      />
 
       {!isSupabaseConfigured ? (
         <ScreenMessage
@@ -193,16 +189,6 @@ export function PlaylistScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: lightColors.background },
-  topBar: {
-    height: 52,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    gap: spacing.md,
-  },
-  topBarTitle: { flex: 1, fontSize: 17, fontWeight: '600', color: lightColors.text },
-  topBarSpacer: { width: 24 },
   listPad: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, flexGrow: 1 },
   header: { paddingBottom: spacing.md },
   coverSkeleton: {

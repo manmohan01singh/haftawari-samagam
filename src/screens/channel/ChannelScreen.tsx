@@ -16,6 +16,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { EmptyState } from '../../components/common/EmptyState';
 import { goBackOrTab } from '../../navigation/safeBack';
 import { StackTabBar } from '../../components/layout/StackTabBar';
+import { StackHeader } from '../../components/layout/StackHeader';
 import { LinkedText } from '../../components/common/LinkedText';
 import { Toast, useToast } from '../../components/common/Toast';
 import { shareContent, shareFeedback } from '../../lib/share';
@@ -173,19 +174,21 @@ export function ChannelScreen({ route, navigation }: Props) {
 
   const header = channel ? (
     <View>
-      <View style={styles.topBar}>
-        <Pressable onPress={() => goBackOrTab(navigation, 'Home')} hitSlop={10} accessibilityLabel="Back">
-          <MaterialIcons name="arrow-back" size={24} color={lightColors.text} />
-        </Pressable>
-        <Text style={styles.topBarTitle} numberOfLines={1}>
-          {channel.title}
-        </Text>
-        <Pressable onPress={() => navigation.navigate('Search')} hitSlop={10} accessibilityLabel="Search">
-          <MaterialIcons name="search" size={24} color={lightColors.text} />
-        </Pressable>
-        <Pressable onPress={() => setMenuOpen(true)} hitSlop={10} accessibilityLabel="Channel options">
-          <MaterialIcons name="more-vert" size={24} color={lightColors.text} />
-        </Pressable>
+      <View style={styles.topBarBleed}>
+        <StackHeader
+          title={channel.title}
+          onBack={() => goBackOrTab(navigation, 'Home')}
+          right={
+            <>
+              <Pressable onPress={() => navigation.navigate('Search')} hitSlop={10} accessibilityLabel="Search">
+                <MaterialIcons name="search" size={24} color={lightColors.text} />
+              </Pressable>
+              <Pressable onPress={() => setMenuOpen(true)} hitSlop={10} accessibilityLabel="Channel options">
+                <MaterialIcons name="more-vert" size={24} color={lightColors.text} />
+              </Pressable>
+            </>
+          }
+        />
       </View>
       {channel.bannerUrl ? (
         <Image
@@ -304,11 +307,7 @@ export function ChannelScreen({ route, navigation }: Props) {
   if (loading && !channel) {
     return (
       <View style={styles.container}>
-        <View style={styles.stateTopBar}>
-          <Pressable onPress={() => goBackOrTab(navigation, 'Home')} hitSlop={10} accessibilityLabel="Back">
-            <MaterialIcons name="arrow-back" size={24} color={lightColors.text} />
-          </Pressable>
-        </View>
+        <StackHeader onBack={() => goBackOrTab(navigation, 'Home')} />
         <View style={styles.listPad}>
           {/* Header-shaped skeleton (banner strip at the served crop's
               aspect, 88dp avatar, name/handle/count lines, pill row) —
@@ -339,11 +338,7 @@ export function ChannelScreen({ route, navigation }: Props) {
   if (error || !channel) {
     return (
       <View style={styles.container}>
-        <View style={styles.stateTopBar}>
-          <Pressable onPress={() => goBackOrTab(navigation, 'Home')} hitSlop={10} accessibilityLabel="Back">
-            <MaterialIcons name="arrow-back" size={24} color={lightColors.text} />
-          </Pressable>
-        </View>
+        <StackHeader onBack={() => goBackOrTab(navigation, 'Home')} />
         <EmptyState
           title="Channel unavailable"
           message={error ?? 'This channel could not be loaded.'}
@@ -463,15 +458,7 @@ export function ChannelScreen({ route, navigation }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: lightColors.background },
   listPad: { paddingHorizontal: spacing.lg },
-  topBar: {
-    height: 52,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.lg,
-    marginHorizontal: -spacing.lg,
-    paddingHorizontal: spacing.lg,
-  },
-  topBarTitle: { flex: 1, fontSize: 17, fontWeight: '600', color: lightColors.text },
+  topBarBleed: { marginHorizontal: -spacing.lg },
   banner: {
     // Full-bleed: escape the list's horizontal padding (same trick
     // as topBar), NO radius, and the aspect of the crop the API URL
@@ -596,12 +583,6 @@ const styles = StyleSheet.create({
   tabLabel: { fontSize: 15, fontWeight: '500', color: lightColors.textSecondary },
   tabLabelActive: { color: lightColors.text, fontWeight: '600' },
   footerSpinner: { paddingVertical: spacing.lg },
-  stateTopBar: {
-    height: 52,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-  },
   menuBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',

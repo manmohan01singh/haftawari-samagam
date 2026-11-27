@@ -49,6 +49,7 @@ import {
 } from '../../lib/videos';
 import { layout, lightColors, nativeApp, radii, spacing, typography } from '../../theme';
 import { goBackOrTab } from '../../navigation/safeBack';
+import { BackButton } from '../../components/layout/StackHeader';
 import { recordLocalWatch } from '../../features/library/localHistory';
 import { ICON_HIT_SLOP } from '../../lib/touch';
 import type { Video } from '../../types/database';
@@ -457,15 +458,7 @@ export function WatchScreen({ route, navigation }: Props) {
   const backRow = useMemo(
     () => (
       <View style={styles.backRow}>
-        <Pressable
-          onPress={() => goBackOrTab(navigation, 'Home')}
-          style={styles.backButton}
-          hitSlop={8}
-          accessibilityLabel="Back"
-          accessibilityRole="button"
-        >
-          <MaterialIcons name="arrow-back" size={24} color={lightColors.text} />
-        </Pressable>
+        <BackButton onPress={() => goBackOrTab(navigation, 'Home')} />
       </View>
     ),
     [navigation],
@@ -857,18 +850,11 @@ const styles = StyleSheet.create({
     backgroundColor: lightColors.playerBackground,
   },
   playerThumb: { width: '100%', height: '100%', backgroundColor: lightColors.playerBackground },
-  // Back control (round-3): lives in the sheet's header zone, above
-  // the title — a plain dark arrow on white, 36dp target, icon's left
-  // edge aligned with the title text (sheet padding 16 + margin -6 +
-  // (36-24)/2 = 16).
+  // Back control: the shared BackButton (Phase 9) in the sheet's
+  // header zone, above the title — a plain dark arrow on white, 48dp
+  // target; its -12 margin + centred glyph put the icon's left edge
+  // at the sheet's 16dp content inset, aligned with the title text.
   backRow: { flexDirection: 'row', alignItems: 'center' },
-  backButton: {
-    width: 36,
-    height: 36,
-    marginLeft: -6,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   // Seam line (round-3): 3dp red strip pulled 3dp up onto the seam
   // between player and sheet; zIndex above the sheet so the strip
   // reads exactly at the boundary, as in ref-watch-live.
@@ -901,11 +887,11 @@ const styles = StyleSheet.create({
     borderTopRightRadius: nativeApp.watchSheet.topRadius,
     marginTop: -nativeApp.watchSheet.topRadius,
     paddingHorizontal: spacing.lg,
-    // Round-3: the back row now occupies the sheet's header zone, so
-    // top padding drops to 8 — back row (36) + title lands the title
-    // at the measured screenshot-06 offset (sheet top → title ≈28dp
-    // of content + the radius zone).
-    paddingTop: spacing.sm,
+    // The back row occupies the sheet's header zone. Phase 9: the
+    // shared BackButton is 48dp tall (was a hand-rolled 36dp), so top
+    // padding drops to 0 — the title lands ≈4dp below the round-3
+    // measured offset, the accepted cost of the standard 48dp target.
+    paddingTop: 0,
     paddingBottom: spacing.md,
     zIndex: 1,
   },

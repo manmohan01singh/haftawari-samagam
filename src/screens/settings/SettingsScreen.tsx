@@ -8,6 +8,7 @@ import { useAuth } from '../../features/auth';
 import { ConfirmModal } from '../../features/library/components/ConfirmModal';
 import { OFFICIAL_CHANNEL_ID } from '../../lib/youtube';
 import { goBackOrTab } from '../../navigation/safeBack';
+import { StackHeader } from '../../components/layout/StackHeader';
 import { StackTabBar } from '../../components/layout/StackTabBar';
 import { Toast, useToast } from '../../components/common/Toast';
 import { UserAvatar } from '../../components/common/UserAvatar';
@@ -97,18 +98,7 @@ export function SettingsScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.topBar}>
-        <Pressable
-          onPress={() => goBackOrTab(navigation, 'Library')}
-          hitSlop={10}
-          accessibilityLabel="Back"
-          accessibilityRole="button"
-        >
-          <MaterialIcons name="arrow-back" size={24} color={lightColors.text} />
-        </Pressable>
-        <Text style={styles.topBarTitle}>Settings</Text>
-        <View style={styles.topBarSpacer} />
-      </View>
+      <StackHeader title="Settings" onBack={() => goBackOrTab(navigation, 'Library')} />
 
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.sectionLabel}>Account</Text>
@@ -259,15 +249,6 @@ export function SettingsScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: lightColors.background },
-  topBar: {
-    height: 52,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-  },
-  topBarTitle: { fontSize: 17, fontWeight: '600', color: lightColors.text },
-  topBarSpacer: { width: 24 },
   content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
   sectionLabel: {
     fontSize: 14,

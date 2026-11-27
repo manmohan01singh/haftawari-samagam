@@ -60,6 +60,7 @@ export const appLinking: LinkingOptions<RootStackParamList> | undefined =
               screens: {
                 AdminOverview: '',
                 AdminVideos: 'videos',
+                AdminChannels: 'channels',
                 AdminSessions: 'sessions',
                 AdminCategories: 'categories',
                 AdminMembers: 'members',

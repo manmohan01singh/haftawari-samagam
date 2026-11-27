@@ -23,6 +23,7 @@ import {
 import type { HistoryItem } from '../../features/library/types';
 import type { LibraryRootStackParamList } from '../../features/library/screenTypes';
 import { goBackOrTab } from '../../navigation/safeBack';
+import { StackHeader } from '../../components/layout/StackHeader';
 import { StackTabBar } from '../../components/layout/StackTabBar';
 import { ConfirmModal } from '../../features/library/components/ConfirmModal';
 import { ScreenMessage } from '../../features/library/components/ScreenMessage';
@@ -308,33 +309,31 @@ export function HistoryScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.topBar}>
-        <Pressable onPress={() => goBackOrTab(navigation, 'Library')} hitSlop={10} accessibilityLabel="Back" accessibilityRole="button">
-          <MaterialIcons name="arrow-back" size={24} color={lightColors.text} />
-        </Pressable>
-        <Text style={styles.topBarTitle}>History</Text>
-        {!user && local.entries.length > 0 ? (
-          <Pressable
-            onPress={() => setConfirmClearLocal(true)}
-            hitSlop={10}
-            accessibilityLabel="Clear device history"
-            accessibilityRole="button"
-          >
-            <MaterialIcons name="delete-outline" size={24} color={lightColors.text} />
-          </Pressable>
-        ) : user && history.data.length > 0 ? (
-          <Pressable
-            onPress={() => setConfirmClear(true)}
-            hitSlop={10}
-            accessibilityLabel="Clear all watch history"
-            accessibilityRole="button"
-          >
-            <MaterialIcons name="delete-outline" size={24} color={lightColors.text} />
-          </Pressable>
-        ) : (
-          <View style={styles.topBarSpacer} />
-        )}
-      </View>
+      <StackHeader
+        title="History"
+        onBack={() => goBackOrTab(navigation, 'Library')}
+        right={
+          !user && local.entries.length > 0 ? (
+            <Pressable
+              onPress={() => setConfirmClearLocal(true)}
+              hitSlop={10}
+              accessibilityLabel="Clear device history"
+              accessibilityRole="button"
+            >
+              <MaterialIcons name="delete-outline" size={24} color={lightColors.text} />
+            </Pressable>
+          ) : user && history.data.length > 0 ? (
+            <Pressable
+              onPress={() => setConfirmClear(true)}
+              hitSlop={10}
+              accessibilityLabel="Clear all watch history"
+              accessibilityRole="button"
+            >
+              <MaterialIcons name="delete-outline" size={24} color={lightColors.text} />
+            </Pressable>
+          ) : undefined
+        }
+      />
 
       {!isSupabaseConfigured ? (
         <ScreenMessage
@@ -441,15 +440,6 @@ export function HistoryScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: lightColors.background },
-  topBar: {
-    height: 52,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-  },
-  topBarTitle: { fontSize: 17, fontWeight: '600', color: lightColors.text },
-  topBarSpacer: { width: 24 },
   listPad: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, flexGrow: 1 },
   errorLine: { color: lightColors.accent, fontSize: 13, paddingBottom: spacing.sm },
   localSection: { paddingTop: spacing.lg },
