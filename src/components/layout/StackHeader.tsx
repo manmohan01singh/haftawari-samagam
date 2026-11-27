@@ -2,6 +2,7 @@ import React, { memo, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { layout, spacing, typography, useTheme, type ThemeColors } from '../../theme';
+import { BarBlurBackground } from './BarBlurBackground';
 
 interface StackHeaderProps {
   /** Optional screen title shown beside the back button (16/600). */
@@ -20,7 +21,14 @@ interface StackHeaderProps {
  * whose positions/sizes had drifted screen to screen.
  *
  * Geometry matches AppHeader: 56dp tall, 16dp horizontal padding,
- * surface background with a hairline bottom border.
+ * hairline bottom border. Material matches too (Phase 13 follow-up):
+ * the bar carries the SAME BarBlurBackground glass as AppHeader and
+ * BottomNav — the user's order is blur on EVERY bar, always, and
+ * this bar previously rendered a solid surface fill. Like AppHeader
+ * the bar stays in-flow (every consumer lays content out below it),
+ * with the BlurView as its first child and overflow hidden; there
+ * is NO backing layer under the BlurView (the layering lesson in
+ * BarBlurBackground: an under-layer kills the blur).
  */
 /**
  * The ONE back control used across the app (Phase 9): 24dp glyph in a
@@ -49,6 +57,7 @@ export const StackHeader = memo(function StackHeader({ title, onBack, right }: S
   const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <View style={styles.bar}>
+      <BarBlurBackground />
       <View style={styles.left}>
         <BackButton onPress={onBack} />
         {title ? (
@@ -69,7 +78,9 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
-    backgroundColor: colors.surface,
+    // No solid fill: BarBlurBackground (translucent tint + backdrop
+    // blur) is the bar's material, same as AppHeader/BottomNav.
+    overflow: 'hidden',
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
