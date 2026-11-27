@@ -117,6 +117,18 @@ export const APP_REGISTRY_CHANNELS: AppChannel[] = [
     aliases: ['amritvela tv'],
     sortOrder: 7,
   },
+  {
+    // Bhai Guriqbal Singh Ji's own-name channel (verified via the API
+    // on 2026-11-27: exact-name handle, small channel — most of his
+    // katha is distributed on label channels such as Katha Kirtan).
+    rowId: null,
+    youtubeChannelId: 'UCsOTSj9g9IZWrqopl1JhTrA',
+    handle: '@BhaiGuriqbalSinghJi',
+    title: 'Bhai Guriqbal Singh Ji',
+    avatarUrl: null,
+    aliases: ['guriqbal', 'bhai guriqbal singh ji', 'guriqbal singh'],
+    sortOrder: 8,
+  },
 ];
 
 /** Registry with the Sakhiyan handle resolved to a real channel id. */

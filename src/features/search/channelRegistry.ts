@@ -29,7 +29,7 @@ import type { ChannelIdentity } from './youtubeSearch';
  * search.list call, but results are cached and the uploads fallback
  * covers any leg that fails on quota.
  */
-export const MAX_YOUTUBE_SEARCH_CHANNELS = 8;
+export const MAX_YOUTUBE_SEARCH_CHANNELS = 9;
 
 export async function loadSearchChannels(): Promise<ChannelIdentity[]> {
   const active = await fetchActiveChannels().catch(() => []);
