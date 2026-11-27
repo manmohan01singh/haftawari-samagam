@@ -17,6 +17,8 @@ interface HostedWatchPlayerProps {
   onPlayingChange?: (playing: boolean) => void;
   /** Phase E mini mode: bare video surface (see HostedPlayer). */
   mini?: boolean;
+  /** The hosted player is loaded and controllable. */
+  onReady?: () => void;
 }
 
 export type { HostedPlayerHandle };
@@ -29,7 +31,7 @@ export type { HostedPlayerHandle };
  * a member session), instead of showing a dead black box.
  */
 export const HostedWatchPlayer = forwardRef<HostedPlayerHandle, HostedWatchPlayerProps>(
-  function HostedWatchPlayer({ videoId, thumbnailUrl, autoplay = true, onPlayingChange, mini = false }, ref) {
+  function HostedWatchPlayer({ videoId, thumbnailUrl, autoplay = true, onPlayingChange, mini = false, onReady }, ref) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   // State is keyed by videoId (same pattern as WatchScreen): a stale
@@ -85,6 +87,7 @@ export const HostedWatchPlayer = forwardRef<HostedPlayerHandle, HostedWatchPlaye
         autoplay={autoplay}
         mini={mini}
         onPlayingChange={onPlayingChange}
+        onReady={onReady}
         onRefreshUri={refreshUri}
         onDuration={(seconds) => void reportVideoDurationIfMissing(videoId, seconds)}
       />

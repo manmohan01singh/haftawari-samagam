@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, type RefObject } from 'react';
+import React, { useMemo, useRef, useState, type RefObject } from 'react';
 import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -57,6 +57,11 @@ export function PlaybackHost({
 
   const ytRef = useRef<YouTubePlayerHandle>(null);
   const hostedRef = useRef<HostedPlayerHandle>(null);
+  // Which hosted item has a loaded, controllable player. The
+  // floating mini only offers play/pause once this matches — before
+  // that (URL still minting, or the signed-out gate) a transport
+  // button would promise control it cannot deliver.
+  const [hostedReadyKey, setHostedReadyKey] = useState<string | null>(null);
 
   if (!item || mode === 'closed') return null;
 
@@ -141,6 +146,7 @@ export function PlaybackHost({
             thumbnailUrl={item.thumbnailUrl}
             mini={mode === 'mini'}
             onPlayingChange={setPlaying}
+            onReady={() => setHostedReadyKey(item.key)}
           />
         ) : null}
         {mode === 'mini' && item.kind === 'hosted' ? (
@@ -164,6 +170,18 @@ export function PlaybackHost({
           accessibilityLabel="Close player"
         >
           <MaterialIcons name="close" size={16} color="#FFFFFF" />
+        </Pressable>
+      ) : null}
+
+      {mode === 'mini' && item.kind === 'hosted' && hostedReadyKey === item.key ? (
+        <Pressable
+          style={[styles.miniClose, { bottom: bottomOffset + 14, right: 18 }]}
+          onPress={togglePlay}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={playing ? 'Pause' : 'Play'}
+        >
+          <MaterialIcons name={playing ? 'pause' : 'play-arrow'} size={16} color="#FFFFFF" />
         </Pressable>
       ) : null}
 
