@@ -251,6 +251,20 @@ const MAX_SCAN_PAGES_PER_CALL = 10;
  * of seconds looking exactly like an empty tab.
  */
 const FIRST_CALL_SCAN_PAGES = 3;
+/**
+ * Early-return batch floor (speed fix #3, verified live 27 Nov
+ * 2026): next() previously hunted until the batch held the full
+ * requested count (25) before returning ANYTHING. For a sparse
+ * topic (Simran), some channel keeps finding a match every few
+ * pages, so the call ran for minutes while the first item — a
+ * catalogue row matched in round 1 — sat unrendered and the chip
+ * looked dead. Now a call returns at a round boundary once it
+ * holds a useful batch; the screen's onEndReached simply calls
+ * next() again and the cursors continue from where they stopped.
+ */
+const MIN_BATCH_BEFORE_RETURN = 8;
+/** Round cap per call once anything is collected (same fix). */
+const MAX_ROUNDS_PER_CALL = 6;
 
 interface ChannelCursor {
   channel: AppChannel;
@@ -463,7 +477,10 @@ export function createHomeFeedPager({ channels, filter, seed }: HomeFeedPagerOpt
     const collected: HomeFeedItem[] = [];
     // Round-robin: one item per source per round, catalogue first in
     // the rotation, until the batch fills or a full round produces
-    // nothing (every source drained/failed).
+    // nothing (every source drained/failed) — with the early-return
+    // floor above: once a round boundary leaves us holding a useful
+    // batch, return it and let scrolling continue the hunt.
+    let rounds = 0;
     while (collected.length < count) {
       let progressed = false;
       const catItem = takeCatalogue();
@@ -487,6 +504,14 @@ export function createHomeFeedPager({ channels, filter, seed }: HomeFeedPagerOpt
         }
       }
       if (!progressed) break;
+      rounds++;
+      // Early return (see MIN_BATCH_BEFORE_RETURN): never hold a
+      // useful batch hostage to a sparse topic's long hunt. The
+      // round cap only applies once something is collected — an
+      // empty-handed call keeps hunting until a genuinely dead
+      // round, so a chip never reports empty over a slow scan.
+      if (collected.length >= MIN_BATCH_BEFORE_RETURN) break;
+      if (collected.length > 0 && rounds >= MAX_ROUNDS_PER_CALL) break;
     }
     const catalogueDrained = catalogueEmitted >= catalogueRows.length;
     const exhausted =
