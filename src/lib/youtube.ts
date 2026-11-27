@@ -42,10 +42,30 @@ function requireApiKey(): string {
 
 export const isYouTubeConfigured: boolean = Boolean(process.env.EXPO_PUBLIC_YOUTUBE_API_KEY);
 
+/**
+ * Hard ceiling on every YouTube API request. There was NO timeout
+ * anywhere in this layer: on a phone network a single stalled fetch
+ * never settles, and because the Home topic-chip scan awaits its
+ * fetches sequentially, one stall froze the whole chip on skeleton
+ * cards forever (user report 27 Nov 2026, "Simran" chip). With the
+ * abort, a stall becomes an ordinary transient failure — the feed
+ * pager already knows how to pause-and-retry those.
+ */
+const API_TIMEOUT_MS = 12_000;
+
 async function apiGet<T>(path: string, fetchImpl: typeof fetch = fetch): Promise<T> {
   const key = requireApiKey();
   const separator = path.includes('?') ? '&' : '?';
-  const response = await fetchImpl(`${API_BASE}/${path}${separator}key=${encodeURIComponent(key)}`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetchImpl(`${API_BASE}/${path}${separator}key=${encodeURIComponent(key)}`, {
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
   if (!response.ok) {
     throw new Error(`YouTube Data API request failed with HTTP ${response.status}.`);
   }

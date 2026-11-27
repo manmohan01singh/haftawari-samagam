@@ -240,6 +240,20 @@ const MAX_CATALOGUE_PAGES = 10;
  * the chip looked empty (Phase 13 fix).
  */
 const MAX_SCAN_PAGES_PER_CALL = 10;
+/**
+ * The FIRST call of a fresh pager (chip tap / first load) scans at
+ * most this many pages per channel. Measured root cause of the
+ * "chips show skeletons forever" report (27 Nov 2026): a topic
+ * first batch previously ground through up to 10 pages × 9 channels
+ * × 2 API calls ≈ 180 SEQUENTIAL requests before rendering a single
+ * card — channels with zero matches in 250 titles (2 of the 9) burn
+ * their whole budget every time — so on a phone the chip sat on
+ * skeletons for minutes, and one stalled fetch (no timeout) froze
+ * it permanently. The first call now renders whatever the shallow
+ * scan finds; the deep scan continues on scroll (onEndReached),
+ * where the full budget applies.
+ */
+const FIRST_CALL_SCAN_PAGES = 3;
 
 interface ChannelCursor {
   channel: AppChannel;
@@ -265,9 +279,23 @@ interface ChannelCursor {
   failed: boolean;
 }
 
+export interface HomeFeedPage {
+  items: HomeFeedItem[];
+  /** Every source genuinely drained. */
+  exhausted: boolean;
+  /**
+   * How many sources FAILED during this call (quota / network /
+   * timeout). Lets the screen tell "the filter truly has nothing"
+   * (0 failures, 0 items → honest empty state) apart from "the data
+   * could not be loaded" (failures, 0 items → error state + retry)
+   * instead of leaving skeletons up or lying with an empty message.
+   */
+  failedSources: number;
+}
+
 export interface HomeFeedPager {
-  /** Pull the next batch (up to `count` items). `exhausted` = every source drained. */
-  next(count: number): Promise<{ items: HomeFeedItem[]; exhausted: boolean }>;
+  /** Pull the next batch (up to `count` items). */
+  next(count: number): Promise<HomeFeedPage>;
 }
 
 export interface HomeFeedPagerOptions {
@@ -297,6 +325,7 @@ export function createHomeFeedPager({ channels, filter, seed }: HomeFeedPagerOpt
   const catalogueIds = new Set<string>();
   let catalogueLoaded = false;
   let catalogueEmitted = 0;
+  let catalogueFailed = false;
 
   async function ensureCatalogue(): Promise<void> {
     if (catalogueLoaded) return;
@@ -317,7 +346,10 @@ export function createHomeFeedPager({ channels, filter, seed }: HomeFeedPagerOpt
       }
     } catch {
       // Backend unreachable: the catalogue source simply stays empty;
-      // the channel streams keep the feed alive (no error wall).
+      // the channel streams keep the feed alive (no error wall) —
+      // but the failure is RECORDED so an all-sources failure can
+      // surface as an error state instead of a fake empty feed.
+      catalogueFailed = true;
     }
   }
 
@@ -366,11 +398,16 @@ export function createHomeFeedPager({ channels, filter, seed }: HomeFeedPagerOpt
    * pages; the scan position persists on the cursor, so the next
    * onEndReached simply continues deeper into the uploads.
    */
+  // Scan budget for the call currently inside next(): shallow on a
+  // pager's first call (render fast, deepen on scroll), full after.
+  let currentScanBudget = MAX_SCAN_PAGES_PER_CALL;
+  let callIndex = 0;
+
   async function fillBuffer(cursor: ChannelCursor): Promise<boolean> {
     if (cursor.buffer.length > 0) return true;
     if (cursor.exhausted || cursor.failed) return false;
     let scans = 0;
-    while (cursor.buffer.length === 0 && !cursor.exhausted && scans < MAX_SCAN_PAGES_PER_CALL) {
+    while (cursor.buffer.length === 0 && !cursor.exhausted && scans < currentScanBudget) {
       try {
         if (!cursor.primed) {
           // First page via the shared 30-min cache (2 units saved on
@@ -434,16 +471,29 @@ export function createHomeFeedPager({ channels, filter, seed }: HomeFeedPagerOpt
     }
   }
 
-  async function next(count: number): Promise<{ items: HomeFeedItem[]; exhausted: boolean }> {
+  async function next(count: number): Promise<HomeFeedPage> {
     // A channel that failed during the previous call gets a fresh
     // chance on every new call (scroll / refresh); within one call
     // it is tried once, so a dead key cannot spin the round-robin.
     for (const cursor of cursors) cursor.failed = false;
+    const isFirstCall = callIndex++ === 0;
+    currentScanBudget = isFirstCall ? FIRST_CALL_SCAN_PAGES : MAX_SCAN_PAGES_PER_CALL;
     await ensureCatalogue();
     const collected: HomeFeedItem[] = [];
     // Round-robin: one item per source per round, catalogue first in
     // the rotation, until the batch fills or a full round produces
-    // nothing (every source drained/failed).
+    // nothing (every source drained/failed). The channel takes of a
+    // round run in PARALLEL — awaiting them one by one made the
+    // round's cost the SUM of all channels' scan times (the measured
+    // skeleton-forever cause); parallel, it is the MAX of them.
+    // Order is preserved by collecting the round's results in
+    // cursor order afterwards.
+    let rotationOffset = 0;
+    // Cursors tried since the last item was collected: the call
+    // ends only when a FULL rotation (every cursor + the catalogue)
+    // produced nothing — a partial round coming up empty must not
+    // cut off channels the rotation has not reached yet.
+    const triedSinceProgress = new Set<number>();
     while (collected.length < count) {
       let progressed = false;
       const catItem = takeCatalogue();
@@ -451,23 +501,45 @@ export function createHomeFeedPager({ channels, filter, seed }: HomeFeedPagerOpt
         collected.push(catItem);
         progressed = true;
       }
-      for (const cursor of cursors) {
-        if (collected.length >= count) break;
-        const item = await takeChannel(cursor);
-        if (item) {
-          collected.push(item);
+      // Take in parallel from only as many cursors as the batch has
+      // slots left — a taken item is consumed (seen-marked, removed
+      // from its buffer), so taking extras and dropping them would
+      // silently lose real videos. The rotation start advances each
+      // round so no channel is permanently favoured by the cap.
+      const slots = count - collected.length;
+      const roundCursors = Array.from(
+        { length: Math.min(slots, cursors.length) },
+        (_, i) => cursors[(rotationOffset + i) % cursors.length],
+      );
+      rotationOffset = (rotationOffset + Math.max(1, roundCursors.length)) % Math.max(1, cursors.length);
+      const round = await Promise.all(roundCursors.map((cursor) => takeChannel(cursor)));
+      roundCursors.forEach((cursor, i) => {
+        if (round[i]) {
           progressed = true;
+          collected.push(round[i]!);
+        } else {
+          triedSinceProgress.add(cursors.indexOf(cursor));
         }
+      });
+      if (progressed) {
+        triedSinceProgress.clear();
+      } else if (triedSinceProgress.size >= cursors.length) {
+        break;
       }
-      if (!progressed) break;
+      // First call: render as soon as the shallow scan produced
+      // anything — do not grind deeper rounds while the user stares
+      // at skeletons. Later calls fill their batch fully.
+      if (isFirstCall && collected.length > 0) break;
     }
     const catalogueDrained = catalogueEmitted >= catalogueRows.length;
     const exhausted =
       catalogueDrained && cursors.every((c) => c.exhausted && c.buffer.length === 0);
+    const failedSources =
+      cursors.filter((c) => c.failed).length + (catalogueFailed ? 1 : 0);
     // Light deterministic shuffle per batch: same seed + batch index
     // ⇒ same order (stable across re-renders); a refresh changes the
     // seed and reshuffles from page 1.
-    return { items: shuffled(collected, seed + batchIndex++ * 7919), exhausted };
+    return { items: shuffled(collected, seed + batchIndex++ * 7919), exhausted, failedSources };
   }
 
   return { next };

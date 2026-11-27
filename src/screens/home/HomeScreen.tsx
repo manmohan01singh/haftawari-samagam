@@ -162,6 +162,7 @@ export function HomeScreen({ navigation }: Props) {
   const [selectedChip, setSelectedChip] = useState<string>(ALL_CHIP);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [exhausted, setExhausted] = useState(false);
@@ -259,10 +260,17 @@ export function HomeScreen({ navigation }: Props) {
       if (generationRef.current !== generation) return;
       setItems(first.items);
       setExhausted(first.exhausted);
+      // Honest failure state: the first page came back empty AND
+      // sources failed (quota / network / timeout) — that is NOT
+      // "this filter has nothing", and the screen must say so with
+      // a retry instead of a fake empty message (or, before the
+      // pager learned to bound its first scan, eternal skeletons).
+      setLoadFailed(first.items.length === 0 && first.failedSources > 0);
     } catch {
       if (generationRef.current !== generation) return;
       setItems([]);
       setExhausted(true);
+      setLoadFailed(true);
     } finally {
       if (generationRef.current === generation) {
         loadingRef.current = false;
@@ -572,6 +580,16 @@ export function HomeScreen({ navigation }: Props) {
           <SkeletonCard variant="feed" />
           <SkeletonCard variant="feed" />
         </View>
+      ) : items.length === 0 && loadFailed ? (
+        <EmptyState
+          title="Couldn't load this filter"
+          message="The video service didn't respond — this can happen when the connection drops or the daily video quota is used up. Your other chips may still work."
+          actionLabel="Try again"
+          onAction={() => {
+            setLoading(true);
+            void startFeed();
+          }}
+        />
       ) : items.length === 0 ? (
         <EmptyState
           title={selectedChip === ALL_CHIP ? 'No samagams yet' : 'Nothing in this filter yet'}
