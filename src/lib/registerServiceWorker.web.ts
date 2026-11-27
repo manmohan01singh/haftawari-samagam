@@ -5,10 +5,12 @@
  *  - Actively checks for updates on load, on tab focus and when the tab
  *    becomes visible again — the old registration never checked, so a
  *    cache-first worker could serve a stale bundle forever.
- *  - When a new worker is waiting, dispatches `haftawari:sw-update` on
- *    window; PwaBanners shows "New version available — Tap to update".
- *    Tapping calls applyPwaUpdate(), which posts SKIP_WAITING and
- *    reloads exactly once when the new worker takes control.
+ *  - Since sw v4 the worker activates ITSELF on install
+ *    (skipWaiting in sw.js) and this page reloads exactly once on
+ *    controllerchange — no tap is required, so nobody can get stuck
+ *    on a stale build by ignoring a banner. `haftawari:sw-update`
+ *    is still dispatched when a waiting worker is ever observed and
+ *    PwaBanners/applyPwaUpdate() remain as a manual fallback.
  *  - Captures `beforeinstallprompt` and dispatches
  *    `haftawari:install-available`; promptPwaInstall() replays it.
  *    The event only exists when the browser itself offers install —

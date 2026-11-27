@@ -24,7 +24,7 @@ import {
 } from '../../features/channels';
 import { isShortVideo, type YouTubeVideoMetadata } from '../../lib/youtube';
 import { FEED_LIST_PERF } from '../../lib/listPerf';
-import { lightColors, nativeApp, radii, spacing } from '../../theme';
+import { layout, lightColors, nativeApp, radii, spacing } from '../../theme';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
 
 type Props = CompositeScreenProps<
@@ -397,7 +397,9 @@ export function SubscriptionsScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: lightColors.background },
-  listPad: { paddingHorizontal: spacing.lg },
+  // Bottom clearance for the overlay blur bottom bar (UX Fix 3's
+  // overlay change): without it the bar covers the last rows.
+  listPad: { paddingHorizontal: spacing.lg, paddingBottom: layout.bottomNavHeight + 24 },
   rail: {
     flexDirection: 'row',
     alignItems: 'flex-start',
