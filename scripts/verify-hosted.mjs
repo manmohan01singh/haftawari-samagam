@@ -33,7 +33,7 @@ function read(rel) {
 }
 
 // ── 1. Migration ─────────────────────────────────────────────────────
-const migration = read('supabase/migrations/0005_hosted_videos.sql');
+const migration = read('supabase/migrations/0006_hosted_videos.sql');
 check('migration 0005 exists', migration !== null);
 if (migration) {
   check(

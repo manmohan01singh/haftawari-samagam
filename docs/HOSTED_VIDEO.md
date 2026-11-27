@@ -9,7 +9,7 @@ bottom are done, every hosted path in the app answers honestly with
 ## 1. Architecture
 
 The app stays one app with two media sources, chosen per video row
-(`videos.source`, migration `0005_hosted_videos.sql`):
+(`videos.source`, migration `0006_hosted_videos.sql`):
 
 | | `source='youtube'` (default, unchanged) | `source='hosted'` |
 |---|---|---|
