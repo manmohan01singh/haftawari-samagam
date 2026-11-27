@@ -311,12 +311,15 @@ export function ChannelScreen({ route, navigation }: Props) {
           </Text>
         </View>
       </View>
-      {/* Ref-3 two-pill row, ≈48% each, 44dp tall: LEFT the honest
-          device-local follow pill (dark "Subscribe" → grey "Subscribed"
-          with bell + chevron, exactly the reference's subscribed
-          state); RIGHT an outline pill with a real action — on the
-          Channel screen itself "View Channel" would be a no-op, so the
-          pill opens this channel on YouTube. */}
+      {/* Round-3 mobile evidence (m.youtube channel page measured at
+          ~412px on the user's phone browser, 27 Nov): the dedicated
+          channel page carries ONE near-full-width Subscribe pill
+          (~91% of width, ~41px tall) — the two-pill row belongs to
+          the Search channel BLOCK (ref-3), not to this page. So this
+          screen now matches the channel page itself: a single
+          full-width honest device-local follow pill (dark "Subscribe"
+          → grey "Subscribed" with bell + chevron). "Open in YouTube"
+          remains available in the ⋮ menu above — no action is lost. */}
       <View style={styles.identityActions}>
         <Pressable
           style={[styles.subscribePill, following && styles.subscribePillActive]}
@@ -334,14 +337,6 @@ export function ChannelScreen({ route, navigation }: Props) {
           ) : (
             <Text style={styles.subscribeText}>Subscribe</Text>
           )}
-        </Pressable>
-        <Pressable
-          style={styles.youtubePill}
-          onPress={() => void Linking.openURL(`https://www.youtube.com/channel/${channelId}`)}
-          accessibilityRole="button"
-          accessibilityLabel="Open in YouTube"
-        >
-          <Text style={styles.youtubePillText}>Open in YouTube</Text>
         </Pressable>
       </View>
       <Text style={styles.followNote}>Follow is saved on this device only</Text>
@@ -412,7 +407,6 @@ export function ChannelScreen({ route, navigation }: Props) {
             </View>
           </View>
           <View style={styles.skelPills}>
-            <View style={styles.skelPill} />
             <View style={styles.skelPill} />
           </View>
           <SkeletonCard variant="shelf" />
@@ -591,11 +585,7 @@ const styles = StyleSheet.create({
   identityLines: { flex: 1 },
   nameRow: { flexDirection: 'row', alignItems: 'flex-start' },
   verifiedBadge: { marginLeft: spacing.xs, marginTop: 5, flexShrink: 0 },
-  identityActions: {
-    flexDirection: 'row',
-    gap: nativeApp.searchChannel.buttonGap,
-    marginTop: spacing.lg,
-  },
+  identityActions: { marginTop: spacing.lg },
   avatar: {
     width: nativeApp.searchChannel.avatarSize, // 88 — ref-3 channel block
     height: nativeApp.searchChannel.avatarSize,
@@ -647,8 +637,8 @@ const styles = StyleSheet.create({
   descriptionWrap: { marginTop: spacing.md },
   moreText: { fontSize: 14, fontWeight: '600', color: lightColors.text, marginTop: spacing.xs },
   subscribePill: {
-    flex: 1,
-    height: nativeApp.searchChannel.buttonHeight, // 44
+    alignSelf: 'stretch',
+    height: 40, // m.youtube channel page at 412px: ~41px tall, ~91% width
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -660,17 +650,6 @@ const styles = StyleSheet.create({
   subscribePillActive: { backgroundColor: lightColors.surfaceVariant },
   subscribeText: { fontSize: 15, fontWeight: '600', color: lightColors.subscribeText },
   subscribeTextActive: { color: lightColors.text },
-  youtubePill: {
-    flex: 1,
-    height: nativeApp.searchChannel.buttonHeight, // 44
-    borderWidth: 1,
-    borderColor: lightColors.border,
-    borderRadius: radii.pill,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-  },
-  youtubePillText: { fontSize: 15, fontWeight: '600', color: lightColors.text },
   followNote: { fontSize: 11, color: lightColors.textSecondary, marginTop: 6 },
   skelBanner: {
     marginHorizontal: -spacing.lg,
@@ -686,10 +665,9 @@ const styles = StyleSheet.create({
   },
   skelLines: { flex: 1, justifyContent: 'center', gap: spacing.sm },
   skelBar: { height: 14, borderRadius: 7, backgroundColor: lightColors.surfaceVariant },
-  skelPills: { flexDirection: 'row', gap: nativeApp.searchChannel.buttonGap, marginTop: spacing.lg, marginBottom: spacing.xl },
+  skelPills: { marginTop: spacing.lg, marginBottom: spacing.xl },
   skelPill: {
-    flex: 1,
-    height: nativeApp.searchChannel.buttonHeight,
+    height: 40,
     borderRadius: radii.pill,
     backgroundColor: lightColors.surfaceVariant,
   },
