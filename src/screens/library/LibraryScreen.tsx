@@ -466,7 +466,9 @@ export function LibraryScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: lightColors.background },
-  scrollContent: { paddingBottom: spacing.xxl },
+  // Bottom clearance for the overlay blur bottom bar (was 32 —
+  // the 56dp overlay bar would cover the last library rows).
+  scrollContent: { paddingBottom: layout.bottomNavHeight + 24 },
   headerRow: {
     height: layout.headerHeight,
     flexDirection: 'row',
