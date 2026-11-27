@@ -21,14 +21,16 @@ import type { Profile } from '../../types/database';
  * - syncProfileFromMetadata: persist the metadata values onto the
  *   row, once per distinct (user, name, avatar) per app session.
  *
- * SYNC RULE (deliberate): when the metadata carries a name or photo,
- * it is authoritative for the profile's display_name / avatar_url
- * and is written whenever the row differs. That is the right call
- * for Google users — the whole point is that their Google name and
- * DP appear — and it is a no-op for email users, whose metadata
- * display_name is exactly what they typed at sign-up and who have
- * no avatar in metadata. The write only ever touches those two
- * columns on the caller's OWN row (profiles_update_own RLS, and the
+ * SYNC RULE (deliberate, changed for Edit Profile): metadata is a
+ * FIRST-SEED only. It may fill display_name / avatar_url when the
+ * stored value is empty/null — that is how a Google user's name and
+ * DP appear on their first sign-in — but it must NEVER overwrite a
+ * non-empty stored value. The profiles row is the user's own data:
+ * once they edit their name in Edit Profile, that edit wins over
+ * Google metadata on every later sign-in, forever. The same holds
+ * for avatar_url: seeded from Google when empty, never replaced
+ * afterwards by sync. The write only ever touches those two columns
+ * on the caller's OWN row (profiles_update_own RLS, and the
  * profiles_guard_role trigger still blocks role changes); `role`
  * is never sent.
  */
@@ -75,10 +77,13 @@ export function mergeProfileWithMetadata(
 const attemptedSyncs = new Set<string>();
 
 /**
- * Persist metadata name/photo onto the profiles row when they
- * differ. Returns the row to expose afterwards (the updated row, or
- * the metadata-merged input row). Never throws: a failed sync —
- * most importantly the missing avatar_url column before migration
+ * Persist metadata name/photo onto the profiles row — FIRST-SEED
+ * ONLY: a field is written only while the stored value is empty.
+ * A non-empty stored display_name (e.g. the user's own Edit Profile
+ * change) is never overwritten by metadata, on any sign-in. Returns
+ * the row to expose afterwards (the updated row, or the
+ * metadata-merged input row). Never throws: a failed sync — most
+ * importantly the missing avatar_url column before migration
  * 0004 is applied — must not break sign-in. In that case the write
  * is retried with display_name only, and the photo still reaches
  * the UI through mergeProfileWithMetadata.
@@ -93,10 +98,16 @@ export async function syncProfileFromMetadata(
   if (!meta.displayName && !meta.avatarUrl) return merged; // nothing to sync (plain email user)
 
   const patch: { display_name?: string; avatar_url?: string } = {};
-  if (meta.displayName && meta.displayName !== profile.display_name) {
+  // First-seed only — see the SYNC RULE above. `cleanString` has
+  // already normalised metadata, so a stored value that is null or
+  // blank is "empty" and may be seeded; anything else is the user's
+  // own data and stays.
+  const storedName = profile.display_name?.trim() ? profile.display_name : null;
+  const storedAvatar = profile.avatar_url?.trim() ? profile.avatar_url : null;
+  if (meta.displayName && !storedName) {
     patch.display_name = meta.displayName;
   }
-  if (meta.avatarUrl && meta.avatarUrl !== (profile.avatar_url ?? null)) {
+  if (meta.avatarUrl && !storedAvatar) {
     patch.avatar_url = meta.avatarUrl;
   }
   if (Object.keys(patch).length === 0) return merged;

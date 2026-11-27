@@ -13,7 +13,7 @@ import { PlaylistsScreen } from '../screens/playlists';
 import { SessionWatchScreen, SessionsListScreen } from '../screens/sessions';
 import { HistoryScreen } from '../screens/history';
 import { SettingsScreen } from '../screens/settings';
-import { AccountScreen } from '../screens/account';
+import { AccountScreen, EditProfileScreen } from '../screens/account';
 import type { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -76,6 +76,7 @@ export function RootNavigator() {
       <Stack.Screen name="History" component={HistoryScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen name="Account" component={AccountScreen} />
+      <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       <Stack.Screen name="SignIn" component={SignInScreen} />
       <Stack.Screen name="SignUp" component={SignUpScreen} />
       {/* Admin routes are only REGISTERED for admin-role users
