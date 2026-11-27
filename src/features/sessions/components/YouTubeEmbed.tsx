@@ -6,7 +6,8 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { Image } from 'expo-image';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { layout, lightColors } from '../../../theme';
 
@@ -65,6 +66,10 @@ export const YouTubeEmbed = memo(
     const [initialStartSeconds] = useState(() =>
       Math.max(0, Math.floor(startSeconds)),
     );
+    // Loading facade (same as the web embed): real thumbnail +
+    // spinner until the player posts 'ready'; pointer-events-none
+    // and removed on ready — never over the playing embed.
+    const [readyVideoId, setReadyVideoId] = useState<string | null>(null);
     const webViewRef = useRef<WebViewHandle | null>(null);
     const setWebViewRef = (instance: WebViewHandle | null): void => {
       webViewRef.current = instance;
@@ -86,6 +91,7 @@ export const YouTubeEmbed = memo(
     const onMessage = (event: WebViewMessageEvent): void => {
       const msg = event.nativeEvent.data;
       if (msg === 'ready') {
+        setReadyVideoId(youtubeVideoId);
         onReady?.();
       } else if (msg.startsWith('time:')) {
         const seconds = Number.parseFloat(msg.slice(5));
@@ -107,6 +113,19 @@ export const YouTubeEmbed = memo(
           onMessage={onMessage}
           style={styles.webview}
         />
+        {readyVideoId !== youtubeVideoId ? (
+          <View style={styles.facade} pointerEvents="none">
+            <Image
+              source={{ uri: `https://i.ytimg.com/vi/${encodeURIComponent(youtubeVideoId)}/hqdefault.jpg` }}
+              style={styles.poster}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+            />
+            <View style={styles.spinnerWrap}>
+              <ActivityIndicator color="#FFFFFF" />
+            </View>
+          </View>
+        ) : null}
       </View>
     );
   }),
@@ -150,4 +169,15 @@ const styles = StyleSheet.create({
     backgroundColor: lightColors.playerBackground,
   },
   webview: { flex: 1, backgroundColor: lightColors.playerBackground },
+  facade: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  poster: { width: '100%', height: '100%' },
+  spinnerWrap: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

@@ -9,6 +9,7 @@ import { appLinking } from './src/navigation/linking';
 import { AuthProvider, useAuth } from './src/features/auth';
 import { registerServiceWorker } from './src/lib/registerServiceWorker';
 import { PwaBanners } from './src/components/pwa/PwaBanners';
+import { AppErrorBoundary } from './src/components/common/AppErrorBoundary';
 
 // Phase 9 (forensic audit §11.1): a real native splash. Hold the
 // OS splash (assets/splash-icon.png on white, configured via the
@@ -75,7 +76,9 @@ export default function App() {
       <AuthProvider>
         <SplashGate />
         <NavigationContainer linking={appLinking}>
-          <RootNavigator />
+          <AppErrorBoundary>
+            <RootNavigator />
+          </AppErrorBoundary>
           <StatusBar style="auto" />
         </NavigationContainer>
         <PwaBanners />
