@@ -105,3 +105,39 @@ No implementation corrections were made in this slice, per the mission
 already-pushed fix branches relevant here: `feature/channels` (a8ef658c)
 and `fix/channels-round2` (46cdb712) — the latter re-applies the
 sequential-search + graceful-message fixes that the union merge dropped.
+
+## Addendum — 2026-11-27 09:37–10:00 IST (device browser, real phone width 886×1920)
+
+Live build now Phase 11/12 (bundle index-907f824f). The user signed in
+themselves during a browser takeover. Findings:
+
+- The signed-in profile is "Mamm" (manmohan.labs@gmail.com), role
+  badge **Member** — NOT the admin-promoted "Waheguru" profile. (Two
+  profiles exist for this email's identities; the admin promotion of
+  2026-11-26 sits on the other one.)
+- **Admin gating: PASS.** No Admin dashboard entry anywhere for a
+  Member (You/Library, Settings, Account all checked); direct routes
+  /admin, /admin/channels, /channels, /account/profile all redirect to
+  Home. Correct behaviour, not a missing link.
+- **Channels panel: still NOT VERIFIED** — unreachable from a Member
+  account. Requires an admin-role sign-in: the original "Waheguru"
+  profile, or a promotion of the "Mamm" profile (central SQL step).
+  The saved secure-entry password was also tested once against the
+  "Waheguru" account in this session and rejected ("Email or password
+  is wrong"), so that account's password remains unknown.
+- **Search "bgsj": PASS** at phone width — card exact (name, handle,
+  "4.65 lakh subscribers • 7.2K videos", Subscribe + View Channel,
+  latest videos). Minor: the "Searching the channels…" status line
+  was still visible above the card after results had loaded.
+- **Subscriptions rail: 7 avatars** — AMRITVELA TRUST LIVE, AMRITVELA
+  TRUST, Sakhiyan - Bhai Gursharan Singh Ji, SGPC Sri Amritsar
+  (Darbar Sahib Live), Gurdwara Bangla Sahib Ji, Takhat Sachkhand Sri
+  Hazur Sahib Live, Amritvela TV. NOTE: the BGSJ official channel is
+  NOT in the rail list although the registry has 8 channels and BGSJ
+  videos appear in the feed — flagged for the registry/follow-seeding
+  owner to confirm whether that is intended.
+- **Phone-width fit: PASS with one observation** — no horizontal page
+  scroll, bottom nav reachable, long names ellipsis-truncate. Only 4
+  of 7 rail avatars visible at once; an automated drag did not scroll
+  the rail to reveal the rest (may be an automation limitation —
+  needs a real finger-scroll confirmation on device).
