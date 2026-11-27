@@ -20,13 +20,16 @@ import type { ChannelIdentity } from './youtubeSearch';
  *
  * The cap MUST cover the built-in sangat registry (Bhai Gursharan
  * Singh Ji official, Amritvela Trust Live, Amritvela Trust,
- * Sakhiyan = 4): at 3 the fourth channel (Sakhiyan) was silently
- * dropped from the fan-out and its uploads could never appear in
- * search results (Phase 11 fix). A channel beyond the cap gets no
+ * Sakhiyan, SGPC Darbar Sahib, Bangla Sahib, Hazur Sahib, Amritvela
+ * TV = 8): at 3 the fourth channel (Sakhiyan) was silently dropped
+ * from the fan-out and its uploads could never appear in search
+ * results (Phase 11 fix). A channel beyond the cap gets no
  * search.list leg (it is still card-matched locally), so raise this
- * if the registry grows.
+ * if the registry grows. Quota note: each leg is a 100-unit
+ * search.list call, but results are cached and the uploads fallback
+ * covers any leg that fails on quota.
  */
-export const MAX_YOUTUBE_SEARCH_CHANNELS = 4;
+export const MAX_YOUTUBE_SEARCH_CHANNELS = 8;
 
 export async function loadSearchChannels(): Promise<ChannelIdentity[]> {
   const active = await fetchActiveChannels().catch(() => []);

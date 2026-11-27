@@ -67,13 +67,55 @@ export const APP_REGISTRY_CHANNELS: AppChannel[] = [
     sortOrder: i + 1,
   })),
   {
+    // ID resolved live against the API on 2026-11-27 (handle kept for
+    // display + as a fallback reference).
     rowId: null,
-    youtubeChannelId: '',
+    youtubeChannelId: 'UCUTxhep53boGW8XTX7hEU5Q',
     handle: '@sakhiyanbhaigursharansinghji',
     title: 'Sakhiyan - Bhai Gursharan Singh Ji',
     avatarUrl: null,
     aliases: ['sakhiyan', 'sakhi', 'haadbiti', 'hadbiti'],
     sortOrder: 3,
+  },
+  // Gurbani channels added on the user's order, 27 Nov 2026 — every
+  // id below was verified live against the YouTube Data API (title,
+  // subscriber and video counts checked; two empty placeholder
+  // channels with similar names were rejected on a 0-video count).
+  {
+    rowId: null,
+    youtubeChannelId: 'UCYn6UEtQ771a_OWSiNBoG8w',
+    handle: '@SGPCSriAmritsar',
+    title: 'SGPC, Sri Amritsar (Darbar Sahib Live)',
+    avatarUrl: null,
+    aliases: ['sgpc', 'darbar sahib', 'harmandir sahib', 'golden temple', 'hukamnama'],
+    sortOrder: 4,
+  },
+  {
+    rowId: null,
+    youtubeChannelId: 'UCA1Jqo-WXVuMgs4WcD5f5Yw',
+    handle: '@gurdwarabanglasahib1313',
+    title: 'Gurdwara Bangla Sahib Ji',
+    avatarUrl: null,
+    aliases: ['bangla sahib', 'dsgmc'],
+    sortOrder: 5,
+  },
+  {
+    rowId: null,
+    youtubeChannelId: 'UCCn_noM0Hgi-IJ456T8w7RQ',
+    handle: null,
+    title: 'Takhat Sachkhand Sri Hazur Sahib Live',
+    avatarUrl: null,
+    aliases: ['hazur sahib', 'hazoor sahib', 'nanded', 'takhat'],
+    sortOrder: 6,
+  },
+  {
+    rowId: null,
+    youtubeChannelId: 'UC2AHnxSbmtaKrk74noBMv-Q',
+    handle: '@AmritvelaTV',
+    title: 'Amritvela TV',
+    avatarUrl: null,
+    aliases: ['amritvela tv'],
+    sortOrder: 7,
   },
 ];
 
