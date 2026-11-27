@@ -120,6 +120,14 @@ function createWebLinking(): LinkingOptions<RootStackParamList> {
         History: 'history',
         Settings: 'settings',
         Account: 'account',
+        // Gated screens need paths too: without one, a guest deep
+        // entry (e.g. /account/edit-profile) matches no route and
+        // React Navigation silently falls back to Home — the same
+        // silent bounce the admin gate fix (night work, 27 Nov)
+        // removed for /admin. EditProfile renders its own signed-out
+        // gate; SetNewPassword renders its reset-link-only note.
+        EditProfile: 'account/edit-profile',
+        SetNewPassword: 'set-new-password',
         SignIn: 'sign-in',
         SignUp: 'sign-up',
         Admin: {

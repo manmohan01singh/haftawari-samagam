@@ -10,12 +10,16 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { branding } from '../../config/branding';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { useAuth } from '../../features/auth/AuthContext';
 import { friendlyAuthError } from '../../features/auth/authHelpers';
 import { radii, spacing, typography, useTheme, type ThemeColors } from '../../theme';
+import type { RootStackParamList } from '../../navigation/types';
+
+type Props = NativeStackScreenProps<RootStackParamList, 'SetNewPassword'>;
 
 /**
  * Set-a-new-password form, shown when the user lands back from a
@@ -28,11 +32,17 @@ import { radii, spacing, typography, useTheme, type ThemeColors } from '../../th
  * rendered as a gate by RootNavigator while AuthContext reports a
  * recovery session; on success the gate clears and the (already
  * signed-in) user continues into the app.
+ *
+ * Direct deep entry (no recovery session, signed out): the form would
+ * fail on submit with no session, so the screen shows a reset-link
+ * note with a Sign in button instead — the same "gate, not silent
+ * bounce" rule as EditProfile/Admin. A signed-in user CAN use the
+ * form here (updateUser works on their live session).
  */
-export function SetNewPasswordScreen() {
+export function SetNewPasswordScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { clearPasswordRecovery, signOut } = useAuth();
+  const { clearPasswordRecovery, signOut, user, passwordRecovery } = useAuth();
 
   // Escape hatch (P10 leftover fix): this gate screen previously
   // offered only "Skip for now", which kept the recovery session and
@@ -87,7 +97,21 @@ export function SetNewPasswordScreen() {
           <Text style={styles.wordmark}>{branding.appName}</Text>
         </View>
         <Text style={styles.heading}>Set a new password</Text>
-        {!isSupabaseConfigured ? (
+        {!user && !passwordRecovery ? (
+          <View>
+            <Text style={styles.intro}>
+              This page is only for finishing a password reset. Open the reset link from your
+              email to set a new password, or sign in with your current password.
+            </Text>
+            <Pressable
+              style={styles.primaryButton}
+              onPress={() => navigation.navigate('SignIn')}
+              accessibilityRole="button"
+            >
+              <Text style={styles.primaryButtonText}>Sign in</Text>
+            </Pressable>
+          </View>
+        ) : !isSupabaseConfigured ? (
           <Text style={styles.error}>Password reset is not available: the backend is not configured.</Text>
         ) : done ? (
           <View>
