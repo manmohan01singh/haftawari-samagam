@@ -1,4 +1,4 @@
--- Haftawari Samagam — 0005_hosted_videos.sql
+-- Haftawari Samagam — 0006_hosted_videos.sql
 -- Dual-source videos: YouTube (official embed, unchanged) + HOSTED
 -- (original files from the rights holder, stored in Cloudflare R2,
 -- played with a native player from short-lived signed URLs).
