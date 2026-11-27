@@ -26,6 +26,8 @@ import {
 } from '../../components/video/cardData';
 import { useAuth } from '../../features/auth';
 import { ChatPreviewCard, SessionChat } from '../../features/chat/components';
+import { useCurrentChatUser } from '../../features/chat/useSessionChat';
+import { joinPresence, leavePresence } from '../../features/presence/presenceService';
 import { useChannelFollow, useOfficialChannel } from '../../features/channel';
 import { AddToPlaylistSheet } from '../../features/library';
 import { formatCount } from '../../lib/format';
@@ -107,6 +109,27 @@ export function WatchScreen({ route, navigation }: Props) {
   const { following, toggleFollow } = useChannelFollow(channel?.channelId ?? OFFICIAL_CHANNEL_ID);
   const [menuOpen, setMenuOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  // Real sangat count for a session watch: Supabase Realtime Presence
+  // on the session's room (same service SessionWatchScreen uses).
+  // Only signed-in viewers can be tracked, so signed-out watches show
+  // no count — hidden, never invented.
+  const { user: chatUser } = useCurrentChatUser();
+  const [presenceCount, setPresenceCount] = useState<number | null>(null);
+  useEffect(() => {
+    if (!sessionId || !isSupabaseConfigured || !chatUser) return;
+    const channel = joinPresence(
+      sessionId,
+      {
+        userId: chatUser.id,
+        displayName: chatUser.displayName,
+        onlineAt: new Date().toISOString(),
+      },
+      (snapshot) => setPresenceCount(snapshot.participantCount),
+    );
+    return () => {
+      void leavePresence(channel);
+    };
+  }, [sessionId, chatUser]);
   // Up Next items: local catalogue rows first; when the catalogue is
   // thin, real channel uploads from the YouTube API fill the list
   // (QA issue 58) — same compact-row rendering either way.
@@ -631,13 +654,15 @@ export function WatchScreen({ route, navigation }: Props) {
               opens the real SessionChat sheet (rendered at the root
               below). A plain recording has no session and gets NO
               chat box — a "Live chat" label under a prerecorded
-              video would mislabel it. No participant count is passed:
-              this screen does not join Presence, so the count is
-              honestly hidden rather than invented. */}
+              video would mislabel it. The participant count is the
+              REAL Realtime Presence count for this session's room
+              (joined above when signed in); signed-out, it stays
+              hidden rather than invented. */}
           {sessionId ? (
             <View style={styles.chatWrap}>
               <ChatPreviewCard
                 sessionId={sessionId}
+                participantCount={presenceCount ?? undefined}
                 onPress={() => setChatOpen(true)}
                 onSignInPress={() => navigation.navigate('SignIn')}
               />
@@ -697,6 +722,7 @@ export function WatchScreen({ route, navigation }: Props) {
     showToast,
     backRow,
     sessionId,
+    presenceCount,
   ]);
 
   if (loading) {
@@ -831,7 +857,11 @@ export function WatchScreen({ route, navigation }: Props) {
               accessibilityRole="button"
             />
             <View style={styles.chatSheetHost}>
-              <SessionChat sessionId={sessionId} onClose={() => setChatOpen(false)} />
+              <SessionChat
+                sessionId={sessionId}
+                participantCount={presenceCount ?? undefined}
+                onClose={() => setChatOpen(false)}
+              />
             </View>
           </View>
         </Modal>
