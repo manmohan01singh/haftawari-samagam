@@ -22,7 +22,7 @@ import { Toast, useToast } from '../../components/common/Toast';
 import { shareContent, shareFeedback } from '../../lib/share';
 import { ShelfCard } from '../../components/video/ShelfCard';
 import { SkeletonCard } from '../../components/video/SkeletonCard';
-import { useChannelFollow, useOfficialChannel } from '../../features/channel';
+import { ensureDefaultFollowsSeeded, useChannelFollow, useOfficialChannel } from '../../features/channel';
 import { formatCount } from '../../lib/format';
 import {
   OFFICIAL_CHANNEL_ID,
@@ -81,7 +81,16 @@ export function ChannelScreen({ route, navigation }: Props) {
   // same AsyncStorage key) the Search channel block uses, so both
   // surfaces always agree. It drives nothing fake — no counts change,
   // and it is labelled as device-local under the pill row.
-  const { following, toggleFollow } = useChannelFollow(channelId);
+  const { following, toggleFollow, reload: reloadFollow } = useChannelFollow(channelId);
+  // Phase 11: the app's own channels are followed by default. Seed
+  // that (one-time per channel; only fills an absent follow key, so
+  // an earlier unfollow is never overridden) here as well, so a
+  // first-ever visit to a registry channel already shows
+  // "Subscribed" instead of depending on the Subscriptions tab
+  // having been opened once. Reload afterwards to pick up the seed.
+  useEffect(() => {
+    void ensureDefaultFollowsSeeded().then(() => reloadFollow());
+  }, [reloadFollow]);
   const { toast, showToast } = useToast();
   const shareVideo = useCallback(
     (title: string, youtubeVideoId: string) => {

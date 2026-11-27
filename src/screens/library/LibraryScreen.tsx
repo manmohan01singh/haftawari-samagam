@@ -72,10 +72,23 @@ export function LibraryScreen({ navigation }: Props) {
   const local = useLocalHistory();
   const [createOpen, setCreateOpen] = useState(false);
   const reloadLocal = local.reload;
+  const reloadHistory = history.reload;
+  const reloadSaved = saved.reload;
+  const reloadSummaries = summaries.reload;
+  // Phase 11 (user order): the Library tab stays mounted, so without
+  // this its History shelf / Saved count / playlist rows went stale
+  // until pull-to-refresh or an app reload — watch a recording, come
+  // back here, and it must already be listed. Silent refresh: every
+  // section below renders its existing data while a reload is in
+  // flight (skeletons only appear when a section has no data yet),
+  // so refocusing never flashes placeholders.
   useFocusEffect(
     useCallback(() => {
       reloadLocal();
-    }, [reloadLocal]),
+      reloadHistory();
+      reloadSaved();
+      reloadSummaries();
+    }, [reloadLocal, reloadHistory, reloadSaved, reloadSummaries]),
   );
 
   const refreshing = history.refreshing || saved.refreshing || summaries.refreshing;
@@ -237,14 +250,13 @@ export function LibraryScreen({ navigation }: Props) {
                 </Text>
               </View>
             </View>
+            {/* Phase 11 (user order): NO "View channel" pill here.
+                Users have no channel of their own in this app, and
+                the old pill opened the OFFICIAL BGSJ channel from the
+                user's own profile — wrong destination, removed. The
+                official channel stays reachable via the bottom-nav
+                centre slot and Settings → Official channel. */}
             <View style={styles.profileButtons}>
-              <Pressable
-                style={[styles.pillButton, styles.pillDark]}
-                onPress={() => navigation.navigate('Channel', {})}
-                accessibilityRole="button"
-              >
-                <Text style={[styles.pillText, styles.pillTextDark]}>View channel</Text>
-              </Pressable>
               <Pressable
                 style={[styles.pillButton, styles.pillLight]}
                 onPress={() => navigation.navigate('Sessions')}

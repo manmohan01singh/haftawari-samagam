@@ -3,7 +3,7 @@ import { FlatList, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions,
 import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { CompositeScreenProps } from '@react-navigation/native';
-import { useScrollToTop } from '@react-navigation/native';
+import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppHeader } from '../../components/layout/AppHeader';
@@ -14,6 +14,7 @@ import { GridCard } from '../../components/video/GridCard';
 import { SkeletonCard } from '../../components/video/SkeletonCard';
 import { apiCardData, formatDateLine } from '../../components/video/cardData';
 import { useAuth } from '../../features/auth';
+import { ensureDefaultFollows, readFollowedChannelIds } from '../../features/channel';
 import {
   getChannelInfoCached,
   getLiveCached,
@@ -42,20 +43,26 @@ const FILTERS: { key: UploadFilter; label: string }[] = [
 ];
 
 /**
- * Subscriptions — MULTI-CHANNEL since the channels panel (migration
- * 0003): the avatar rail and the feed read from the admin-chosen
- * `channels` table (all ACTIVE channels, in admin order), not from a
- * hard-coded single channel. With exactly one active channel this is
- * precisely the old single-channel screen.
+ * Subscriptions — the channels the user FOLLOWS on this device
+ * (Phase 11, user order 27 Nov 2026). The candidate set is the app's
+ * active channels (built-in sangat registry ∪ admin `channels`
+ * table, via useActiveChannels); the rail and the feed show the
+ * followed subset of it.
  *
- *  - Rail: one avatar per active channel (ref-2 pattern), with a red
- *    live dot ONLY when YouTube itself reports that channel as live
- *    right now (cached live check, 5 min). Tapping an avatar filters
- *    the feed to that channel; tapping the selected avatar again opens
- *    its Channel page. "All" merges every channel's uploads.
- *  - Feed: each channel's uploads (Shorts filtered OUT — user ban),
- *    de-duplicated and date-ordered; the Live filter shows only what
- *    the API reports as live/upcoming.
+ *  - Default follows: on first run the app's channels are seeded as
+ *    followed (ensureDefaultFollows — one-time per channel, only
+ *    fills an absent follow key), so this screen starts with the
+ *    full sangat panel, exactly as before. Unfollowing a channel on
+ *    its Channel page removes it here and it is never re-seeded.
+ *  - Rail: one avatar per followed channel (ref-2 pattern), with a
+ *    red live dot ONLY when YouTube itself reports that channel as
+ *    live right now (cached live check, 5 min). Tapping an avatar
+ *    filters the feed to that channel; tapping the selected avatar
+ *    again opens its Channel page. "All" merges every followed
+ *    channel's uploads.
+ *  - Feed: each followed channel's uploads (Shorts filtered OUT —
+ *    user ban), de-duplicated and date-ordered; the Live filter
+ *    shows only what the API reports as live/upcoming.
  *  - Quota: uploads cached 30 min per channel, live checks cached
  *    5 min and run sequentially (staggered) — see docs/CHANNELS.md.
  * There is NO Shorts shelf (user decision).
@@ -89,14 +96,60 @@ export function SubscriptionsScreen({ navigation }: Props) {
 
   const channelIdsKey = channels.map((c) => c.youtubeChannelId).join(',');
 
-  // Uploads for every active channel (cached per channel).
+  // Follow state (Phase 11): null until the device-local follows
+  // have been read. The first read also performs the one-time
+  // default seeding, so the app's channels start followed.
+  const [followedIds, setFollowedIds] = useState<Set<string> | null>(null);
   useEffect(() => {
     if (channels.length === 0) return;
     let active = true;
     (async () => {
+      await ensureDefaultFollows(channels);
+      const ids = await readFollowedChannelIds(channels.map((c) => c.youtubeChannelId));
+      if (active) setFollowedIds(ids);
+    })();
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channelIdsKey]);
+
+  // Re-read follows on focus: unfollowing on a Channel page must
+  // remove the channel here when the user comes back (no re-seed —
+  // seeding is one-time per channel and already recorded).
+  useFocusEffect(
+    useCallback(() => {
+      if (channels.length === 0) return;
+      let active = true;
+      void readFollowedChannelIds(channels.map((c) => c.youtubeChannelId)).then((ids) => {
+        if (active) setFollowedIds(ids);
+      });
+      return () => {
+        active = false;
+      };
+    }, [channels]),
+  );
+
+  const followedChannels = useMemo(
+    () => (followedIds ? channels.filter((c) => followedIds.has(c.youtubeChannelId)) : []),
+    [channels, followedIds],
+  );
+  const followedIdsKey = followedChannels.map((c) => c.youtubeChannelId).join(',');
+
+  // A channel that was just unfollowed can't stay selected: the
+  // effective selection falls back to 'all' (derived, not synced
+  // state — the stale id is simply ignored until the next tap).
+  const activeSelected: string | 'all' =
+    selected !== 'all' && followedIds && !followedIds.has(selected) ? 'all' : selected;
+
+  // Uploads for every followed channel (cached per channel).
+  useEffect(() => {
+    if (followedChannels.length === 0) return;
+    let active = true;
+    (async () => {
       try {
         const entries = await Promise.all(
-          channels.map(async (c) => {
+          followedChannels.map(async (c) => {
             const videos = await getUploadsCached(
               c.youtubeChannelId,
               uploadsPlaylistIdFor(c.youtubeChannelId),
@@ -117,15 +170,15 @@ export function SubscriptionsScreen({ navigation }: Props) {
       active = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelIdsKey, reloadKey]);
+  }, [followedIdsKey, reloadKey]);
 
   // Live checks — sequential (staggered) so N channels never burst
   // N×200 units at once; each result is cached 5 min.
   useEffect(() => {
-    if (channels.length === 0) return;
+    if (followedChannels.length === 0) return;
     let active = true;
     (async () => {
-      for (const c of channels) {
+      for (const c of followedChannels) {
         if (!active) return;
         const items = await getLiveCached(c.youtubeChannelId);
         if (!active) return;
@@ -136,13 +189,13 @@ export function SubscriptionsScreen({ navigation }: Props) {
       active = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelIdsKey, reloadKey]);
+  }, [followedIdsKey, reloadKey]);
 
   // Fill avatars the table snapshot lacks (e.g. the fallback channel)
   // from cached channel metadata (1 unit, 6h cache).
   useEffect(() => {
     let active = true;
-    for (const c of channels) {
+    for (const c of followedChannels) {
       if (c.avatarUrl) continue;
       void getChannelInfoCached(c.youtubeChannelId).then((info) => {
         if (active && info) {
@@ -153,7 +206,7 @@ export function SubscriptionsScreen({ navigation }: Props) {
     return () => {
       active = false;
     };
-  }, [channels]);
+  }, [followedChannels]);
 
   const avatarFor = useCallback(
     (channel: AppChannel): string | null => channel.avatarUrl ?? infoAvatars.get(channel.youtubeChannelId) ?? null,
@@ -166,8 +219,11 @@ export function SubscriptionsScreen({ navigation }: Props) {
   );
 
   const scopeChannels = useMemo(
-    () => (selected === 'all' ? channels : channels.filter((c) => c.youtubeChannelId === selected)),
-    [channels, selected],
+    () =>
+      activeSelected === 'all'
+        ? followedChannels
+        : followedChannels.filter((c) => c.youtubeChannelId === activeSelected),
+    [followedChannels, activeSelected],
   );
 
   const visible = useMemo(() => {
@@ -229,18 +285,18 @@ export function SubscriptionsScreen({ navigation }: Props) {
 
   const keyExtractor = useCallback((item: YouTubeVideoMetadata) => item.youtubeVideoId, []);
   const initial = profile?.display_name?.charAt(0)?.toUpperCase() ?? user?.email?.charAt(0)?.toUpperCase() ?? null;
-  const selectedChannel = selected === 'all' ? null : (channelById.get(selected) ?? null);
-  const isLoading = channelsLoading || loading;
+  const selectedChannel = activeSelected === 'all' ? null : (channelById.get(activeSelected) ?? null);
+  const isLoading = channelsLoading || loading || (channels.length > 0 && followedIds === null);
 
   const header = (
     <View>
-      {/* Avatar rail — every active channel from the panel. */}
+      {/* Avatar rail — every followed channel. */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
-        {channels.map((c) => {
+        {followedChannels.map((c) => {
           const isLiveNow = (liveByChannel.get(c.youtubeChannelId) ?? []).some(
             (v) => v.liveBroadcastContent === 'live',
           );
-          const isSelected = selected === c.youtubeChannelId;
+          const isSelected = activeSelected === c.youtubeChannelId;
           const avatar = avatarFor(c);
           return (
             <Pressable
@@ -286,7 +342,7 @@ export function SubscriptionsScreen({ navigation }: Props) {
         <Text style={styles.heading}>
           {selectedChannel ? selectedChannel.title : 'Most relevant'}
         </Text>
-        {channels.length > 1 && selected !== 'all' ? (
+        {followedChannels.length > 1 && activeSelected !== 'all' ? (
           <Pressable
             onPress={() => setSelected('all')}
             accessibilityRole="button"
@@ -338,7 +394,14 @@ export function SubscriptionsScreen({ navigation }: Props) {
         avatarInitial={initial}
       />
 
-      {isLoading ? (
+      {channels.length > 0 && followedIds !== null && followedChannels.length === 0 ? (
+        <EmptyState
+          title="You're not following any channel yet"
+          message="Open a channel page and tap Subscribe to follow it — its uploads will appear here."
+          actionLabel="Browse samagams"
+          onAction={() => navigation.navigate('MainTabs', { screen: 'Home' })}
+        />
+      ) : isLoading ? (
         <View style={[styles.listPad, styles.skeletonRow]}>
           <View style={styles.skeletonCell}>
             <SkeletonCard variant="shelf" />

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { channelFollowKey } from './channelFollows';
+
 /**
  * Honest DEVICE-LOCAL follow state for a channel.
  *
@@ -13,9 +15,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export function useChannelFollow(channelId: string): {
   following: boolean;
   toggleFollow: () => void;
+  /** Re-read the stored value (e.g. after default-follow seeding). */
+  reload: () => void;
 } {
   const [following, setFollowing] = useState(false);
-  const followKey = `channel-follow:${channelId}`;
+  const followKey = channelFollowKey(channelId);
+
+  const reload = useCallback(() => {
+    AsyncStorage.getItem(followKey)
+      .then((value) => setFollowing(value === '1'))
+      .catch(() => undefined);
+  }, [followKey]);
 
   useEffect(() => {
     let active = true;
@@ -37,5 +47,5 @@ export function useChannelFollow(channelId: string): {
     });
   }, [followKey]);
 
-  return { following, toggleFollow };
+  return { following, toggleFollow, reload };
 }
