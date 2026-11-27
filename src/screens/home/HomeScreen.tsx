@@ -6,7 +6,9 @@ import type { CompositeScreenProps } from '@react-navigation/native';
 import { useScrollToTop } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { Image } from 'expo-image';
 import { AppHeader } from '../../components/layout/AppHeader';
+import { SessionStatusBadge } from '../../features/sessions/components/SessionStatusBadge';
 import { useWebPullToRefresh } from '../../components/gesture/WebPullToRefresh';
 import { ChipsRow } from '../../components/layout/ChipsRow';
 import { Toast, useToast } from '../../components/common/Toast';
@@ -200,7 +202,11 @@ export function HomeScreen({ navigation }: Props) {
   // Drives only the Sessions entry row below (its subtitle + where it
   // leads) — no fabricated indicator: when nothing is playing, the
   // row keeps its plain "watch together" form and leads to the list.
-  const [liveSession, setLiveSession] = useState<{ id: string; title: string } | null>(null);
+  const [liveSession, setLiveSession] = useState<{
+    id: string;
+    title: string;
+    thumbnailUrl: string | null;
+  } | null>(null);
 
   useEffect(() => {
     if (!isSupabaseConfigured) return;
@@ -226,6 +232,7 @@ export function HomeScreen({ navigation }: Props) {
             ? {
                 id: playing.session.id,
                 title: playing.session.title ?? playing.video?.title ?? 'Samagam',
+                thumbnailUrl: playing.video?.thumbnail_url ?? null,
               }
             : null,
         );
@@ -564,6 +571,44 @@ export function HomeScreen({ navigation }: Props) {
         <ChipsRow chips={[...HOME_CHIPS]} selected={selectedChip} onSelect={handleSelectChip} />
       </View>
 
+      {/* Pinned live card (user order, 27 Nov 2026): when a Samagam
+          is really NOW PLAYING it sits at the very top of Home with
+          its thumbnail and the red badge — the YouTube-home live
+          pattern. Driven by the same derived status as the strip
+          below; when nothing is playing it is simply absent. */}
+      {liveSession ? (
+        <Pressable
+          style={({ pressed }) => [styles.liveCard, pressed && styles.pressed]}
+          onPress={() => navigation.navigate('SessionWatch', { sessionId: liveSession.id })}
+          accessibilityRole="button"
+          accessibilityLabel={`Now playing: ${liveSession.title}. Tap to join the Samagam.`}
+        >
+          {liveSession.thumbnailUrl ? (
+            <Image
+              source={{ uri: liveSession.thumbnailUrl }}
+              style={styles.liveCardThumb}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+            />
+          ) : (
+            <View style={[styles.liveCardThumb, styles.liveCardThumbEmpty]}>
+              <Image
+                source={require('../../../assets/icon.png')}
+                style={styles.liveCardThumbMark}
+                contentFit="contain"
+              />
+            </View>
+          )}
+          <View style={styles.liveCardBody}>
+            <SessionStatusBadge status="now_playing" />
+            <Text style={styles.liveCardTitle} numberOfLines={2}>
+              {liveSession.title}
+            </Text>
+            <Text style={styles.liveCardHint}>Tap to join the Samagam</Text>
+          </View>
+        </Pressable>
+      ) : null}
+
       {notConfigured ? (
         <EmptyState
           title="Backend not configured"
@@ -669,4 +714,27 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   endOfFeedText: { ...typography.metadata, color: colors.textSecondary, textAlign: 'center' },
+  pressed: { opacity: 0.85 },
+  liveCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  liveCardThumb: { width: 120, aspectRatio: 16 / 9, borderRadius: 8 },
+  liveCardThumbEmpty: {
+    backgroundColor: colors.surfaceVariant,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  liveCardThumbMark: { width: 40, height: 40 },
+  liveCardBody: { flex: 1, minWidth: 0, gap: spacing.xs, alignItems: 'flex-start' },
+  liveCardTitle: { ...typography.cardTitle, color: colors.text },
+  liveCardHint: { ...typography.metadata, color: colors.textSecondary },
 });

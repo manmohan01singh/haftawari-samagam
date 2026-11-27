@@ -39,6 +39,8 @@ export interface HostedPlayerProps {
   /** Player-reported position, ~every 1s while playing. */
   onTimeUpdate?: (seconds: number) => void;
   onReady?: () => void;
+  /** The player's discovered duration (seconds), fired once per source when known. */
+  onDuration?: (seconds: number) => void;
   onError?: (message: string) => void;
   /**
    * Re-mint a fresh playback URL after a playback error. Signed URLs
@@ -86,6 +88,7 @@ export const HostedPlayer = memo(
       autoplay = false,
       onTimeUpdate,
       onReady,
+      onDuration,
       onError,
       onRefreshUri,
       showScrubber = true,
@@ -96,8 +99,9 @@ export const HostedPlayer = memo(
     const styles = useMemo(() => createStyles(colors), [colors]);
     const viewRef = useRef<VideoView>(null);
     const readyHandledFor = useRef<string | null>(null);
-    const callbacks = useRef({ onTimeUpdate, onReady, onError, onRefreshUri });
-    callbacks.current = { onTimeUpdate, onReady, onError, onRefreshUri };
+    const durationReportedFor = useRef<string | null>(null);
+    const callbacks = useRef({ onTimeUpdate, onReady, onDuration, onError, onRefreshUri });
+    callbacks.current = { onTimeUpdate, onReady, onDuration, onError, onRefreshUri };
     // Signed-URL refresh bookkeeping (see onRefreshUri): last known
     // position / play state for a seamless resume, plus attempt caps.
     const positionRef = useRef(0);
@@ -138,6 +142,14 @@ export const HostedPlayer = memo(
         if (initialStart > 0) player.currentTime = initialStart;
         if (autoplay) player.play();
         callbacks.current.onReady?.();
+      }
+      if (
+        next === 'readyToPlay' &&
+        durationReportedFor.current !== uri &&
+        player.duration > 0
+      ) {
+        durationReportedFor.current = uri;
+        callbacks.current.onDuration?.(player.duration);
       }
       if (next === 'error') {
         // First try a silent signed-URL refresh + resume (the usual

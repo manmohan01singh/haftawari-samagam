@@ -51,7 +51,16 @@ export const VideoCard = memo(function VideoCard({
         {video.thumbnail_url ? (
           <Image source={{ uri: video.thumbnail_url }} style={styles.thumbnail} contentFit="cover" cachePolicy="memory-disk" recyclingKey={video.id} />
         ) : (
-          <View style={[styles.thumbnail, styles.thumbnailEmpty]} />
+          // No thumbnail (hosted rows before one is uploaded): show
+          // the brand mark on the placeholder instead of a black void
+          // (device report, 27 Nov 2026).
+          <View style={[styles.thumbnail, styles.thumbnailEmpty]}>
+            <Image
+              source={require('../../../assets/icon.png')}
+              style={styles.thumbnailFallbackMark}
+              contentFit="contain"
+            />
+          </View>
         )}
         {video.duration_seconds != null ? (
           <View style={styles.durationBadge}>
@@ -97,7 +106,12 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: radii.card,
     backgroundColor: colors.surfaceVariant,
   },
-  thumbnailEmpty: { backgroundColor: colors.surfaceVariant },
+  thumbnailEmpty: {
+    backgroundColor: colors.surfaceVariant,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  thumbnailFallbackMark: { width: 56, height: 56, opacity: 0.9 },
   durationBadge: {
     position: 'absolute',
     right: spacing.sm,

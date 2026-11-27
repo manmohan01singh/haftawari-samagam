@@ -78,7 +78,13 @@ export const FeedCard = memo(function FeedCard({
           pointerEvents="none"
         />
       ) : (
-        <View style={[styles.thumbnail, styles.thumbnailEmpty]} />
+        <View style={[styles.thumbnail, styles.thumbnailEmpty]}>
+          <Image
+            source={require('../../../assets/icon.png')}
+            style={styles.thumbnailFallbackMark}
+            contentFit="contain"
+          />
+        </View>
       )}
       {isLive ? (
         <View style={styles.liveBadge} pointerEvents="none">
@@ -127,7 +133,13 @@ export const FeedCard = memo(function FeedCard({
               transition={150}
             />
           ) : (
-            <View style={[styles.upNextThumb, styles.thumbnailEmpty]} />
+            <View style={[styles.upNextThumb, styles.thumbnailEmpty]}>
+              <Image
+                source={require('../../../assets/icon.png')}
+                style={styles.upNextFallbackMark}
+                contentFit="contain"
+              />
+            </View>
           )}
           {isLive ? (
             <View style={[styles.upNextBadge, styles.upNextLiveBadge]}>
@@ -270,7 +282,13 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     // read as a black rectangle. Matches the skeleton colour.
     backgroundColor: colors.surfaceVariant,
   },
-  thumbnailEmpty: { backgroundColor: colors.surfaceVariant },
+  thumbnailEmpty: {
+    backgroundColor: colors.surfaceVariant,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  thumbnailFallbackMark: { width: 56, height: 56, opacity: 0.9 },
+  upNextFallbackMark: { width: 30, height: 30, opacity: 0.9 },
   liveBadge: {
     position: 'absolute',
     right: nativeApp.feedCard.badgeInset,

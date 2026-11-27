@@ -5,6 +5,7 @@ import { HostedPlayer } from './HostedPlayer';
 import {
   fetchHostedPlaybackUrl,
   HostedNotConfiguredError,
+  reportVideoDurationIfMissing,
 } from '../../features/hosted/hostedService';
 import { layout, spacing, useTheme, type ThemeColors } from '../../theme';
 
@@ -70,7 +71,14 @@ export function HostedWatchPlayer({ videoId, thumbnailUrl, autoplay = true }: Ho
   }, [videoId]);
 
   if (state.kind === 'ready') {
-    return <HostedPlayer uri={state.url} autoplay={autoplay} onRefreshUri={refreshUri} />;
+    return (
+      <HostedPlayer
+        uri={state.url}
+        autoplay={autoplay}
+        onRefreshUri={refreshUri}
+        onDuration={(seconds) => void reportVideoDurationIfMissing(videoId, seconds)}
+      />
+    );
   }
 
   return (

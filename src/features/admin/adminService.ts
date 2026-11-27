@@ -278,6 +278,49 @@ export async function setVideoCategory(
   return updated;
 }
 
+/**
+ * Set a video's duration (seconds). Hosted uploads probe the file's
+ * real duration on the admin's device at pick time (the server cannot
+ * probe an R2 object); sessions derive their completion from this —
+ * a null duration is what left a finished session claiming NOW
+ * PLAYING forever (device report, 27 Nov 2026).
+ */
+export async function setVideoDuration(
+  videoId: string,
+  durationSeconds: number,
+  actorId: string,
+): Promise<void> {
+  const supabase = requireSupabase();
+  const { error } = await supabase
+    .from('videos')
+    .update({ duration_seconds: Math.round(durationSeconds), updated_at: new Date().toISOString() })
+    .eq('id', videoId);
+  if (error) throw error;
+  await writeAuditLog(actorId, 'video.set_duration', 'video', videoId, {
+    duration_seconds: Math.round(durationSeconds),
+  });
+}
+
+/**
+ * Set a video's thumbnail. Hosted videos have no YouTube thumbnail to
+ * borrow, so the admin uploads one (stored as a compressed JPEG data
+ * URI — the catalogue holds essentially one hosted video at a time,
+ * so no separate image host is needed).
+ */
+export async function setVideoThumbnail(
+  videoId: string,
+  thumbnailDataUri: string,
+  actorId: string,
+): Promise<void> {
+  const supabase = requireSupabase();
+  const { error } = await supabase
+    .from('videos')
+    .update({ thumbnail_url: thumbnailDataUri, updated_at: new Date().toISOString() })
+    .eq('id', videoId);
+  if (error) throw error;
+  await writeAuditLog(actorId, 'video.set_thumbnail', 'video', videoId, {});
+}
+
 export async function deleteVideo(video: Video, actorId: string): Promise<void> {
   const supabase = requireSupabase();
   const { error } = await supabase.from('videos').delete().eq('id', video.id);

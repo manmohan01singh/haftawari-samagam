@@ -35,11 +35,13 @@ import {
 import {
   fetchHostedPlaybackUrl,
   HostedNotConfiguredError,
+  reportVideoDurationIfMissing,
 } from '../../features/hosted/hostedService';
 import {
   formatCountdown,
   formatSessionDateTime,
   formatStartedAgo,
+  formatStreamedAgo,
 } from '../../features/sessions/format';
 import { useServerClock } from '../../features/sessions/hooks/useServerClock';
 import { serverClock } from '../../features/sessions/serverClock';
@@ -516,6 +518,7 @@ export function SessionWatchScreen({ route, navigation }: Props) {
               autoplay={isPlaying}
               onReady={handlePlayerReady}
               onTimeUpdate={handleTimeUpdate}
+              onDuration={(seconds) => void reportVideoDurationIfMissing(video.id, seconds)}
               onRefreshUri={async () => {
                 try {
                   return await fetchHostedPlaybackUrl(video.id);
@@ -618,7 +621,24 @@ export function SessionWatchScreen({ route, navigation }: Props) {
             ? formatStartedAgo(session.scheduled_start_at, nowMs)
             : status === 'upcoming'
               ? `${formatSessionDateTime(session.scheduled_start_at)} · ${formatCountdown(session.scheduled_start_at, nowMs)}`
-              : formatSessionDateTime(session.scheduled_start_at)}
+              : isCompleted
+                ? // YouTube's post-live wording: once the recording's
+                  // own end has passed, it reads "Streamed … ago",
+                  // measured from the effective end (start + the
+                  // recording duration, else the scheduled end).
+                  formatStreamedAgo(
+                    new Date(
+                      Date.parse(session.scheduled_start_at) +
+                        (durationSeconds != null
+                          ? durationSeconds * 1000
+                          : session.scheduled_end_at
+                            ? Date.parse(session.scheduled_end_at) -
+                              Date.parse(session.scheduled_start_at)
+                            : 0),
+                    ).toISOString(),
+                    nowMs,
+                  )
+                : formatSessionDateTime(session.scheduled_start_at)}
         </Text>
 
         {/* Channel row (YouTube-live parity): round-clipped avatar,
@@ -831,7 +851,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.surface,
     borderTopLeftRadius: nativeApp.watchSheet.topRadius,
     borderTopRightRadius: nativeApp.watchSheet.topRadius,
-    marginTop: -nativeApp.watchSheet.topRadius,
+    marginTop: 0,
     padding: spacing.lg,
   },
   skelLine: { height: 18, borderRadius: 4, backgroundColor: colors.surfaceVariant },
@@ -879,7 +899,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.surface,
     borderTopLeftRadius: nativeApp.watchSheet.topRadius,
     borderTopRightRadius: nativeApp.watchSheet.topRadius,
-    marginTop: -nativeApp.watchSheet.topRadius,
+    marginTop: 0,
   },
   sheetContent: { padding: spacing.lg, paddingBottom: spacing.xxl },
   backRow: { flexDirection: 'row', alignItems: 'center' },

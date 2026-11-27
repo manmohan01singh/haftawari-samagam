@@ -1381,7 +1381,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   // overlapped the video — the seam rendered as a straight edge).
   // With the list overlapping, the sheet's corner notches reveal the
   // video behind them, exactly as in ref-watch-live.
-  list: { flex: 1, marginTop: -nativeApp.watchSheet.topRadius, zIndex: 1 },
+  list: { flex: 1, marginTop: 0, zIndex: 1 },
   listContent: { width: '100%', maxWidth: 1100, alignSelf: 'center' },
   headerWrap: { position: 'relative' },
   playerThumb: { width: '100%', height: '100%', backgroundColor: colors.playerBackground },
@@ -1538,7 +1538,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.surface,
     borderTopLeftRadius: nativeApp.watchSheet.topRadius,
     borderTopRightRadius: nativeApp.watchSheet.topRadius,
-    marginTop: -nativeApp.watchSheet.topRadius,
+    marginTop: 0,
     padding: spacing.lg,
     zIndex: 1,
   },

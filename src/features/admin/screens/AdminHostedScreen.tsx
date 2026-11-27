@@ -10,13 +10,19 @@ import {
   invokeR2Admin,
   listHostedVideoBundles,
   saveContentAuthorization,
+  setVideoDuration,
   setVideoPublishState,
+  setVideoThumbnail,
   updateHostedAsset,
   upsertHostedAsset,
   verifyHostedAsset,
   type HostedVideoBundle,
 } from '../adminService';
 import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
+import { Image } from 'expo-image';
+import { probeVideoDuration } from '../../hosted/hostedProbe';
 import { AdminGate, type AdminContext } from '../components/AdminGate';
 import {
   AdminButton,
@@ -264,6 +270,25 @@ function ManagePanel({
       setPermissionNote('');
     }, 'Permission recorded. Publishing is now unlocked for this recording.');
 
+  /**
+   * Persist a probed duration (see hostedProbe): writes the video
+   * row's duration_seconds and pre-fills the schedule duration, so a
+   * session of this recording ends — and late joiners clamp — at the
+   * true end. Best-effort: a failed probe never blocks the upload.
+   */
+  const persistProbedDuration = async (seconds: number | null) => {
+    if (seconds == null || seconds <= 0) return;
+    try {
+      await setVideoDuration(video.id, seconds, ctx.userId);
+      setSessionDurationMin((current) =>
+        current.trim() ? current : String(Math.max(1, Math.ceil(seconds / 60))),
+      );
+    } catch {
+      // The upload itself already succeeded; duration can also be
+      // healed later by probe-on-first-play (admin watching).
+    }
+  };
+
   const onFilePicked = async (file: File) => {
     const safeName = file.name.replace(/[^A-Za-z0-9._-]+/g, '_');
     const key = `hosted/${video.id}/${safeName}`;
@@ -272,6 +297,9 @@ function ManagePanel({
     onNotice(null);
     setUploadPct(0);
     try {
+      const objectUrl = URL.createObjectURL(file);
+      const probed = await probeVideoDuration(objectUrl).catch(() => null);
+      URL.revokeObjectURL(objectUrl);
       await uploadOriginalToR2(file, key, (p) =>
         setUploadPct(Math.floor((p.loadedBytes / Math.max(1, p.totalBytes)) * 100)),
       );
@@ -285,6 +313,7 @@ function ManagePanel({
         },
         ctx.userId,
       );
+      await persistProbedDuration(probed);
       onNotice('Original uploaded. Now tap "Verify & make ready" below.');
       await onChanged();
     } catch (err) {
@@ -316,6 +345,9 @@ function ManagePanel({
     onNotice(null);
     setUploadPct(0);
     try {
+      // Probe the file's real duration on-device BEFORE the upload —
+      // the session engine needs it and the server cannot measure it.
+      const probed = await probeVideoDuration(picked.uri).catch(() => null);
       await uploadOriginalToR2(
         {
           uri: picked.uri,
@@ -336,6 +368,7 @@ function ManagePanel({
         },
         ctx.userId,
       );
+      await persistProbedDuration(probed);
       onNotice('Original uploaded. Now tap "Verify & make ready" below.');
       await onChanged();
     } catch (err) {
@@ -387,7 +420,14 @@ function ManagePanel({
       if (Number.isNaN(start.getTime())) {
         throw new Error('Enter the date as YYYY-MM-DD and the time as HH:MM (24-hour).');
       }
-      const durationMin = sessionDurationMin.trim() ? Number(sessionDurationMin.trim()) : null;
+      // Window end: the typed minutes win; otherwise the recording's
+      // own probed duration — a session scheduled without any end is
+      // what used to sit at NOW PLAYING long past the video's end.
+      const durationMin = sessionDurationMin.trim()
+        ? Number(sessionDurationMin.trim())
+        : video.duration_seconds
+          ? Math.ceil(video.duration_seconds / 60)
+          : null;
       const end =
         durationMin && durationMin > 0
           ? new Date(start.getTime() + durationMin * 60_000)
@@ -402,6 +442,37 @@ function ManagePanel({
         ctx.userId,
       );
     }, `Session scheduled for ${sessionDate.trim()} at ${sessionTime.trim()} — it will show as UPCOMING, then NOW PLAYING at that time.`);
+
+  // Thumbnail upload (user request, 27 Nov 2026): hosted videos have
+  // no YouTube thumbnail to borrow, so without one every card renders
+  // black. The picked image is compressed to a small JPEG and stored
+  // on the video row as a data URI (the catalogue holds essentially
+  // one hosted video at a time — no separate image host needed).
+  const pickThumbnail = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      onError('Photo access is needed to choose a thumbnail.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 1,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    await run(async () => {
+      const manipulated = await ImageManipulator.manipulateAsync(
+        result.assets[0].uri,
+        [{ resize: { width: 640 } }],
+        { compress: 0.72, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+      );
+      if (!manipulated.base64) throw new Error('Could not process that image.');
+      await setVideoThumbnail(
+        video.id,
+        `data:image/jpeg;base64,${manipulated.base64}`,
+        ctx.userId,
+      );
+    }, 'Thumbnail saved — cards for this recording will show it everywhere.');
+  };
 
   const onDeleteAsset = (confirmOnlyCopy: boolean) =>
     run(async () => {
@@ -488,6 +559,27 @@ function ManagePanel({
           onPress={() => void pickFileNative()}
         />
       )}
+
+      {/* ── Thumbnail (hosted videos have no YouTube thumb) ── */}
+      <Text style={styles.subhead}>Thumbnail</Text>
+      {video.thumbnail_url ? (
+        <Image
+          source={{ uri: video.thumbnail_url }}
+          style={styles.thumbPreview}
+          contentFit="cover"
+        />
+      ) : (
+        <Text style={styles.help}>
+          No thumbnail yet — without one, this recording&apos;s cards render black in the app.
+        </Text>
+      )}
+      <View style={styles.actions}>
+        <AdminButton
+          title={video.thumbnail_url ? 'Change thumbnail' : 'Upload thumbnail'}
+          disabled={busy}
+          onPress={() => void pickThumbnail()}
+        />
+      </View>
 
       {/* ── Make ready (direct-file: no transcode step) ── */}
       <Text style={styles.subhead}>3 · Make ready</Text>
@@ -626,6 +718,7 @@ const createStyles = (colors: ThemeColors) =>
       backgroundColor: colors.surface,
     },
     subhead: { ...typography.chip, color: colors.text, marginTop: spacing.sm },
+    thumbPreview: { width: 160, aspectRatio: 16 / 9, borderRadius: radii.card },
     actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, alignItems: 'center' },
     pickerOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   });

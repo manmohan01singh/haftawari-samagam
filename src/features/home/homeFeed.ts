@@ -453,6 +453,13 @@ export function createHomeFeedPager({ channels, filter, seed }: HomeFeedPagerOpt
         collected.push(catItem);
         progressed = true;
       }
+      // Parallel pre-fill (speed fix, 27 Nov 2026): every channel's
+      // network fetch for this round runs CONCURRENTLY. The takes
+      // below stay sequential (they share the dedupe set), but they
+      // now read from warm buffers — first paint no longer waits on
+      // nine channels' round trips in series, and a topic chip's
+      // deep scan stops feeling like an empty tab.
+      await Promise.all(cursors.map((c) => fillBuffer(c)));
       for (const cursor of cursors) {
         if (collected.length >= count) break;
         const item = await takeChannel(cursor);

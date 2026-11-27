@@ -72,6 +72,46 @@ export async function fetchHostedPlaybackUrl(videoId: string): Promise<string> {
   return data.url;
 }
 
+/**
+ * Probe-on-first-play self-heal (deep-research session-completion
+ * model, 27 Nov 2026): when a player discovers a hosted video's real
+ * duration and the catalogue row still has none, an ADMIN viewer's
+ * app writes it back — sessions then complete at the true end
+ * instead of playing past it or sitting black past the offset.
+ * Best-effort and silent: members can't write (RLS), and any failure
+ * is swallowed — playback never depends on this.
+ */
+export async function reportVideoDurationIfMissing(
+  videoId: string,
+  durationSeconds: number,
+): Promise<void> {
+  try {
+    if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return;
+    const supabase = requireSupabase();
+    const { data: video } = await supabase
+      .from('videos')
+      .select('duration_seconds')
+      .eq('id', videoId)
+      .maybeSingle();
+    if (!video || video.duration_seconds != null) return;
+    const { data: auth } = await supabase.auth.getUser();
+    if (!auth.user) return;
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', auth.user.id)
+      .maybeSingle();
+    if (!profile || profile.role !== 'admin') return;
+    await supabase
+      .from('videos')
+      .update({ duration_seconds: Math.round(durationSeconds) })
+      .eq('id', videoId)
+      .is('duration_seconds', null);
+  } catch {
+    // Self-heal only — never surface.
+  }
+}
+
 /** The hosted asset row for a video (RLS: published-hosted or admin). */
 export async function fetchHostedAsset(videoId: string): Promise<HostedAsset | null> {
   const supabase = requireSupabase();

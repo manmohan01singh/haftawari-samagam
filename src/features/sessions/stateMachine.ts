@@ -54,11 +54,19 @@ export function deriveStatus(args: {
   // end of the video until the window closes.
   const windowEndMs = scheduledEndAt ? Date.parse(scheduledEndAt) : null;
   const recordingEndMs = durationSeconds != null ? startMs + durationSeconds * 1000 : null;
+  // Hard cap (deep-research session-completion model, 27 Nov 2026):
+  // when NEITHER a window end nor a recording duration is known
+  // (legacy rows, unprobed hosted files), the session must still end
+  // — a NOW PLAYING that never finishes is worse than a generous
+  // bound. 4h exceeds every real samagam in the catalogue (~3h max);
+  // admin flows now always set a duration or a window end, so the
+  // cap is only a backstop for legacy data.
+  const HARD_CAP_MS = 4 * 60 * 60 * 1000;
   const endMs =
     windowEndMs != null && recordingEndMs != null
       ? Math.min(windowEndMs, recordingEndMs)
-      : (windowEndMs ?? recordingEndMs);
-  if (endMs != null && nowMs >= endMs) return 'completed';
+      : (windowEndMs ?? recordingEndMs ?? startMs + HARD_CAP_MS);
+  if (nowMs >= endMs) return 'completed';
   return 'now_playing';
 }
 
