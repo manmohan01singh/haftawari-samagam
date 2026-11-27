@@ -110,6 +110,9 @@ export function PlaybackHost({
       top: slotRect.y,
       width: slotRect.width,
       height: slotRect.height,
+      // Belt-and-braces clip at the slot itself: nothing the player
+      // renders may ever paint over the sheet below it.
+      overflow: 'hidden',
     };
   } else if (mode === 'mini' && item.kind === 'hosted') {
     // Floating mini: 168 wide, 16:9 → ~94.5 tall.

@@ -668,8 +668,26 @@ const createStyles = (colors: ThemeColors) =>
       width: '100%',
       aspectRatio: layout.thumbnailAspectRatio,
       backgroundColor: colors.playerBackground,
+      // Clip the video surface to the 16:9 box, always: on web a
+      // portrait source's <video> element otherwise renders at its
+      // intrinsic aspect and spills far below the player over the
+      // sheet (user's phone screenshot, 27 Nov 2026 — the frame ran
+      // to ~63% of the screen while the chrome ended at ~34%).
+      overflow: 'hidden',
     },
-    video: { flex: 1, backgroundColor: colors.playerBackground },
+    // Pin the surface to the wrap's exact box instead of flex
+    // sizing: a flex-sized replaced element can still grow to its
+    // intrinsic height on web; an absolutely-pinned one cannot,
+    // and contentFit="contain" then letterboxes the frame inside
+    // the box exactly like YouTube.
+    video: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: colors.playerBackground,
+    },
     buffering: {
       position: 'absolute',
       top: 0,
