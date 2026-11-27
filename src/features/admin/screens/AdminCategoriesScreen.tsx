@@ -1,8 +1,8 @@
 import { useFocusEffect } from '@react-navigation/native';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useMemo } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { EmptyState } from '../../../components/common/EmptyState';
-import { lightColors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useTheme, type ThemeColors } from '../../../theme';
 import type { Category } from '../../../types/database';
 import {
   createCategory,
@@ -20,11 +20,14 @@ import {
   ErrorBanner,
   LoadingView,
   SectionTitle,
-  adminStyles,
+  createAdminStyles,
   friendlyError,
 } from '../components/AdminUi';
 
 function CategoriesContent({ ctx }: { ctx: AdminContext }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const adminStyles = useMemo(() => createAdminStyles(colors), [colors]);
   const [categories, setCategories] = useState<Category[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -137,7 +140,7 @@ function CategoriesContent({ ctx }: { ctx: AdminContext }) {
           value={newName}
           onChangeText={setNewName}
           placeholder="e.g. Haftawari, Amritvela, Evening Kirtan"
-          placeholderTextColor={lightColors.textSecondary}
+          placeholderTextColor={colors.textSecondary}
         />
         {newName.trim() ? (
           <Text style={styles.help}>Slug: {slugifyCategoryName(newName) || '—'}</Text>
@@ -184,7 +187,7 @@ function CategoriesContent({ ctx }: { ctx: AdminContext }) {
                     value={editName}
                     onChangeText={setEditName}
                     placeholder="New name"
-                    placeholderTextColor={lightColors.textSecondary}
+                    placeholderTextColor={colors.textSecondary}
                   />
                   <Text style={styles.help}>
                     Only the display name changes — the slug stays &quot;{category.slug}&quot;
@@ -241,9 +244,9 @@ export function AdminCategoriesScreen() {
   return <AdminGate>{(ctx) => <CategoriesContent ctx={ctx} />}</AdminGate>;
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   form: { gap: spacing.md },
-  help: { ...typography.body, color: lightColors.textSecondary },
+  help: { ...typography.body, color: colors.textSecondary },
   notice: { ...typography.body, color: '#1B5E20' },
   listHeader: {
     flexDirection: 'row',
@@ -252,15 +255,15 @@ const styles = StyleSheet.create({
   },
   card: {
     borderWidth: 1,
-    borderColor: lightColors.border,
+    borderColor: colors.border,
     borderRadius: radii.card,
     padding: spacing.md,
     gap: spacing.md,
-    backgroundColor: lightColors.surface,
+    backgroundColor: colors.surface,
   },
   cardText: { gap: spacing.xs },
-  name: { ...typography.cardTitle, color: lightColors.text },
-  meta: { ...typography.metadata, color: lightColors.textSecondary },
+  name: { ...typography.cardTitle, color: colors.text },
+  meta: { ...typography.metadata, color: colors.textSecondary },
   editBox: { gap: spacing.sm },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 });

@@ -1,8 +1,8 @@
 import { useFocusEffect } from '@react-navigation/native';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useMemo } from 'react';
 import { Image, StyleSheet, Text, TextInput, View } from 'react-native';
 import { EmptyState } from '../../../components/common/EmptyState';
-import { lightColors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useTheme, type ThemeColors } from '../../../theme';
 import type { Category, Video } from '../../../types/database';
 import { isYouTubeConfigured } from '../../../lib/youtube';
 import {
@@ -22,13 +22,16 @@ import {
   ErrorBanner,
   LoadingView,
   SectionTitle,
-  adminStyles,
+  createAdminStyles,
   formatDuration,
   publishStateChip,
   friendlyError,
 } from '../components/AdminUi';
 
 function VideosContent({ ctx }: { ctx: AdminContext }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const adminStyles = useMemo(() => createAdminStyles(colors), [colors]);
   const [videos, setVideos] = useState<Video[] | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -114,7 +117,7 @@ function VideosContent({ ctx }: { ctx: AdminContext }) {
           value={urlInput}
           onChangeText={setUrlInput}
           placeholder="https://www.youtube.com/watch?v=…"
-          placeholderTextColor={lightColors.textSecondary}
+          placeholderTextColor={colors.textSecondary}
           autoCapitalize="none"
           autoCorrect={false}
         />
@@ -258,9 +261,9 @@ export function AdminVideosScreen() {
   return <AdminGate>{(ctx) => <VideosContent ctx={ctx} />}</AdminGate>;
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   addBox: { gap: spacing.md },
-  help: { ...typography.body, color: lightColors.textSecondary },
+  help: { ...typography.body, color: colors.textSecondary },
   notice: { ...typography.body, color: '#1B5E20' },
   listHeader: {
     flexDirection: 'row',
@@ -269,26 +272,26 @@ const styles = StyleSheet.create({
   },
   card: {
     borderWidth: 1,
-    borderColor: lightColors.border,
+    borderColor: colors.border,
     borderRadius: radii.card,
     padding: spacing.md,
     gap: spacing.md,
-    backgroundColor: lightColors.surface,
+    backgroundColor: colors.surface,
   },
   cardTop: { flexDirection: 'row', gap: spacing.md },
   thumb: { width: 120, height: 68, borderRadius: radii.badge, backgroundColor: '#000' },
-  thumbEmpty: { backgroundColor: lightColors.surfaceVariant },
+  thumbEmpty: { backgroundColor: colors.surfaceVariant },
   cardText: { flex: 1, gap: spacing.xs },
-  title: { ...typography.cardTitle, color: lightColors.text },
-  meta: { ...typography.metadata, color: lightColors.textSecondary },
-  metaSmall: { ...typography.metadata, color: lightColors.textSecondary, fontSize: 11 },
+  title: { ...typography.cardTitle, color: colors.text },
+  meta: { ...typography.metadata, color: colors.textSecondary },
+  metaSmall: { ...typography.metadata, color: colors.textSecondary, fontSize: 11 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   picker: {
     gap: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: lightColors.border,
+    borderTopColor: colors.border,
     paddingTop: spacing.md,
   },
-  pickerLabel: { ...typography.chip, color: lightColors.text },
+  pickerLabel: { ...typography.chip, color: colors.text },
   pickerOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 });

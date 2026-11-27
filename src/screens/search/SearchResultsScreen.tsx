@@ -30,7 +30,7 @@ import {
 import { formatCount } from '../../lib/format';
 import { OFFICIAL_CHANNEL_HANDLE, type YouTubeVideoMetadata } from '../../lib/youtube';
 import { getUploadsCached, uploadsPlaylistIdFor } from '../../features/channels';
-import { lightColors, nativeApp, radii, spacing, typography } from '../../theme';
+import { nativeApp, radii, spacing, typography, useTheme, type ThemeColors } from '../../theme';
 import { goBackOrTab } from '../../navigation/safeBack';
 import type { RootStackParamList } from '../../navigation/types';
 import { FEED_LIST_PERF, H_LIST_PERF } from '../../lib/listPerf';
@@ -68,6 +68,8 @@ function searchResultCardData(v: VideoResult, channelAvatarUrl: string | null): 
  * "haftawari") a tappable "Did you mean" line says so.
  */
 export function SearchResultsScreen({ route, navigation }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { query } = route.params;
   const channel = useOfficialChannel();
   const { width: windowWidth } = useWindowDimensions();
@@ -331,7 +333,7 @@ export function SearchResultsScreen({ route, navigation }: Props) {
             accessibilityLabel="Retry channel search"
           >
             {legRetrying ? (
-              <ActivityIndicator size="small" color={lightColors.text} />
+              <ActivityIndicator size="small" color={colors.text} />
             ) : (
               <Text style={styles.retryChipText}>Retry</Text>
             )}
@@ -362,7 +364,7 @@ export function SearchResultsScreen({ route, navigation }: Props) {
                     singleton (a verified music channel per the API
                     record), so the badge belongs to this record only. */}
                 {channelResult.channelId === OFFICIAL_CHANNEL_ID ? (
-                  <MaterialIcons name="verified" size={16} color={lightColors.textSecondary} style={styles.verifiedBadge} />
+                  <MaterialIcons name="verified" size={16} color={colors.textSecondary} style={styles.verifiedBadge} />
                 ) : null}
               </View>
               {channelResult.handle ? <Text style={styles.channelHandle}>{channelResult.handle}</Text> : null}
@@ -389,10 +391,10 @@ export function SearchResultsScreen({ route, navigation }: Props) {
               <MaterialIcons
                 name={following ? 'notifications' : 'notifications-none'}
                 size={20}
-                color={lightColors.text}
+                color={colors.text}
               />
               <Text style={styles.followPillText}>{following ? 'Following' : 'Subscribe'}</Text>
-              {following ? <MaterialIcons name="expand-more" size={18} color={lightColors.text} /> : null}
+              {following ? <MaterialIcons name="expand-more" size={18} color={colors.text} /> : null}
             </Pressable>
             <Pressable
               style={styles.viewChannelPill}
@@ -486,7 +488,7 @@ export function SearchResultsScreen({ route, navigation }: Props) {
       <View style={styles.centered}>
         <View style={styles.bar}>
           <Pressable onPress={() => goBackOrTab(navigation, 'Home')} hitSlop={10} accessibilityLabel="Back">
-            <MaterialIcons name="arrow-back" size={24} color={lightColors.text} />
+            <MaterialIcons name="arrow-back" size={24} color={colors.text} />
           </Pressable>
           <View style={styles.field}>
             <TextInput
@@ -505,7 +507,7 @@ export function SearchResultsScreen({ route, navigation }: Props) {
               accessibilityRole="button"
               accessibilityLabel="Clear search and go to Home"
             >
-              <MaterialIcons name="close" size={20} color={lightColors.text} />
+              <MaterialIcons name="close" size={20} color={colors.text} />
             </Pressable>
           </View>
         </View>
@@ -516,7 +518,7 @@ export function SearchResultsScreen({ route, navigation }: Props) {
                 must be able to tell their tap registered and a search
                 is running, not stare at a blank page. */}
             <View style={styles.searchingRow}>
-              <ActivityIndicator color={lightColors.text} />
+              <ActivityIndicator color={colors.text} />
               <Text style={styles.searchingLabel}>Searching for “{query}”…</Text>
             </View>
             <SkeletonCard variant="shelf" />
@@ -525,7 +527,7 @@ export function SearchResultsScreen({ route, navigation }: Props) {
           </View>
         ) : error ? (
           <View style={styles.emptyWrap}>
-            <MaterialIcons name="error-outline" size={40} color={lightColors.accent} />
+            <MaterialIcons name="error-outline" size={40} color={colors.accent} />
             <EmptyState title="Search failed" message={error} />
             <Pressable style={styles.actionPill} onPress={retry} accessibilityRole="button">
               <Text style={styles.actionPillText}>Try again</Text>
@@ -541,7 +543,7 @@ export function SearchResultsScreen({ route, navigation }: Props) {
             ListEmptyComponent={
               channelMatches || allItems.length > 0 ? undefined : (
                 <View style={styles.emptyWrap}>
-                  <MaterialIcons name="search-off" size={40} color={lightColors.textSecondary} />
+                  <MaterialIcons name="search-off" size={40} color={colors.textSecondary} />
                   <EmptyState
                     title="No results found"
                     message={
@@ -592,8 +594,8 @@ export function SearchResultsScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: lightColors.background },
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background },
   centered: { flex: 1, width: '100%', maxWidth: 960, alignSelf: 'center' },
   bar: {
     flexDirection: 'row',
@@ -607,50 +609,50 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
     height: nativeApp.searchChannel.pillHeight, // 48
   },
 
   searchingRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 16 },
-  searchingLabel: { fontSize: 15, color: lightColors.textSecondary },
-  fieldInput: { flex: 1, fontSize: 16, color: lightColors.text, outlineStyle: 'none' } as object,
+  searchingLabel: { fontSize: 15, color: colors.textSecondary },
+  fieldInput: { flex: 1, fontSize: 16, color: colors.text, outlineStyle: 'none' } as object,
   emptyWrap: { alignItems: 'center', gap: spacing.md, paddingTop: spacing.xl },
   actionPill: {
-    backgroundColor: lightColors.subscribeBackground,
+    backgroundColor: colors.subscribeBackground,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.md,
   },
-  actionPillText: { ...typography.chip, color: lightColors.subscribeText },
+  actionPillText: { ...typography.chip, color: colors.subscribeText },
   actionPillOutline: {
     borderWidth: 1,
-    borderColor: lightColors.border,
+    borderColor: colors.border,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.md,
   },
-  actionPillOutlineText: { ...typography.chip, color: lightColors.text },
+  actionPillOutlineText: { ...typography.chip, color: colors.text },
   listPad: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xl },
   didYouMeanRow: { paddingVertical: spacing.sm },
-  didYouMeanText: { ...typography.body, fontSize: 15, color: lightColors.textSecondary },
-  didYouMeanStrong: { color: lightColors.text, fontWeight: '600', textDecorationLine: 'underline' },
-  pendingNote: { ...typography.metadata, color: lightColors.textSecondary, marginTop: spacing.sm },
-  skippedNote: { ...typography.metadata, color: lightColors.textSecondary, marginTop: spacing.sm },
+  didYouMeanText: { ...typography.body, fontSize: 15, color: colors.textSecondary },
+  didYouMeanStrong: { color: colors.text, fontWeight: '600', textDecorationLine: 'underline' },
+  pendingNote: { ...typography.metadata, color: colors.textSecondary, marginTop: spacing.sm },
+  skippedNote: { ...typography.metadata, color: colors.textSecondary, marginTop: spacing.sm },
   skippedRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm },
   skippedText: { flex: 1, marginTop: 0 },
   retryChip: {
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
     paddingVertical: 6,
     minWidth: 72,
     alignItems: 'center',
   },
-  retryChipText: { ...typography.chip, color: lightColors.text },
+  retryChipText: { ...typography.chip, color: colors.text },
   tintBlock: {
-    backgroundColor: lightColors.searchTint,
+    backgroundColor: colors.searchTint,
     // Bleed to the screen edges: cancel the list's horizontal padding.
     marginHorizontal: -spacing.lg,
     paddingHorizontal: spacing.lg,
@@ -667,17 +669,17 @@ const styles = StyleSheet.create({
   channelNameRow: { flexDirection: 'row', alignItems: 'flex-start' },
   verifiedBadge: { marginLeft: spacing.xs, marginTop: 5, flexShrink: 0 },
   avatarFallback: {
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarInitial: { fontSize: 30, fontWeight: '600', color: lightColors.textSecondary },
+  avatarInitial: { fontSize: 30, fontWeight: '600', color: colors.textSecondary },
   channelLines: { flex: 1, justifyContent: 'center' },
   channelName: {
     fontSize: nativeApp.searchChannel.nameFontSize,
     lineHeight: 25,
     fontWeight: '700',
-    color: lightColors.text,
+    color: colors.text,
     flexShrink: 1,
   },
   buttonRow: {
@@ -692,13 +694,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: radii.pill,
   },
-  followPillText: { fontSize: 15, fontWeight: '600', color: lightColors.text },
-  followNote: { fontSize: 11, color: lightColors.textSecondary, marginTop: 6 },
-  channelHandle: { fontSize: 14, color: lightColors.textSecondary, marginTop: 3 },
-  channelMeta: { fontSize: 14, color: lightColors.textSecondary, marginTop: 2 },
+  followPillText: { fontSize: 15, fontWeight: '600', color: colors.text },
+  followNote: { fontSize: 11, color: colors.textSecondary, marginTop: 6 },
+  channelHandle: { fontSize: 14, color: colors.textSecondary, marginTop: 3 },
+  channelMeta: { fontSize: 14, color: colors.textSecondary, marginTop: 2 },
   viewChannelPill: {
     flex: 1,
     height: nativeApp.searchChannel.buttonHeight, // 44
@@ -708,18 +710,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  viewChannelText: { fontSize: 15, fontWeight: '600', color: lightColors.text },
-  latestHeading: { ...typography.sectionTitle, color: lightColors.text, marginTop: spacing.xl, marginBottom: spacing.md },
+  viewChannelText: { fontSize: 15, fontWeight: '600', color: colors.text },
+  latestHeading: { ...typography.sectionTitle, color: colors.text, marginTop: spacing.xl, marginBottom: spacing.md },
   carouselContent: { gap: spacing.lg },
-  resultsHeading: { ...typography.sectionTitle, color: lightColors.text, marginTop: spacing.xl, marginBottom: spacing.md },
+  resultsHeading: { ...typography.sectionTitle, color: colors.text, marginTop: spacing.xl, marginBottom: spacing.md },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
   chip: {
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: radii.badge + 4,
     paddingHorizontal: spacing.md,
     paddingVertical: 6,
   },
-  chipSelected: { backgroundColor: lightColors.selectedChipBackground },
-  chipText: { ...typography.chip, color: lightColors.text },
-  chipTextSelected: { color: lightColors.selectedChipText },
+  chipSelected: { backgroundColor: colors.selectedChipBackground },
+  chipText: { ...typography.chip, color: colors.text },
+  chipTextSelected: { color: colors.selectedChipText },
 });

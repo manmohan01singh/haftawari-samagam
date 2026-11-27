@@ -1,8 +1,8 @@
-import React, { memo, useState } from 'react';
+import React, { memo, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { layout, lightColors, radii, spacing } from '../../theme';
+import { layout, radii, spacing, useTheme, type ThemeColors } from '../../theme';
 import { CardActionSheet, type CardMenuAction } from '../common/CardActionSheet';
 import { formatDuration } from './VideoCard';
 import type { CardVideoData } from './cardData';
@@ -24,6 +24,8 @@ interface GridCardProps {
  * real API values only.
  */
 export const GridCard = memo(function GridCard({ data, onPress, menuActions }: GridCardProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [menuOpen, setMenuOpen] = useState(false);
   const isLive = data.broadcastState === 'live';
   return (
@@ -63,7 +65,7 @@ export const GridCard = memo(function GridCard({ data, onPress, menuActions }: G
               accessibilityLabel="Video options"
               style={styles.moreButton}
             >
-              <MaterialIcons name="more-vert" size={18} color={lightColors.text} />
+              <MaterialIcons name="more-vert" size={18} color={colors.text} />
             </Pressable>
           ) : null}
         </View>
@@ -83,7 +85,7 @@ export const GridCard = memo(function GridCard({ data, onPress, menuActions }: G
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   cell: { flex: 1 },
   card: { paddingBottom: spacing.xl },
   thumbnailWrap: { position: 'relative' },
@@ -92,9 +94,9 @@ const styles = StyleSheet.create({
     aspectRatio: layout.thumbnailAspectRatio,
     borderRadius: radii.card,
     // Phase 9 W2 (audit D14): surfaceVariant placeholder, as FeedCard.
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
   },
-  thumbnailEmpty: { backgroundColor: lightColors.surfaceVariant },
+  thumbnailEmpty: { backgroundColor: colors.surfaceVariant },
   liveBadge: {
     position: 'absolute',
     right: spacing.sm,
@@ -102,7 +104,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    backgroundColor: lightColors.accent,
+    backgroundColor: colors.accent,
     borderRadius: radii.liveBadge,
     paddingHorizontal: 5,
     paddingVertical: 2,
@@ -119,10 +121,10 @@ const styles = StyleSheet.create({
   },
   durationText: { color: '#FFFFFF', fontSize: 11, fontWeight: '600' },
   titleRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: spacing.sm },
-  title: { flex: 1, fontSize: 14, lineHeight: 19, fontWeight: '600', color: lightColors.text },
+  title: { flex: 1, fontSize: 14, lineHeight: 19, fontWeight: '600', color: colors.text },
   // Phase 9 W2 (audit D15): ≥44×44 hit box — the old 18px glyph +
   // hitSlop 8 gave ≈34px, the smallest target in the app.
   moreButton: { marginLeft: 2, marginTop: 1, minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  channel: { fontSize: 12, color: lightColors.textSecondary, marginTop: 2 },
-  meta: { fontSize: 12, color: lightColors.textSecondary, marginTop: 1 },
+  channel: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  meta: { fontSize: 12, color: colors.textSecondary, marginTop: 1 },
 });

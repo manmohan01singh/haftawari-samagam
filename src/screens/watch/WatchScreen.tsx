@@ -51,7 +51,7 @@ import {
   recordWatchHistory,
   setVideoSaved,
 } from '../../lib/videos';
-import { layout, lightColors, nativeApp, radii, spacing, typography } from '../../theme';
+import { layout, nativeApp, radii, spacing, typography, useTheme, type ThemeColors } from '../../theme';
 import { goBackOrTab } from '../../navigation/safeBack';
 import { BackButton } from '../../components/layout/StackHeader';
 import { recordLocalWatch } from '../../features/library/localHistory';
@@ -88,6 +88,8 @@ interface ResolvedWatch {
  * screen plays archive recordings.
  */
 export function WatchScreen({ route, navigation }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { videoRowId, youtubeVideoId, sessionId } = route.params;
   const { user } = useAuth();
   const officialChannel = useOfficialChannel();
@@ -669,7 +671,7 @@ export function WatchScreen({ route, navigation }: Props) {
             accessibilityRole="button"
             accessibilityLabel="Expand player"
           >
-            <MaterialIcons name="expand-less" size={24} color={lightColors.text} />
+            <MaterialIcons name="expand-less" size={24} color={colors.text} />
           </Pressable>
           <Pressable
             onPress={() => goBackOrTab(navigation, 'Home')}
@@ -677,7 +679,7 @@ export function WatchScreen({ route, navigation }: Props) {
             accessibilityRole="button"
             accessibilityLabel="Close player"
           >
-            <MaterialIcons name="close" size={24} color={lightColors.text} />
+            <MaterialIcons name="close" size={24} color={colors.text} />
           </Pressable>
         </>
       ) : null}
@@ -703,7 +705,7 @@ export function WatchScreen({ route, navigation }: Props) {
         <BackButton onPress={() => goBackOrTab(navigation, 'Home')} />
       </View>
     ),
-    [navigation],
+    [navigation, styles],
   );
 
   const header = useMemo(() => {
@@ -747,7 +749,7 @@ export function WatchScreen({ route, navigation }: Props) {
                 accessibilityRole="button"
                 accessibilityLabel="Minimise player"
               >
-                <MaterialIcons name="expand-more" size={24} color={lightColors.text} />
+                <MaterialIcons name="expand-more" size={24} color={colors.text} />
               </Pressable>
             </View>
             <Text style={styles.title} numberOfLines={expanded ? undefined : 2}>
@@ -833,9 +835,9 @@ export function WatchScreen({ route, navigation }: Props) {
               <MaterialIcons
                 name={following ? 'notifications' : 'notifications-none'}
                 size={20}
-                color={lightColors.text}
+                color={colors.text}
               />
-              <MaterialIcons name="expand-more" size={18} color={lightColors.text} />
+              <MaterialIcons name="expand-more" size={18} color={colors.text} />
             </Pressable>
             <View style={styles.actions}>
               <Pressable
@@ -844,7 +846,7 @@ export function WatchScreen({ route, navigation }: Props) {
                 accessibilityLabel="Like"
                 accessibilityRole="button"
               >
-                <MaterialIcons name="thumb-up-off-alt" size={24} color={lightColors.text} />
+                <MaterialIcons name="thumb-up-off-alt" size={24} color={colors.text} />
               </Pressable>
               <Pressable
                 onPress={() => showToast('Dislikes are not available in this app yet — nothing was recorded')}
@@ -852,10 +854,10 @@ export function WatchScreen({ route, navigation }: Props) {
                 accessibilityLabel="Dislike"
                 accessibilityRole="button"
               >
-                <MaterialIcons name="thumb-down-off-alt" size={24} color={lightColors.text} />
+                <MaterialIcons name="thumb-down-off-alt" size={24} color={colors.text} />
               </Pressable>
               <Pressable onPress={onShare} hitSlop={ICON_HIT_SLOP} accessibilityLabel="Share" accessibilityRole="button">
-                <MaterialIcons name="share" size={24} color={lightColors.text} />
+                <MaterialIcons name="share" size={24} color={colors.text} />
               </Pressable>
               {resolved.row ? (
                 <Pressable
@@ -865,7 +867,7 @@ export function WatchScreen({ route, navigation }: Props) {
                   accessibilityRole="button"
                   accessibilityState={{ selected: saved }}
                 >
-                  <MaterialIcons name={saved ? 'bookmark' : 'bookmark-border'} size={24} color={lightColors.text} />
+                  <MaterialIcons name={saved ? 'bookmark' : 'bookmark-border'} size={24} color={colors.text} />
                 </Pressable>
               ) : null}
               {/* ⋮ (screenshot 06's horizontal •••): opens the real
@@ -880,7 +882,7 @@ export function WatchScreen({ route, navigation }: Props) {
                 accessibilityLabel="More actions"
                 accessibilityRole="button"
               >
-                <MaterialIcons name="more-horiz" size={24} color={lightColors.text} />
+                <MaterialIcons name="more-horiz" size={24} color={colors.text} />
               </Pressable>
             </View>
           </View>
@@ -965,6 +967,8 @@ export function WatchScreen({ route, navigation }: Props) {
     presenceCount,
     mini,
     sheetPanResponder,
+    colors,
+    styles,
   ]);
 
   if (loading) {
@@ -985,7 +989,7 @@ export function WatchScreen({ route, navigation }: Props) {
             />
           ) : null}
           <View style={styles.playerSpinner}>
-            <ActivityIndicator color={youtubeVideoId ? '#FFFFFF' : lightColors.textSecondary} />
+            <ActivityIndicator color={youtubeVideoId ? '#FFFFFF' : colors.textSecondary} />
             {!youtubeVideoId ? (
               <Text style={styles.playerSkeletonLabel}>Loading recording…</Text>
             ) : null}
@@ -1054,7 +1058,7 @@ export function WatchScreen({ route, navigation }: Props) {
               accessibilityLabel="Load more videos"
             >
               {upNextLoadingMore ? (
-                <ActivityIndicator color={lightColors.textSecondary} />
+                <ActivityIndicator color={colors.textSecondary} />
               ) : (
                 <Text style={styles.loadMoreText}>Load more</Text>
               )}
@@ -1144,8 +1148,8 @@ export function WatchScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: lightColors.background },
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background },
   playerWrap: {
     width: '100%',
     // Wide screens (round-3 live check, desktop 1919px): an uncapped
@@ -1156,7 +1160,7 @@ const styles = StyleSheet.create({
     // widths (≤1100) are completely unaffected.
     maxWidth: 1100,
     alignSelf: 'center',
-    backgroundColor: lightColors.playerBackground,
+    backgroundColor: colors.playerBackground,
   },
   // The 16:9 box lives one level in (round-4) so the mini bar can
   // restyle the WRAP into a bottom bar while the box — and the
@@ -1175,9 +1179,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing.sm,
     gap: spacing.md,
-    backgroundColor: lightColors.surface,
+    backgroundColor: colors.surface,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: lightColors.border,
+    borderTopColor: colors.border,
     shadowColor: '#000000',
     shadowOpacity: 0.18,
     shadowRadius: 8,
@@ -1186,8 +1190,8 @@ const styles = StyleSheet.create({
     zIndex: 20,
   },
   miniTitleZone: { flex: 1, justifyContent: 'center' },
-  miniTitle: { fontSize: 13, lineHeight: 17, fontWeight: '500', color: lightColors.text },
-  miniChannel: { fontSize: 11, lineHeight: 14, color: lightColors.textSecondary, marginTop: 1 },
+  miniTitle: { fontSize: 13, lineHeight: 17, fontWeight: '500', color: colors.text },
+  miniChannel: { fontSize: 11, lineHeight: 14, color: colors.textSecondary, marginTop: 1 },
   listMini: { marginTop: 0 },
   listContentMini: { paddingBottom: 80 },
   backRowLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -1200,7 +1204,7 @@ const styles = StyleSheet.create({
   list: { flex: 1, marginTop: -nativeApp.watchSheet.topRadius, zIndex: 1 },
   listContent: { width: '100%', maxWidth: 1100, alignSelf: 'center' },
   headerWrap: { position: 'relative' },
-  playerThumb: { width: '100%', height: '100%', backgroundColor: lightColors.playerBackground },
+  playerThumb: { width: '100%', height: '100%', backgroundColor: colors.playerBackground },
   // Back control: the shared BackButton (Phase 9) in the sheet's
   // header zone, above the title — a plain dark arrow on white, 48dp
   // target; its -12 margin + centred glyph put the icon's left edge
@@ -1223,7 +1227,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 3,
-    backgroundColor: lightColors.accent,
+    backgroundColor: colors.accent,
     zIndex: 2,
   },
   chatWrap: { marginTop: spacing.lg },
@@ -1240,7 +1244,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sheet: {
-    backgroundColor: lightColors.surface,
+    backgroundColor: colors.surface,
     // Screenshot 06 / token: exactly 20px rounded top corners. The
     // OVERLAP itself now comes from the list's -20 margin (see
     // styles.list) — the sheet's own margin is 0, because a negative
@@ -1257,9 +1261,9 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
     zIndex: 1,
   },
-  title: { fontSize: 20, lineHeight: 26, fontWeight: '600', color: lightColors.text },
-  metaLine: { fontSize: 14, color: lightColors.textSecondary, marginTop: spacing.md },
-  moreText: { color: lightColors.text, fontWeight: '600' },
+  title: { fontSize: 20, lineHeight: 26, fontWeight: '600', color: colors.text },
+  metaLine: { fontSize: 14, color: colors.textSecondary, marginTop: spacing.md },
+  moreText: { color: colors.text, fontWeight: '600' },
   channelRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1268,14 +1272,14 @@ const styles = StyleSheet.create({
   },
   channelAvatar: { width: 40, height: 40, borderRadius: 20 },
   avatarFallback: {
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarInitial: { fontSize: 16, fontWeight: '600', color: lightColors.textSecondary },
+  avatarInitial: { fontSize: 16, fontWeight: '600', color: colors.textSecondary },
   channelLines: { flex: 1, minWidth: 0 },
-  channelName: { fontSize: 15, fontWeight: '600', color: lightColors.text },
-  channelMeta: { fontSize: 13, color: lightColors.textSecondary, marginTop: 1 },
+  channelName: { fontSize: 15, fontWeight: '600', color: colors.text },
+  channelMeta: { fontSize: 13, color: colors.textSecondary, marginTop: 1 },
   actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1287,7 +1291,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: radii.pill,
     // Screenshot 06 bell pill: ≈52×40dp, icon-only (bell + chevron).
     paddingHorizontal: spacing.md + 2,
@@ -1295,30 +1299,30 @@ const styles = StyleSheet.create({
   },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 20, flexShrink: 0 },
   descriptionBox: {
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: radii.card,
     padding: spacing.md,
     marginTop: spacing.lg,
   },
-  descriptionText: { fontSize: 14, lineHeight: 20, color: lightColors.text },
+  descriptionText: { fontSize: 14, lineHeight: 20, color: colors.text },
   descriptionToggle: {
     fontSize: 14,
     fontWeight: '600',
-    color: lightColors.text,
+    color: colors.text,
     marginTop: spacing.sm,
   },
   upNextHeading: {
     fontSize: 18,
     lineHeight: 24,
     fontWeight: '700',
-    color: lightColors.text,
+    color: colors.text,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
     paddingBottom: spacing.sm,
   },
   upNextEmpty: {
     fontSize: 14,
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
     textAlign: 'center',
     paddingVertical: spacing.xl,
   },
@@ -1329,37 +1333,37 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.lg,
     marginVertical: spacing.md,
     borderRadius: radii.pill,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
   },
-  loadMoreText: { fontSize: 14, fontWeight: '600', color: lightColors.text },
+  loadMoreText: { fontSize: 14, fontWeight: '600', color: colors.text },
   playerSkeleton: {
     width: '100%',
     maxWidth: 1100,
     alignSelf: 'center',
     aspectRatio: layout.thumbnailAspectRatio,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
   },
-  playerSkeletonLabel: { ...typography.metadata, color: lightColors.textSecondary },
+  playerSkeletonLabel: { ...typography.metadata, color: colors.textSecondary },
   // The loading sheet keeps the real sheet's geometry (white surface,
   // 20px rounded top overlapping the player) so the layout does not
   // jump when the real sheet replaces it.
   sheetSkeleton: {
-    backgroundColor: lightColors.surface,
+    backgroundColor: colors.surface,
     borderTopLeftRadius: nativeApp.watchSheet.topRadius,
     borderTopRightRadius: nativeApp.watchSheet.topRadius,
     marginTop: -nativeApp.watchSheet.topRadius,
     padding: spacing.lg,
     zIndex: 1,
   },
-  skelLine: { height: 18, borderRadius: 4, backgroundColor: lightColors.surfaceVariant },
+  skelLine: { height: 18, borderRadius: 4, backgroundColor: colors.surfaceVariant },
   skelRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.lg, gap: spacing.md },
   skelAvatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
   },
 });

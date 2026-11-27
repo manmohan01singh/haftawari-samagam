@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { lightColors, spacing } from '../../../theme';
+import { spacing, useTheme, type ThemeColors } from '../../../theme';
 import type { ChatMessageWithAuthor } from '../types';
 import { ChatAvatar } from './ChatAvatar';
 
@@ -29,6 +29,8 @@ export const ChatMessageRow = React.memo(function ChatMessageRow({
   message,
   ownAvatarUrl,
 }: ChatMessageRowProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const name = message.author.displayName?.trim() ? message.author.displayName : UNKNOWN_AUTHOR_LABEL;
   return (
     <View style={styles.row}>
@@ -46,7 +48,7 @@ export const ChatMessageRow = React.memo(function ChatMessageRow({
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -63,7 +65,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     fontWeight: '700',
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
   },
   gap: {
     fontSize: 14,
@@ -72,6 +74,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     fontWeight: '400',
-    color: lightColors.text,
+    color: colors.text,
   },
 });

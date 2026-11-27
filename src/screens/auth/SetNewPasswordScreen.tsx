@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -15,7 +15,7 @@ import { branding } from '../../config/branding';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { useAuth } from '../../features/auth/AuthContext';
 import { friendlyAuthError } from '../../features/auth/authHelpers';
-import { lightColors, radii, spacing, typography } from '../../theme';
+import { radii, spacing, typography, useTheme, type ThemeColors } from '../../theme';
 
 /**
  * Set-a-new-password form, shown when the user lands back from a
@@ -30,6 +30,8 @@ import { lightColors, radii, spacing, typography } from '../../theme';
  * signed-in) user continues into the app.
  */
 export function SetNewPasswordScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { clearPasswordRecovery, signOut } = useAuth();
 
   // Escape hatch (P10 leftover fix): this gate screen previously
@@ -108,7 +110,7 @@ export function SetNewPasswordScreen() {
               <TextInput
                 style={styles.passwordInput}
                 placeholder="At least 6 characters"
-                placeholderTextColor={lightColors.textSecondary}
+                placeholderTextColor={colors.textSecondary}
                 autoCapitalize="none"
                 autoCorrect={false}
                 autoComplete="new-password"
@@ -125,7 +127,7 @@ export function SetNewPasswordScreen() {
                 <MaterialIcons
                   name={showPassword ? 'visibility-off' : 'visibility'}
                   size={22}
-                  color={lightColors.textSecondary}
+                  color={colors.textSecondary}
                 />
               </Pressable>
             </View>
@@ -136,7 +138,7 @@ export function SetNewPasswordScreen() {
             <TextInput
               style={styles.input}
               placeholder="Type the same password again"
-              placeholderTextColor={lightColors.textSecondary}
+              placeholderTextColor={colors.textSecondary}
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="new-password"
@@ -155,7 +157,7 @@ export function SetNewPasswordScreen() {
               accessibilityRole="button"
             >
               {busy ? (
-                <ActivityIndicator color={lightColors.subscribeText} />
+                <ActivityIndicator color={colors.subscribeText} />
               ) : (
                 <Text style={styles.primaryButtonText}>Update password</Text>
               )}
@@ -185,53 +187,53 @@ export function SetNewPasswordScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: lightColors.background, paddingHorizontal: spacing.xl, width: '100%', maxWidth: 480, alignSelf: 'center' },
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.xl, width: '100%', maxWidth: 480, alignSelf: 'center' },
   brand: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xxl, paddingTop: spacing.xl },
   playMark: {
     width: 34,
     height: 24,
     borderRadius: 7,
-    backgroundColor: lightColors.accent,
+    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  wordmark: { fontSize: 21, fontWeight: '700', color: lightColors.text, letterSpacing: -0.3 },
-  heading: { ...typography.watchTitle, color: lightColors.text, marginBottom: spacing.lg },
-  intro: { ...typography.body, color: lightColors.textSecondary, marginBottom: spacing.lg },
+  wordmark: { fontSize: 21, fontWeight: '700', color: colors.text, letterSpacing: -0.3 },
+  heading: { ...typography.watchTitle, color: colors.text, marginBottom: spacing.lg },
+  intro: { ...typography.body, color: colors.textSecondary, marginBottom: spacing.lg },
   input: {
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: radii.card,
     paddingHorizontal: spacing.lg,
     paddingVertical: 14,
     fontSize: 16,
-    color: lightColors.text,
+    color: colors.text,
     marginBottom: spacing.md,
   },
-  error: { ...typography.body, color: lightColors.accent, marginBottom: spacing.md },
-  label: { ...typography.chip, color: lightColors.text, marginBottom: spacing.xs, marginTop: spacing.sm },
-  fieldError: { ...typography.metadata, color: lightColors.accent, marginBottom: spacing.sm },
-  helper: { ...typography.metadata, color: lightColors.textSecondary, textAlign: 'center', marginTop: spacing.sm },
-  confirmText: { ...typography.body, color: lightColors.text, marginBottom: spacing.lg },
+  error: { ...typography.body, color: colors.accent, marginBottom: spacing.md },
+  label: { ...typography.chip, color: colors.text, marginBottom: spacing.xs, marginTop: spacing.sm },
+  fieldError: { ...typography.metadata, color: colors.accent, marginBottom: spacing.sm },
+  helper: { ...typography.metadata, color: colors.textSecondary, textAlign: 'center', marginTop: spacing.sm },
+  confirmText: { ...typography.body, color: colors.text, marginBottom: spacing.lg },
   passwordRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: radii.card,
     paddingHorizontal: spacing.lg,
     marginBottom: spacing.md,
   },
-  passwordInput: { flex: 1, paddingVertical: 14, fontSize: 16, color: lightColors.text },
+  passwordInput: { flex: 1, paddingVertical: 14, fontSize: 16, color: colors.text },
   primaryButton: {
-    backgroundColor: lightColors.subscribeBackground,
+    backgroundColor: colors.subscribeBackground,
     borderRadius: radii.pill,
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: spacing.sm,
   },
   buttonDisabled: { opacity: 0.5 },
-  primaryButtonText: { fontSize: 16, fontWeight: '600', color: lightColors.subscribeText },
+  primaryButtonText: { fontSize: 16, fontWeight: '600', color: colors.subscribeText },
   switchRow: { alignItems: 'center', marginTop: spacing.xl, paddingVertical: spacing.md, minHeight: 44, justifyContent: 'center' },
-  switchText: { ...typography.body, color: lightColors.textSecondary },
-  switchStrong: { ...typography.body, color: lightColors.text, fontWeight: '600' },
+  switchText: { ...typography.body, color: colors.textSecondary },
+  switchStrong: { ...typography.body, color: colors.text, fontWeight: '600' },
 });

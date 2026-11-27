@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { supabase } from '../../../lib/supabase';
 import { authRedirectUrl, friendlyAuthError } from '../authHelpers';
-import { lightColors, radii, spacing } from '../../../theme';
+import { radii, spacing, useTheme, type ThemeColors } from '../../../theme';
 import { GoogleGIcon } from './GoogleGIcon';
 
 interface GoogleSignInButtonProps {
@@ -25,6 +25,8 @@ interface GoogleSignInButtonProps {
  * is surfaced by AuthContext's linkError on the sign-in screen.
  */
 export function GoogleSignInButton({ onError }: GoogleSignInButtonProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [busy, setBusy] = useState(false);
 
   const handlePress = async () => {
@@ -65,7 +67,7 @@ export function GoogleSignInButton({ onError }: GoogleSignInButtonProps) {
       accessibilityState={{ disabled: busy, busy }}
     >
       {busy ? (
-        <ActivityIndicator size="small" color={lightColors.textSecondary} />
+        <ActivityIndicator size="small" color={colors.textSecondary} />
       ) : (
         <GoogleGIcon size={20} />
       )}
@@ -76,19 +78,19 @@ export function GoogleSignInButton({ onError }: GoogleSignInButtonProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   button: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: lightColors.border,
+    borderColor: colors.border,
     borderRadius: radii.pill,
     paddingVertical: 12,
     paddingHorizontal: spacing.lg,
     gap: spacing.md,
   },
   buttonBusy: { opacity: 0.7 },
-  label: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '600', color: lightColors.text },
+  label: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '600', color: colors.text },
   spacer: { width: 20 },
 });

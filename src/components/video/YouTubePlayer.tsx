@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 import { WebView } from 'react-native-webview';
-import { layout, lightColors } from '../../theme';
+import { layout, useTheme, type ThemeColors } from '../../theme';
 
 interface YouTubePlayerProps {
   youtubeVideoId: string;
@@ -32,6 +32,8 @@ interface YouTubePlayerProps {
  * outside PiP still pauses per YouTube policy.
  */
 export function YouTubePlayer({ youtubeVideoId }: YouTubePlayerProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   // Same loading facade as the web player (QA issues 5/6): the real
   // thumbnail + spinner until the WebView finishes its first load,
   // removed immediately afterwards — never over the playing embed.
@@ -68,13 +70,13 @@ export function YouTubePlayer({ youtubeVideoId }: YouTubePlayerProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   wrap: {
     width: '100%',
     aspectRatio: layout.thumbnailAspectRatio,
-    backgroundColor: lightColors.playerBackground,
+    backgroundColor: colors.playerBackground,
   },
-  webview: { flex: 1, backgroundColor: lightColors.playerBackground },
+  webview: { flex: 1, backgroundColor: colors.playerBackground },
   facade: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   poster: { width: '100%', height: '100%' },
   spinnerWrap: {

@@ -1,9 +1,9 @@
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { branding } from '../../config/branding';
-import { layout, lightColors, spacing } from '../../theme';
+import { layout, spacing, useTheme, type ThemeColors } from '../../theme';
 import { ICON_HIT_SLOP } from '../../lib/touch';
 import { BarBlurBackground } from './BarBlurBackground';
 
@@ -37,6 +37,8 @@ export const AppHeader = memo(function AppHeader({
   avatarUrl,
   avatarInitial,
 }: AppHeaderProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <View style={styles.bar}>
       <BarBlurBackground />
@@ -53,7 +55,7 @@ export const AppHeader = memo(function AppHeader({
       </View>
       <View style={styles.actions}>
         <Pressable onPress={onSearchPress} hitSlop={ICON_HIT_SLOP} accessibilityLabel="Search" accessibilityRole="button">
-          <MaterialIcons name="search" size={24} color={lightColors.text} />
+          <MaterialIcons name="search" size={24} color={colors.text} />
         </Pressable>
         <Pressable onPress={onAccountPress} hitSlop={ICON_HIT_SLOP} accessibilityLabel="Account" accessibilityRole="button">
           {avatarUrl ? (
@@ -66,7 +68,7 @@ export const AppHeader = memo(function AppHeader({
                   </View>
                 ) : (
                   <View style={[styles.avatar, styles.avatarFallback]}>
-                    <MaterialIcons name="person" size={18} color={lightColors.textSecondary} />
+                    <MaterialIcons name="person" size={18} color={colors.textSecondary} />
                   </View>
                 )
               }
@@ -82,7 +84,7 @@ export const AppHeader = memo(function AppHeader({
             // honest signed-out affordance — the same treatment the
             // bottom-nav avatar slot uses, app-wide.
             <View style={[styles.avatar, styles.avatarFallback]}>
-              <MaterialIcons name="person" size={18} color={lightColors.textSecondary} />
+              <MaterialIcons name="person" size={18} color={colors.textSecondary} />
             </View>
           )}
         </Pressable>
@@ -97,6 +99,8 @@ export const AppHeader = memo(function AppHeader({
  * than leaving a broken-image circle.
  */
 function HeaderAvatarImage({ uri, fallback }: { uri: string; fallback: React.ReactNode }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   // Remember WHICH uri failed so a changed uri gets a fresh try.
   const [failedUri, setFailedUri] = React.useState<string | null>(null);
   if (failedUri === uri) return <>{fallback}</>;
@@ -111,7 +115,7 @@ function HeaderAvatarImage({ uri, fallback }: { uri: string; fallback: React.Rea
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   bar: {
     height: layout.headerHeight,
     flexDirection: 'row',
@@ -131,13 +135,13 @@ const styles = StyleSheet.create({
   // Round-2 measurement (ref-1): wordmark ~20dp, tight tracking,
   // sitting ~8dp from the brand mark; right-side icons 24dp.
   // letterSpacing -0.3 matches the web splash shell (public/index.html).
-  wordmark: { fontSize: 20, fontWeight: '700', color: lightColors.text, letterSpacing: -0.3 },
+  wordmark: { fontSize: 20, fontWeight: '700', color: colors.text, letterSpacing: -0.3 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 22 },
   avatar: { width: 28, height: 28, borderRadius: 14 },
   avatarFallback: {
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarInitial: { fontSize: 13, fontWeight: '600', color: lightColors.textSecondary },
+  avatarInitial: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
 });

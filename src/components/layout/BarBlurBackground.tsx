@@ -1,6 +1,8 @@
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { BlurView } from 'expo-blur';
+
+import { useTheme } from '../../theme';
 
 /**
  * Translucent blur material for the app bars (user request, 27 Nov
@@ -36,6 +38,14 @@ import { BlurView } from 'expo-blur';
  * tests on) skip the BlurView entirely and keep the same 0.68
  * translucent tint as a plain layer. Icons render ABOVE this
  * layer, never inside it.
+ *
+ * Phase 12: the material is theme-aware — in dark mode the tint is
+ * 0.68 near-black (#0F0F0F, the dark background token) and the
+ * BlurView tint flips to 'dark', so the bars read as dark glass.
+ * It also honours the "Blur effects" appearance switch: when the
+ * user turns blur off, the bars render the plain translucent tint
+ * (the same degraded form low-core web gets) on every platform.
+ * Light mode with blur on is byte-for-byte the pre-Phase-12 look.
  */
 const LOW_CORE_WEB =
   Platform.OS === 'web' &&
@@ -44,10 +54,21 @@ const LOW_CORE_WEB =
   navigator.hardwareConcurrency <= 4;
 
 export const BarBlurBackground = memo(function BarBlurBackground() {
-  if (LOW_CORE_WEB) {
+  const { isDark, blurEnabled } = useTheme();
+
+  const tintStyle = useMemo(
+    () => ({
+      backgroundColor: isDark
+        ? 'rgba(15,15,15,0.68)'
+        : 'rgba(255,255,255,0.68)',
+    }),
+    [isDark],
+  );
+
+  if (!blurEnabled || LOW_CORE_WEB) {
     return (
       <View
-        style={[StyleSheet.absoluteFill, styles.tint]}
+        style={[StyleSheet.absoluteFill, tintStyle]}
         pointerEvents="none"
       />
     );
@@ -55,14 +76,10 @@ export const BarBlurBackground = memo(function BarBlurBackground() {
   return (
     <BlurView
       intensity={48}
-      tint="light"
+      tint={isDark ? 'dark' : 'light'}
       experimentalBlurMethod="dimezisBlurView"
-      style={[StyleSheet.absoluteFill, styles.tint]}
+      style={[StyleSheet.absoluteFill, tintStyle]}
       pointerEvents="none"
     />
   );
-});
-
-const styles = StyleSheet.create({
-  tint: { backgroundColor: 'rgba(255,255,255,0.68)' },
 });

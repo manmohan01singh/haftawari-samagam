@@ -1,12 +1,18 @@
 import 'react-native-gesture-handler';
-import React, { useEffect, useRef } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import React, { useEffect, useMemo, useRef } from 'react';
+import {
+  DarkTheme,
+  DefaultTheme,
+  NavigationContainer,
+  type Theme as NavigationTheme,
+} from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { RootNavigator } from './src/navigation';
 import { appLinking } from './src/navigation/linking';
 import { AuthProvider, useAuth } from './src/features/auth';
+import { ThemeProvider, useTheme } from './src/theme';
 import { registerServiceWorker } from './src/lib/registerServiceWorker';
 import { PwaBanners } from './src/components/pwa/PwaBanners';
 import { AppErrorBoundary } from './src/components/common/AppErrorBoundary';
@@ -59,12 +65,52 @@ function SplashGate() {
 }
 
 /**
+ * Phase 12: the navigation shell, themed. React Navigation gets a
+ * theme built from the SAME tokens the screens use (background,
+ * surface-as-card, text, border), so navigator-owned surfaces —
+ * screen backgrounds during transitions, stack cards — match the
+ * resolved palette instead of flashing the framework defaults. The
+ * status bar style follows the resolved theme too ('light' = light
+ * content on dark backgrounds).
+ */
+function ThemedNavigation() {
+  const { colors, isDark } = useTheme();
+
+  const navigationTheme = useMemo<NavigationTheme>(() => {
+    const base = isDark ? DarkTheme : DefaultTheme;
+    return {
+      ...base,
+      colors: {
+        ...base.colors,
+        primary: colors.accent,
+        background: colors.background,
+        card: colors.surface,
+        text: colors.text,
+        border: colors.border,
+        notification: colors.accent,
+      },
+    };
+  }, [colors, isDark]);
+
+  return (
+    <NavigationContainer linking={appLinking} theme={navigationTheme}>
+      <AppErrorBoundary>
+        <RootNavigator />
+      </AppErrorBoundary>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
+    </NavigationContainer>
+  );
+}
+
+/**
  * Haftawari Samagam.
  * Phase 2: real auth session (Supabase), home feed from the published
  * catalogue, watch screen with the official YouTube embed, search and
  * the official channel — all real data, honest empty states.
  * On web, the offline-shell service worker is registered (production
  * only; the .web variant of registerServiceWorker does the work).
+ * Phase 12: ThemeProvider wraps the whole tree — every screen reads
+ * its palette from useTheme() (System / Light / Dark, persisted).
  */
 export default function App() {
   useEffect(() => {
@@ -73,16 +119,13 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <AuthProvider>
-        <SplashGate />
-        <NavigationContainer linking={appLinking}>
-          <AppErrorBoundary>
-            <RootNavigator />
-          </AppErrorBoundary>
-          <StatusBar style="auto" />
-        </NavigationContainer>
-        <PwaBanners />
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <SplashGate />
+          <ThemedNavigation />
+          <PwaBanners />
+        </AuthProvider>
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }

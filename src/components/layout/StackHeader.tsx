@@ -1,7 +1,7 @@
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { layout, lightColors, spacing, typography } from '../../theme';
+import { layout, spacing, typography, useTheme, type ThemeColors } from '../../theme';
 
 interface StackHeaderProps {
   /** Optional screen title shown beside the back button (16/600). */
@@ -30,6 +30,8 @@ interface StackHeaderProps {
  * inside a rounded sheet, but the control itself stays identical).
  */
 export const BackButton = memo(function BackButton({ onPress }: { onPress: () => void }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <Pressable
       onPress={onPress}
@@ -37,12 +39,14 @@ export const BackButton = memo(function BackButton({ onPress }: { onPress: () =>
       accessibilityLabel="Back"
       accessibilityRole="button"
     >
-      <MaterialIcons name="arrow-back" size={24} color={lightColors.text} />
+      <MaterialIcons name="arrow-back" size={24} color={colors.text} />
     </Pressable>
   );
 });
 
 export const StackHeader = memo(function StackHeader({ title, onBack, right }: StackHeaderProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <View style={styles.bar}>
       <View style={styles.left}>
@@ -58,16 +62,16 @@ export const StackHeader = memo(function StackHeader({ title, onBack, right }: S
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   bar: {
     height: layout.headerHeight,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
-    backgroundColor: lightColors.surface,
+    backgroundColor: colors.surface,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: lightColors.border,
+    borderBottomColor: colors.border,
   },
   left: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexShrink: 1 },
   // 48×48 target with the glyph centred; negative left margin pulls the
@@ -84,7 +88,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: typography.cardTitle.fontSize,
     fontWeight: typography.cardTitle.fontWeight,
-    color: lightColors.text,
+    color: colors.text,
     flexShrink: 1,
   },
   right: { flexDirection: 'row', alignItems: 'center', gap: 22 },

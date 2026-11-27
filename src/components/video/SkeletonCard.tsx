@@ -1,6 +1,6 @@
-import React, { memo, useEffect, useRef } from 'react';
+import React, { memo, useEffect, useMemo, useRef } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
-import { layout, lightColors, nativeApp, radii, spacing } from '../../theme';
+import { layout, nativeApp, radii, spacing, useTheme, type ThemeColors } from '../../theme';
 
 /**
  * Loading placeholder with the EXACT geometry of the real card, so the
@@ -21,6 +21,8 @@ export const SkeletonCard = memo(function SkeletonCard({
 }: {
   variant: 'feed' | 'shelf' | 'row';
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const pulse = useRef(new Animated.Value(0.55)).current;
   useEffect(() => {
     const loop = Animated.loop(
@@ -72,7 +74,7 @@ export const SkeletonCard = memo(function SkeletonCard({
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   // Feed skeleton mirrors the real FeedCard container: Phase 9 W2
   // flattened the card (no radii), so the skeleton matches — flat
   // thumbnail, flat white body, 16px of page ground below the card.
@@ -81,19 +83,19 @@ const styles = StyleSheet.create({
   thumbnail: {
     width: '100%',
     aspectRatio: layout.thumbnailAspectRatio,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
   },
   thumbnailFeed: {},
   thumbnailShelf: { borderRadius: radii.card },
   feedBody: {
-    backgroundColor: lightColors.surface,
+    backgroundColor: colors.surface,
     paddingHorizontal: nativeApp.feedCard.bodyPadding,
     paddingTop: spacing.md,
     paddingBottom: spacing.md,
   },
   shelfBody: { paddingTop: spacing.md },
-  line: { height: 17, borderRadius: 4, backgroundColor: lightColors.surfaceVariant },
-  lineSm: { height: 13, borderRadius: 4, backgroundColor: lightColors.surfaceVariant },
+  line: { height: 17, borderRadius: 4, backgroundColor: colors.surfaceVariant },
+  lineSm: { height: 13, borderRadius: 4, backgroundColor: colors.surfaceVariant },
   row: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: spacing.md },
   rowCard: {
     flexDirection: 'row',
@@ -106,13 +108,13 @@ const styles = StyleSheet.create({
     maxWidth: 168,
     aspectRatio: layout.thumbnailAspectRatio,
     borderRadius: radii.card,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
   },
   rowLines: { flex: 1, paddingTop: 2 },
   avatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
   },
 });

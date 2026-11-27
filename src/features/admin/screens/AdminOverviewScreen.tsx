@@ -1,8 +1,8 @@
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { lightColors, spacing, typography } from '../../../theme';
+import { spacing, typography, useTheme, type ThemeColors } from '../../../theme';
 import type { AdminStackParamList } from '../../../navigation/types';
 import { fetchOverviewCounts, type OverviewCounts } from '../adminService';
 import { AdminGate } from '../components/AdminGate';
@@ -29,6 +29,8 @@ const LINKS: { route: keyof AdminStackParamList; label: string; hint: string }[]
 ];
 
 function OverviewContent({ navigation }: { navigation: Props['navigation'] }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [counts, setCounts] = useState<OverviewCounts | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -115,7 +117,7 @@ export function AdminOverviewScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   statGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -130,6 +132,6 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   linkText: { flex: 1 },
-  linkLabel: { ...typography.cardTitle, color: lightColors.text },
-  linkHint: { ...typography.metadata, color: lightColors.textSecondary },
+  linkLabel: { ...typography.cardTitle, color: colors.text },
+  linkHint: { ...typography.metadata, color: colors.textSecondary },
 });

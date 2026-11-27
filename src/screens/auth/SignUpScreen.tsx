@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -18,7 +18,7 @@ import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { GoogleSignInButton } from '../../features/auth/components/GoogleSignInButton';
 import { OrDivider } from '../../features/auth/components/OrDivider';
 import { authRedirectUrl, friendlyAuthError } from '../../features/auth/authHelpers';
-import { lightColors, radii, spacing, typography } from '../../theme';
+import { radii, spacing, typography, useTheme, type ThemeColors } from '../../theme';
 import type { RootStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SignUp'>;
@@ -33,6 +33,8 @@ type Props = NativeStackScreenProps<RootStackParamList, 'SignUp'>;
  * account is signed in.
  */
 export function SignUpScreen({ navigation }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -112,7 +114,7 @@ export function SignUpScreen({ navigation }: Props) {
       <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
       <View style={styles.topRow}>
         <Pressable onPress={() => goBackOrTab(navigation, 'Library')} hitSlop={10} accessibilityLabel="Back">
-          <MaterialIcons name="arrow-back" size={24} color={lightColors.text} />
+          <MaterialIcons name="arrow-back" size={24} color={colors.text} />
         </Pressable>
         <Pressable
           onPress={() => navigation.navigate('MainTabs', { screen: 'Home' })}
@@ -120,7 +122,7 @@ export function SignUpScreen({ navigation }: Props) {
           accessibilityLabel="Go to Home"
           accessibilityRole="button"
         >
-          <MaterialIcons name="home" size={24} color={lightColors.text} />
+          <MaterialIcons name="home" size={24} color={colors.text} />
         </Pressable>
       </View>
       <View style={styles.brand}>
@@ -151,7 +153,7 @@ export function SignUpScreen({ navigation }: Props) {
           <TextInput
             style={styles.input}
             placeholder="How your name appears in chat"
-            placeholderTextColor={lightColors.textSecondary}
+            placeholderTextColor={colors.textSecondary}
             autoCapitalize="words"
             value={displayName}
             onChangeText={setDisplayName}
@@ -160,7 +162,7 @@ export function SignUpScreen({ navigation }: Props) {
           <TextInput
             style={styles.input}
             placeholder="you@example.com"
-            placeholderTextColor={lightColors.textSecondary}
+            placeholderTextColor={colors.textSecondary}
             autoCapitalize="none"
             autoComplete="email"
             keyboardType="email-address"
@@ -175,7 +177,7 @@ export function SignUpScreen({ navigation }: Props) {
             <TextInput
               style={styles.passwordInput}
               placeholder="At least 6 characters"
-              placeholderTextColor={lightColors.textSecondary}
+              placeholderTextColor={colors.textSecondary}
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="new-password"
@@ -192,7 +194,7 @@ export function SignUpScreen({ navigation }: Props) {
               <MaterialIcons
                 name={showPassword ? 'visibility-off' : 'visibility'}
                 size={22}
-                color={lightColors.textSecondary}
+                color={colors.textSecondary}
               />
             </Pressable>
           </View>
@@ -213,7 +215,7 @@ export function SignUpScreen({ navigation }: Props) {
               accessibilityRole="button"
             >
               {busy ? (
-                <ActivityIndicator color={lightColors.subscribeText} />
+                <ActivityIndicator color={colors.subscribeText} />
               ) : (
                 <Text style={styles.primaryButtonText}>Sign Up</Text>
               )}
@@ -232,54 +234,54 @@ export function SignUpScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: lightColors.background, paddingHorizontal: spacing.xl, width: '100%', maxWidth: 480, alignSelf: 'center' },
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.xl, width: '100%', maxWidth: 480, alignSelf: 'center' },
   topRow: { paddingTop: spacing.xl, marginBottom: spacing.lg, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   brand: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xxl },
   playMark: {
     width: 34,
     height: 24,
     borderRadius: 7,
-    backgroundColor: lightColors.accent,
+    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  wordmark: { fontSize: 21, fontWeight: '700', color: lightColors.text, letterSpacing: -0.3 },
-  heading: { ...typography.watchTitle, color: lightColors.text, marginBottom: spacing.lg },
+  wordmark: { fontSize: 21, fontWeight: '700', color: colors.text, letterSpacing: -0.3 },
+  heading: { ...typography.watchTitle, color: colors.text, marginBottom: spacing.lg },
   input: {
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: radii.card,
     paddingHorizontal: spacing.lg,
     paddingVertical: 14,
     fontSize: 16,
-    color: lightColors.text,
+    color: colors.text,
     marginBottom: spacing.md,
   },
-  error: { ...typography.body, color: lightColors.accent, marginBottom: spacing.md },
-  label: { ...typography.chip, color: lightColors.text, marginBottom: spacing.xs, marginTop: spacing.sm },
-  fieldError: { ...typography.metadata, color: lightColors.accent, marginBottom: spacing.sm },
-  rules: { ...typography.metadata, color: lightColors.textSecondary, marginBottom: spacing.sm },
-  helper: { ...typography.metadata, color: lightColors.textSecondary, textAlign: 'center', marginTop: spacing.sm },
+  error: { ...typography.body, color: colors.accent, marginBottom: spacing.md },
+  label: { ...typography.chip, color: colors.text, marginBottom: spacing.xs, marginTop: spacing.sm },
+  fieldError: { ...typography.metadata, color: colors.accent, marginBottom: spacing.sm },
+  rules: { ...typography.metadata, color: colors.textSecondary, marginBottom: spacing.sm },
+  helper: { ...typography.metadata, color: colors.textSecondary, textAlign: 'center', marginTop: spacing.sm },
   passwordRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: radii.card,
     paddingHorizontal: spacing.lg,
     marginBottom: spacing.sm,
   },
-  passwordInput: { flex: 1, paddingVertical: 14, fontSize: 16, color: lightColors.text },
-  confirmText: { ...typography.body, color: lightColors.text, marginBottom: spacing.lg },
+  passwordInput: { flex: 1, paddingVertical: 14, fontSize: 16, color: colors.text },
+  confirmText: { ...typography.body, color: colors.text, marginBottom: spacing.lg },
   primaryButton: {
-    backgroundColor: lightColors.subscribeBackground,
+    backgroundColor: colors.subscribeBackground,
     borderRadius: radii.pill,
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: spacing.sm,
   },
   buttonDisabled: { opacity: 0.5 },
-  primaryButtonText: { fontSize: 16, fontWeight: '600', color: lightColors.subscribeText },
+  primaryButtonText: { fontSize: 16, fontWeight: '600', color: colors.subscribeText },
   switchRow: { alignItems: 'center', marginTop: spacing.xl, paddingVertical: spacing.md, minHeight: 44, justifyContent: 'center' },
-  switchText: { ...typography.body, color: lightColors.textSecondary },
-  switchStrong: { color: lightColors.text, fontWeight: '600' },
+  switchText: { ...typography.body, color: colors.textSecondary },
+  switchStrong: { color: colors.text, fontWeight: '600' },
 });

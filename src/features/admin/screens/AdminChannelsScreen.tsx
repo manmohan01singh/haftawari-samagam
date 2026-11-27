@@ -1,11 +1,11 @@
 import { useFocusEffect } from '@react-navigation/native';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useMemo } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { Image } from 'expo-image';
 import { EmptyState } from '../../../components/common/EmptyState';
 import { formatCount } from '../../../lib/format';
 import { resolveChannelInput, type YouTubeChannelInfo } from '../../../lib/youtube';
-import { lightColors, spacing, typography } from '../../../theme';
+import { spacing, typography, useTheme, type ThemeColors } from '../../../theme';
 import type { ChannelRecord } from '../../../types/database';
 import {
   addChannel,
@@ -26,7 +26,7 @@ import {
   ErrorBanner,
   LoadingView,
   SectionTitle,
-  adminStyles,
+  createAdminStyles,
   friendlyError,
 } from '../components/AdminUi';
 
@@ -40,6 +40,9 @@ import {
  * app-side channel cache so Subscriptions/Search pick it up.
  */
 function ChannelsContent({ ctx }: { ctx: AdminContext }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const adminStyles = useMemo(() => createAdminStyles(colors), [colors]);
   const [channels, setChannels] = useState<ChannelRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -168,7 +171,7 @@ function ChannelsContent({ ctx }: { ctx: AdminContext }) {
             setResolved(null);
           }}
           placeholder="e.g. @amritvelatrustlive or youtube.com/@amritvelatrustlive"
-          placeholderTextColor={lightColors.textSecondary}
+          placeholderTextColor={colors.textSecondary}
           autoCapitalize="none"
           autoCorrect={false}
         />
@@ -340,10 +343,10 @@ export function AdminChannelsScreen() {
   return <AdminGate>{(ctx) => <ChannelsContent ctx={ctx} />}</AdminGate>;
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   form: { gap: spacing.sm },
-  help: { ...typography.metadata, color: lightColors.textSecondary },
-  notice: { ...typography.body, color: lightColors.text },
+  help: { ...typography.metadata, color: colors.textSecondary },
+  notice: { ...typography.body, color: colors.text },
   listHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -353,14 +356,14 @@ const styles = StyleSheet.create({
   preview: {
     gap: spacing.md,
     borderWidth: 1,
-    borderColor: lightColors.border,
+    borderColor: colors.border,
     borderRadius: 12,
     padding: spacing.md,
   },
   channelRow: {
     gap: spacing.sm,
     borderWidth: 1,
-    borderColor: lightColors.border,
+    borderColor: colors.border,
     borderRadius: 12,
     padding: spacing.md,
     marginBottom: spacing.md,
@@ -369,12 +372,12 @@ const styles = StyleSheet.create({
   rowText: { flex: 1, gap: 2 },
   avatar: { width: 48, height: 48, borderRadius: 24 },
   avatarFallback: {
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarInitial: { fontSize: 18, fontWeight: '600', color: lightColors.textSecondary },
-  channelTitle: { ...typography.cardTitle, color: lightColors.text },
-  channelMeta: { ...typography.metadata, color: lightColors.textSecondary },
+  avatarInitial: { fontSize: 18, fontWeight: '600', color: colors.textSecondary },
+  channelTitle: { ...typography.cardTitle, color: colors.text },
+  channelMeta: { ...typography.metadata, color: colors.textSecondary },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 });

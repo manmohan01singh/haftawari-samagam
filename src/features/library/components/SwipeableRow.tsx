@@ -5,7 +5,7 @@
  * inside gesture and press callbacks, never during render. The
  * react-hooks/refs rule cannot prove that, so it is disabled for this
  * file only. */
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useMemo } from 'react';
 import {
   Animated,
   PanResponder,
@@ -15,7 +15,7 @@ import {
   View,
 } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { lightColors } from '../../../theme';
+import { useTheme, type ThemeColors } from '../../../theme';
 
 const ACTION_WIDTH = 88;
 const OPEN_THRESHOLD = 40;
@@ -36,6 +36,8 @@ interface SwipeableRowProps {
  * unaffected. Tapping the row content while open just closes it.
  */
 export function SwipeableRow({ onRemove, removeLabel = 'Remove', children }: SwipeableRowProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const translateX = useRef(new Animated.Value(0)).current;
   const offsetRef = useRef(0);
   const [open, setOpen] = useState(false);
@@ -85,7 +87,7 @@ export function SwipeableRow({ onRemove, removeLabel = 'Remove', children }: Swi
           accessibilityRole="button"
           accessibilityLabel={removeLabel}
         >
-          <MaterialIcons name="delete-outline" size={22} color={lightColors.subscribeText} />
+          <MaterialIcons name="delete-outline" size={22} color={colors.subscribeText} />
           <Text style={styles.actionText}>{removeLabel}</Text>
         </Pressable>
       </View>
@@ -107,7 +109,7 @@ export function SwipeableRow({ onRemove, removeLabel = 'Remove', children }: Swi
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { position: 'relative', overflow: 'hidden' },
   action: {
     position: 'absolute',
@@ -115,7 +117,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     right: 0,
     width: ACTION_WIDTH,
-    backgroundColor: lightColors.text,
+    backgroundColor: colors.text,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -126,8 +128,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 2,
   },
-  actionText: { color: lightColors.subscribeText, fontSize: 12, fontWeight: '600' },
-  foreground: { backgroundColor: lightColors.background },
+  actionText: { color: colors.subscribeText, fontSize: 12, fontWeight: '600' },
+  foreground: { backgroundColor: colors.background },
   closeOverlay: {
     position: 'absolute',
     top: 0,

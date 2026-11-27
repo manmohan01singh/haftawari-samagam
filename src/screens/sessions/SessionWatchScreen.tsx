@@ -47,11 +47,12 @@ import { SESSION_LABELS } from '../../features/sessions/types';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import {
   layout,
-  lightColors,
   nativeApp,
   radii,
   spacing,
   typography,
+  useTheme,
+  type ThemeColors,
 } from '../../theme';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -74,6 +75,8 @@ const DRIFT_TOLERANCE_SECONDS = 5;
  * originated live broadcast.
  */
 export function SessionWatchScreen({ route, navigation }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { sessionId } = route.params;
   // 5s tick (not the 1s default): this screen's labels are
   // minute-granularity and drift correction reads serverClock
@@ -472,7 +475,7 @@ export function SessionWatchScreen({ route, navigation }: Props) {
             ) : null}
             {joinedCount != null ? (
               <View style={styles.countChip}>
-                <MaterialIcons name="group" size={15} color={lightColors.textSecondary} />
+                <MaterialIcons name="group" size={15} color={colors.textSecondary} />
                 <Text style={styles.countChipText}>{joinedCount} joined</Text>
               </View>
             ) : null}
@@ -620,30 +623,30 @@ export function SessionWatchScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: lightColors.playerBackground },
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.playerBackground },
   playerSkeleton: {
     width: '100%',
     aspectRatio: layout.thumbnailAspectRatio,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  playerSkeletonLabel: { ...typography.metadata, color: lightColors.textSecondary },
+  playerSkeletonLabel: { ...typography.metadata, color: colors.textSecondary },
   sheetSkeleton: {
     flex: 1,
-    backgroundColor: lightColors.surface,
+    backgroundColor: colors.surface,
     borderTopLeftRadius: nativeApp.watchSheet.topRadius,
     borderTopRightRadius: nativeApp.watchSheet.topRadius,
     marginTop: -nativeApp.watchSheet.topRadius,
     padding: spacing.lg,
   },
-  skelLine: { height: 18, borderRadius: 4, backgroundColor: lightColors.surfaceVariant },
+  skelLine: { height: 18, borderRadius: 4, backgroundColor: colors.surfaceVariant },
   skelPill: {
     width: 150,
     height: 40,
     borderRadius: radii.pill,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
   },
   countsRow: {
     flexDirection: 'row',
@@ -656,98 +659,98 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs + 2,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.md,
     paddingVertical: 5,
   },
   presenceDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#2E7D32' },
-  countChipText: { fontSize: 13, fontWeight: '600', color: lightColors.text },
+  countChipText: { fontSize: 13, fontWeight: '600', color: colors.text },
   signInExplain: {
     ...typography.body,
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
     marginTop: spacing.sm,
   },
-  playerArea: { backgroundColor: lightColors.playerBackground },
+  playerArea: { backgroundColor: colors.playerBackground },
   thumbnailWrap: { position: 'relative' },
   thumbnail: {
     width: '100%',
     aspectRatio: layout.thumbnailAspectRatio,
-    backgroundColor: lightColors.playerBackground,
+    backgroundColor: colors.playerBackground,
   },
-  thumbnailEmpty: { backgroundColor: lightColors.surfaceVariant },
+  thumbnailEmpty: { backgroundColor: colors.surfaceVariant },
   thumbnailBadge: { position: 'absolute', left: spacing.sm, bottom: spacing.sm },
   sheet: {
     flex: 1,
-    backgroundColor: lightColors.surface,
+    backgroundColor: colors.surface,
     borderTopLeftRadius: nativeApp.watchSheet.topRadius,
     borderTopRightRadius: nativeApp.watchSheet.topRadius,
     marginTop: -nativeApp.watchSheet.topRadius,
   },
   sheetContent: { padding: spacing.lg, paddingBottom: spacing.xxl },
   backRow: { flexDirection: 'row', alignItems: 'center' },
-  title: { ...typography.watchTitle, fontWeight: '600', color: lightColors.text },
+  title: { ...typography.watchTitle, fontWeight: '600', color: colors.text },
   metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.sm, flexWrap: 'wrap' },
   statusText: {
     fontSize: 13,
     fontWeight: '700',
     letterSpacing: 0.4,
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
   },
-  statusPlaying: { color: lightColors.accent },
+  statusPlaying: { color: colors.accent },
   scheduleLine: {
     ...typography.channelName,
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
     marginTop: spacing.xs,
   },
   syncButton: {
     alignSelf: 'flex-start',
     marginTop: spacing.md,
     borderWidth: 1,
-    borderColor: lightColors.border,
+    borderColor: colors.border,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     minHeight: 44,
     justifyContent: 'center',
   },
-  syncButtonText: { fontSize: 13, fontWeight: '600', color: lightColors.text },
+  syncButtonText: { fontSize: 13, fontWeight: '600', color: colors.text },
   actionRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.lg },
   joinPill: {
-    backgroundColor: lightColors.subscribeBackground,
+    backgroundColor: colors.subscribeBackground,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.sm + 2,
     minHeight: 44,
     justifyContent: 'center',
   },
-  joinPillText: { color: lightColors.subscribeText, fontSize: 14, fontWeight: '600' },
+  joinPillText: { color: colors.subscribeText, fontSize: 14, fontWeight: '600' },
   joinedPill: {
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.sm + 2,
     minHeight: 44,
     justifyContent: 'center',
   },
-  joinedPillText: { color: lightColors.text, fontSize: 14, fontWeight: '600' },
+  joinedPillText: { color: colors.text, fontSize: 14, fontWeight: '600' },
   disabled: { opacity: 0.5 },
   pressed: { opacity: 0.8 },
-  signInNote: { ...typography.body, color: lightColors.textSecondary },
-  stateScreen: { flex: 1, backgroundColor: lightColors.background },
-  joinError: { fontSize: 13, color: lightColors.accent, marginTop: spacing.sm },
+  signInNote: { ...typography.body, color: colors.textSecondary },
+  stateScreen: { flex: 1, backgroundColor: colors.background },
+  joinError: { fontSize: 13, color: colors.accent, marginTop: spacing.sm },
   note: {
     ...typography.body,
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
     marginTop: spacing.lg,
   },
   descriptionBox: {
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: radii.card,
     padding: spacing.md,
     marginTop: spacing.lg,
   },
-  descriptionText: { ...typography.body, color: lightColors.text },
+  descriptionText: { ...typography.body, color: colors.text },
   chatCardWrap: { marginTop: spacing.lg },
   chatBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
   chatBackdropTap: { flex: 1 },

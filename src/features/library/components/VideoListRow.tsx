@@ -1,8 +1,8 @@
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { layout, lightColors, radii, spacing, typography } from '../../../theme';
+import { layout, radii, spacing, typography, useTheme, type ThemeColors } from '../../../theme';
 import type { Video } from '../../../types/database';
 import { SMALL_ICON_HIT_SLOP } from '../../../lib/touch';
 import { formatClock, resumeRatio } from '../format';
@@ -43,6 +43,8 @@ export const VideoListRow = memo(function VideoListRow({
   actionLabel,
   onAction,
 }: VideoListRowProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const ratio = resumePositionSeconds != null ? resumeRatio(resumePositionSeconds, video.duration_seconds) : null;
   const thumbUrl = listThumbnailUrl(video.youtube_video_id, video.thumbnail_url);
   const metaParts: string[] = [];
@@ -107,7 +109,7 @@ export const VideoListRow = memo(function VideoListRow({
           <MaterialIcons
             name={actionIcon === 'bookmark' ? 'bookmark' : 'close'}
             size={20}
-            color={lightColors.textSecondary}
+            color={colors.textSecondary}
           />
         </Pressable>
       ) : null}
@@ -115,7 +117,7 @@ export const VideoListRow = memo(function VideoListRow({
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -127,9 +129,9 @@ const styles = StyleSheet.create({
     width: '100%',
     aspectRatio: layout.thumbnailAspectRatio,
     borderRadius: radii.card,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
   },
-  thumbEmpty: { backgroundColor: lightColors.surfaceVariant },
+  thumbEmpty: { backgroundColor: colors.surfaceVariant },
   durationBadge: {
     position: 'absolute',
     right: spacing.xs + 2,
@@ -151,9 +153,9 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: radii.card,
     overflow: 'hidden',
   },
-  progressFill: { height: '100%', backgroundColor: lightColors.accent },
+  progressFill: { height: '100%', backgroundColor: colors.accent },
   lines: { flex: 1, paddingTop: 2 },
-  title: { ...typography.body, fontSize: 15, lineHeight: 20, fontWeight: '600', color: lightColors.text },
-  meta: { ...typography.metadata, fontSize: 13, color: lightColors.textSecondary, marginTop: 3 },
+  title: { ...typography.body, fontSize: 15, lineHeight: 20, fontWeight: '600', color: colors.text },
+  meta: { ...typography.metadata, fontSize: 13, color: colors.textSecondary, marginTop: 3 },
   actionButton: { padding: spacing.xs, marginTop: 2 },
 });

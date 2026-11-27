@@ -1,6 +1,6 @@
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
-import { lightColors, nativeApp, radii, spacing } from '../../theme';
+import { nativeApp, radii, spacing, useTheme, type ThemeColors } from '../../theme';
 
 export interface SecondaryTabItem {
   key: string;
@@ -20,6 +20,8 @@ interface SecondaryTabsProps {
  * really exist in this app.
  */
 export const SecondaryTabs = memo(function SecondaryTabs({ items, selectedKey, onSelect }: SecondaryTabsProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <ScrollView
       horizontal
@@ -46,7 +48,7 @@ export const SecondaryTabs = memo(function SecondaryTabs({ items, selectedKey, o
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   scroll: { flexGrow: 0 },
   // Round-2 pixel pass, measured from ref-1-home.jpg (1080px-wide
   // capture, ÷2.62 for dp): the tab row is DENSE — selected pill
@@ -69,6 +71,6 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: radii.pill,
   },
-  itemSelected: { backgroundColor: lightColors.secondaryTabSelectedBg },
-  label: { fontSize: nativeApp.secondaryTabs.textSize, color: lightColors.text },
+  itemSelected: { backgroundColor: colors.secondaryTabSelectedBg },
+  label: { fontSize: nativeApp.secondaryTabs.textSize, color: colors.text },
 });

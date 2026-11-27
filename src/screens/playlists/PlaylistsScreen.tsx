@@ -1,10 +1,10 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { isSupabaseConfigured } from '../../lib/supabase';
-import { lightColors, spacing } from '../../theme';
+import { spacing, useTheme, type ThemeColors } from '../../theme';
 import { useCurrentUser, usePlaylistSummaries } from '../../features/library/hooks';
 import { createPlaylist, deletePlaylist } from '../../features/library/libraryService';
 import { CardActionSheet } from '../../components/common/CardActionSheet';
@@ -29,6 +29,8 @@ type Props = NativeStackScreenProps<LibraryRootStackParamList, 'Playlists'>;
  * detail screen. Signed-out users see the public list only.
  */
 export function PlaylistsScreen({ navigation }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { user, loading: authLoading } = useCurrentUser();
   const summaries = usePlaylistSummaries(user?.id ?? null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -103,7 +105,7 @@ export function PlaylistsScreen({ navigation }: Props) {
               accessibilityLabel="Create a new playlist"
               accessibilityRole="button"
             >
-              <MaterialIcons name="add" size={26} color={lightColors.text} />
+              <MaterialIcons name="add" size={26} color={colors.text} />
             </Pressable>
           ) : undefined
         }
@@ -191,8 +193,8 @@ export function PlaylistsScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: lightColors.background },
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background },
   listPad: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, flexGrow: 1 },
-  errorLine: { color: lightColors.accent, fontSize: 13, paddingBottom: spacing.sm },
+  errorLine: { color: colors.accent, fontSize: 13, paddingBottom: spacing.sm },
 });

@@ -5,7 +5,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { isSupabaseConfigured } from '../../lib/supabase';
-import { lightColors, spacing } from '../../theme';
+import { spacing, useTheme, type ThemeColors } from '../../theme';
 import { useCurrentUser, useHistory } from '../../features/library/hooks';
 import {
   clearHistory,
@@ -51,6 +51,8 @@ type Props = NativeStackScreenProps<LibraryRootStackParamList, 'History'>;
  * the account list instead of disappearing at sign-in.
  */
 export function HistoryScreen({ navigation }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { user, loading: authLoading } = useCurrentUser();
   const history = useHistory(user?.id ?? null);
   // Device-local history (signed-out users, QA 78): recordings opened
@@ -275,12 +277,12 @@ export function HistoryScreen({ navigation }: Props) {
             accessibilityLabel="Remove from device history"
             style={styles.localRemove}
           >
-            <MaterialIcons name="close" size={20} color={lightColors.textSecondary} />
+            <MaterialIcons name="close" size={20} color={colors.textSecondary} />
           </Pressable>
         </Pressable>
       </SwipeableRow>
     ),
-    [navigation, removeLocal],
+    [navigation, removeLocal, colors, styles],
   );
 
   /** Signed-in footer: local watches that cannot live in
@@ -320,7 +322,7 @@ export function HistoryScreen({ navigation }: Props) {
               accessibilityLabel="Clear device history"
               accessibilityRole="button"
             >
-              <MaterialIcons name="delete-outline" size={24} color={lightColors.text} />
+              <MaterialIcons name="delete-outline" size={24} color={colors.text} />
             </Pressable>
           ) : user && history.data.length > 0 ? (
             <Pressable
@@ -329,7 +331,7 @@ export function HistoryScreen({ navigation }: Props) {
               accessibilityLabel="Clear all watch history"
               accessibilityRole="button"
             >
-              <MaterialIcons name="delete-outline" size={24} color={lightColors.text} />
+              <MaterialIcons name="delete-outline" size={24} color={colors.text} />
             </Pressable>
           ) : undefined
         }
@@ -438,34 +440,34 @@ export function HistoryScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: lightColors.background },
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background },
   listPad: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, flexGrow: 1 },
-  errorLine: { color: lightColors.accent, fontSize: 13, paddingBottom: spacing.sm },
+  errorLine: { color: colors.accent, fontSize: 13, paddingBottom: spacing.sm },
   localSection: { paddingTop: spacing.lg },
   localSectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  localSectionTitle: { fontSize: 17, fontWeight: '600', color: lightColors.text },
-  localSectionClear: { fontSize: 14, fontWeight: '600', color: lightColors.text },
-  localSectionNote: { fontSize: 13, lineHeight: 18, color: lightColors.textSecondary, marginTop: 4 },
+  localSectionTitle: { fontSize: 17, fontWeight: '600', color: colors.text },
+  localSectionClear: { fontSize: 14, fontWeight: '600', color: colors.text },
+  localSectionNote: { fontSize: 13, lineHeight: 18, color: colors.textSecondary, marginTop: 4 },
   localBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: 12,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
     marginBottom: spacing.md,
   },
-  localBannerText: { flex: 1, fontSize: 13, lineHeight: 18, color: lightColors.textSecondary },
-  localBannerAction: { fontSize: 14, fontWeight: '700', color: lightColors.text },
+  localBannerText: { flex: 1, fontSize: 13, lineHeight: 18, color: colors.textSecondary },
+  localBannerAction: { fontSize: 14, fontWeight: '700', color: colors.text },
   localRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, paddingVertical: spacing.sm },
   localThumbWrap: { width: '40%', maxWidth: 168, position: 'relative' },
-  localThumb: { width: '100%', aspectRatio: 16 / 9, borderRadius: 12, backgroundColor: lightColors.playerBackground },
+  localThumb: { width: '100%', aspectRatio: 16 / 9, borderRadius: 12, backgroundColor: colors.playerBackground },
   durationBadge: {
     position: 'absolute',
     right: 6,
@@ -476,9 +478,9 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   durationText: { color: '#FFFFFF', fontSize: 11, fontWeight: '600' },
-  thumbEmpty: { backgroundColor: lightColors.surfaceVariant },
+  thumbEmpty: { backgroundColor: colors.surfaceVariant },
   localLines: { flex: 1, paddingTop: 2 },
-  localTitle: { fontSize: 15, lineHeight: 20, fontWeight: '600', color: lightColors.text },
-  localMeta: { fontSize: 13, color: lightColors.textSecondary, marginTop: 3 },
+  localTitle: { fontSize: 15, lineHeight: 20, fontWeight: '600', color: colors.text },
+  localMeta: { fontSize: 13, color: colors.textSecondary, marginTop: 3 },
   localRemove: { padding: spacing.xs, marginTop: 2 },
 });

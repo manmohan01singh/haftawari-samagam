@@ -3,13 +3,14 @@ import React, {
   memo,
   useCallback,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
 } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
-import { layout, lightColors } from '../../../theme';
+import { layout, useTheme, type ThemeColors } from '../../../theme';
 
 /** Minimal structural handle for the WebView (only what sync needs). */
 interface WebViewHandle {
@@ -57,6 +58,8 @@ export const YouTubeEmbed = memo(
     { youtubeVideoId, startSeconds, autoplay = false, onTimeUpdate, onReady },
     ref,
   ) {
+    const { colors } = useTheme();
+    const styles = useMemo(() => createStyles(colors), [colors]);
     // Freeze the start offset at mount (UX perf pass): the caller
     // passes a LIVE session offset that changes on every clock tick,
     // and the WebView source html is built from it — without freezing,
@@ -162,13 +165,13 @@ function buildEmbedHtml(videoId: string, startSeconds: number, autoplay: boolean
   ].join('\n');
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   wrap: {
     width: '100%',
     aspectRatio: layout.thumbnailAspectRatio,
-    backgroundColor: lightColors.playerBackground,
+    backgroundColor: colors.playerBackground,
   },
-  webview: { flex: 1, backgroundColor: lightColors.playerBackground },
+  webview: { flex: 1, backgroundColor: colors.playerBackground },
   facade: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   poster: { width: '100%', height: '100%' },
   spinnerWrap: {

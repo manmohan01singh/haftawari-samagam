@@ -5,7 +5,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { isSupabaseConfigured } from '../../lib/supabase';
-import { layout, lightColors, radii, spacing } from '../../theme';
+import { layout, radii, spacing, useTheme, type ThemeColors } from '../../theme';
 import { useCurrentUser, usePlaylistDetail } from '../../features/library/hooks';
 import { removePlaylistItem } from '../../features/library/libraryService';
 import { formatClock } from '../../features/library/format';
@@ -31,6 +31,8 @@ type Props = NativeStackScreenProps<LibraryRootStackParamList, 'Playlist'>;
  * gets an honest "not available" message.
  */
 export function PlaylistScreen({ navigation, route }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { playlistId } = route.params;
   const { user } = useCurrentUser();
   const detailState = usePlaylistDetail(playlistId);
@@ -106,7 +108,7 @@ export function PlaylistScreen({ navigation, route }: Props) {
         />
       ) : (
         <View style={[styles.cover, styles.coverEmpty]}>
-          <MaterialIcons name="playlist-play" size={40} color={lightColors.textSecondary} />
+          <MaterialIcons name="playlist-play" size={40} color={colors.textSecondary} />
         </View>
       )}
       <Text style={styles.playlistTitle}>{detail.playlist.title}</Text>
@@ -128,7 +130,7 @@ export function PlaylistScreen({ navigation, route }: Props) {
           accessibilityRole="button"
           accessibilityLabel="Play the first recording in this playlist"
         >
-          <MaterialIcons name="play-arrow" size={20} color={lightColors.subscribeText} />
+          <MaterialIcons name="play-arrow" size={20} color={colors.subscribeText} />
           <Text style={styles.playAllText}>Play</Text>
         </Pressable>
       ) : null}
@@ -187,42 +189,42 @@ export function PlaylistScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: lightColors.background },
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background },
   listPad: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, flexGrow: 1 },
   header: { paddingBottom: spacing.md },
   coverSkeleton: {
     width: '100%',
     aspectRatio: layout.thumbnailAspectRatio,
     borderRadius: radii.card,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     marginBottom: spacing.md,
   },
   cover: {
     width: '100%',
     aspectRatio: layout.thumbnailAspectRatio,
     borderRadius: radii.card,
-    backgroundColor: lightColors.playerBackground,
+    backgroundColor: colors.playerBackground,
   },
   coverEmpty: {
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  playlistTitle: { fontSize: 20, fontWeight: '700', color: lightColors.text, marginTop: spacing.md },
-  playlistDescription: { fontSize: 14, lineHeight: 20, color: lightColors.textSecondary, marginTop: spacing.xs },
-  playlistMeta: { fontSize: 13, color: lightColors.textSecondary, marginTop: spacing.xs },
-  errorLine: { color: lightColors.accent, fontSize: 13, paddingTop: spacing.sm },
+  playlistTitle: { fontSize: 20, fontWeight: '700', color: colors.text, marginTop: spacing.md },
+  playlistDescription: { fontSize: 14, lineHeight: 20, color: colors.textSecondary, marginTop: spacing.xs },
+  playlistMeta: { fontSize: 13, color: colors.textSecondary, marginTop: spacing.xs },
+  errorLine: { color: colors.accent, fontSize: 13, paddingTop: spacing.sm },
   playAllButton: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
     gap: spacing.xs,
-    backgroundColor: lightColors.subscribeBackground,
+    backgroundColor: colors.subscribeBackground,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
     paddingVertical: 9,
     marginTop: spacing.md,
   },
-  playAllText: { fontSize: 14, fontWeight: '600', color: lightColors.subscribeText },
+  playAllText: { fontSize: 14, fontWeight: '600', color: colors.subscribeText },
 });

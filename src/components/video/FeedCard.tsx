@@ -1,8 +1,8 @@
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { layout, lightColors, nativeApp, radii, spacing, typography } from '../../theme';
+import { layout, nativeApp, radii, spacing, typography, useTheme, type ThemeColors } from '../../theme';
 import { formatDuration } from './VideoCard';
 import { ICON_HIT_SLOP } from '../../lib/touch';
 import type { CardVideoData } from './cardData';
@@ -58,6 +58,8 @@ export const FeedCard = memo(function FeedCard({
   onChannelPress,
   menuActions,
 }: FeedCardProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const isLive = data.broadcastState === 'live';
   const isUpNext = variant === 'upNext';
   const [menuOpen, setMenuOpen] = React.useState(false);
@@ -154,7 +156,7 @@ export const FeedCard = memo(function FeedCard({
             accessibilityRole="button"
             style={styles.moreButton}
           >
-            <MaterialIcons name="more-vert" size={20} color={lightColors.text} />
+            <MaterialIcons name="more-vert" size={20} color={colors.text} />
           </Pressable>
         ) : null}
       </Pressable>
@@ -213,7 +215,7 @@ export const FeedCard = memo(function FeedCard({
                 accessibilityState={{ selected: !!saved }}
                 accessibilityRole="button"
               >
-                <MaterialIcons name={saved ? 'bookmark' : 'bookmark-border'} size={24} color={lightColors.text} />
+                <MaterialIcons name={saved ? 'bookmark' : 'bookmark-border'} size={24} color={colors.text} />
               </Pressable>
             ) : null}
             {onShare ? (
@@ -223,7 +225,7 @@ export const FeedCard = memo(function FeedCard({
                 accessibilityLabel="Share"
                 accessibilityRole="button"
               >
-                <MaterialIcons name="share" size={24} color={lightColors.text} />
+                <MaterialIcons name="share" size={24} color={colors.text} />
               </Pressable>
             ) : null}
             {hasMenu ? (
@@ -233,7 +235,7 @@ export const FeedCard = memo(function FeedCard({
                 accessibilityLabel="More actions"
                 accessibilityRole="button"
               >
-                <MaterialIcons name="more-horiz" size={24} color={lightColors.text} />
+                <MaterialIcons name="more-horiz" size={24} color={colors.text} />
               </Pressable>
             ) : null}
           </View>
@@ -247,7 +249,7 @@ export const FeedCard = memo(function FeedCard({
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   // Phase 9 W2 (audit D4): the reference home card is FLAT — full-bleed
   // thumbnail with no corner radius, flat white body, no shadow; cards
   // are separated by 16px of page ground. (The round-2 floating-card
@@ -266,9 +268,9 @@ const styles = StyleSheet.create({
     // Light placeholder while the image is in flight (QA issue 7) —
     // this was playerBackground (pure black), so every slow thumbnail
     // read as a black rectangle. Matches the skeleton colour.
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
   },
-  thumbnailEmpty: { backgroundColor: lightColors.surfaceVariant },
+  thumbnailEmpty: { backgroundColor: colors.surfaceVariant },
   liveBadge: {
     position: 'absolute',
     right: nativeApp.feedCard.badgeInset,
@@ -276,7 +278,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    backgroundColor: lightColors.accent,
+    backgroundColor: colors.accent,
     // Phase 9 W2 (audit D13): LIVE badge radius is radii.liveBadge (6)
     // everywhere; the round-2 ~8 estimate is superseded by the audit.
     borderRadius: radii.liveBadge,
@@ -297,27 +299,27 @@ const styles = StyleSheet.create({
   },
   durationText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600' },
   body: {
-    backgroundColor: lightColors.surface,
+    backgroundColor: colors.surface,
     paddingHorizontal: nativeApp.feedCard.bodyPadding,
     paddingTop: spacing.md,
     paddingBottom: spacing.md,
   },
   // QA issue 52: reference card titles are ~15-16px, two lines max.
   // Phase 9 W2: values come from the typography.cardTitle token.
-  title: { ...typography.cardTitle, color: lightColors.text },
+  title: { ...typography.cardTitle, color: colors.text },
   row: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: spacing.md },
   avatar: { width: 40, height: 40, borderRadius: 20 },
   avatarFallback: {
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarInitial: { fontSize: 16, fontWeight: '600', color: lightColors.textSecondary },
+  avatarInitial: { fontSize: 16, fontWeight: '600', color: colors.textSecondary },
   lines: { flex: 1, minWidth: 0 },
-  handle: { ...typography.channelName, color: lightColors.textSecondary },
+  handle: { ...typography.channelName, color: colors.textSecondary },
   // Phase 9 W2 (audit D6): feed meta uses typography.metadataLg (13px,
   // reference ≈13–14); the 12px metadata token stays for compact rows.
-  meta: { ...typography.metadataLg, color: lightColors.textSecondary, marginTop: 1 },
+  meta: { ...typography.metadataLg, color: colors.textSecondary, marginTop: 1 },
   engagement: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -326,7 +328,7 @@ const styles = StyleSheet.create({
   },
   // Up Next compact row (QA 57): horizontal, flat on the white sheet.
   upNextCard: {
-    backgroundColor: lightColors.surface,
+    backgroundColor: colors.surface,
     flexDirection: 'row',
     alignItems: 'flex-start',
     paddingHorizontal: nativeApp.feedCard.bodyPadding,
@@ -341,7 +343,7 @@ const styles = StyleSheet.create({
     // Light placeholder while loading (was playerBackground black —
     // a slow Up Next row read as a black rectangle; same fix as the
     // feed thumbnail, QA issue 7 pattern).
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
   },
   upNextBadge: {
     position: 'absolute',
@@ -354,8 +356,8 @@ const styles = StyleSheet.create({
   },
   // LIVE keeps the unified radii.liveBadge (6) even in the compact row.
   upNextLiveBadge: { borderRadius: radii.liveBadge },
-  upNextTitle: { fontSize: 15, lineHeight: 20, fontWeight: '600', color: lightColors.text },
-  upNextMeta: { fontSize: 13, lineHeight: 18, color: lightColors.textSecondary, marginTop: 3 },
+  upNextTitle: { fontSize: 15, lineHeight: 20, fontWeight: '600', color: colors.text },
+  upNextMeta: { fontSize: 13, lineHeight: 18, color: colors.textSecondary, marginTop: 3 },
   // Phase 9 W2 (audit D15): the kebab's own box is ≥44×44 — the old
   // 20px glyph + hitSlop 8 gave a ≈36px target, below the minimum.
   moreButton: { marginTop: 1, minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },

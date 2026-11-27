@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -19,7 +19,7 @@ import { useAuth } from '../../features/auth/AuthContext';
 import { GoogleSignInButton } from '../../features/auth/components/GoogleSignInButton';
 import { OrDivider } from '../../features/auth/components/OrDivider';
 import { authRedirectUrl, friendlyAuthError, type AuthErrorKind } from '../../features/auth/authHelpers';
-import { lightColors, radii, spacing, typography } from '../../theme';
+import { radii, spacing, typography, useTheme, type ThemeColors } from '../../theme';
 import type { RootStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SignIn'>;
@@ -32,6 +32,8 @@ type Props = NativeStackScreenProps<RootStackParamList, 'SignIn'>;
  * so every failure read as "login doesn't work".
  */
 export function SignInScreen({ navigation }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   // Set when the user landed here from a FAILED email link (expired /
   // already used) — explains why they are signed out.
   const { linkError } = useAuth();
@@ -159,7 +161,7 @@ export function SignInScreen({ navigation }: Props) {
       <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
       <View style={styles.topRow}>
         <Pressable onPress={() => goBackOrTab(navigation, 'Library')} hitSlop={10} accessibilityLabel="Back">
-          <MaterialIcons name="arrow-back" size={24} color={lightColors.text} />
+          <MaterialIcons name="arrow-back" size={24} color={colors.text} />
         </Pressable>
         <Pressable
           onPress={() => navigation.navigate('MainTabs', { screen: 'Home' })}
@@ -167,7 +169,7 @@ export function SignInScreen({ navigation }: Props) {
           accessibilityLabel="Go to Home"
           accessibilityRole="button"
         >
-          <MaterialIcons name="home" size={24} color={lightColors.text} />
+          <MaterialIcons name="home" size={24} color={colors.text} />
         </Pressable>
       </View>
       <View style={styles.brand}>
@@ -194,7 +196,7 @@ export function SignInScreen({ navigation }: Props) {
           <TextInput
             style={styles.input}
             placeholder="you@example.com"
-            placeholderTextColor={lightColors.textSecondary}
+            placeholderTextColor={colors.textSecondary}
             autoCapitalize="none"
             autoComplete="email"
             keyboardType="email-address"
@@ -209,7 +211,7 @@ export function SignInScreen({ navigation }: Props) {
             <TextInput
               style={styles.passwordInput}
               placeholder="Your password"
-              placeholderTextColor={lightColors.textSecondary}
+              placeholderTextColor={colors.textSecondary}
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="password"
@@ -226,7 +228,7 @@ export function SignInScreen({ navigation }: Props) {
               <MaterialIcons
                 name={showPassword ? 'visibility-off' : 'visibility'}
                 size={22}
-                color={lightColors.textSecondary}
+                color={colors.textSecondary}
               />
             </Pressable>
           </View>
@@ -256,7 +258,7 @@ export function SignInScreen({ navigation }: Props) {
             accessibilityRole="button"
           >
             {busy ? (
-              <ActivityIndicator color={lightColors.subscribeText} />
+              <ActivityIndicator color={colors.subscribeText} />
             ) : (
               <Text style={styles.primaryButtonText}>Sign In</Text>
             )}
@@ -275,56 +277,56 @@ export function SignInScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: lightColors.background, paddingHorizontal: spacing.xl, width: '100%', maxWidth: 480, alignSelf: 'center' },
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.xl, width: '100%', maxWidth: 480, alignSelf: 'center' },
   topRow: { paddingTop: spacing.xl, marginBottom: spacing.lg, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   brand: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xxl },
   playMark: {
     width: 34,
     height: 24,
     borderRadius: 7,
-    backgroundColor: lightColors.accent,
+    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  wordmark: { fontSize: 21, fontWeight: '700', color: lightColors.text, letterSpacing: -0.3 },
-  heading: { ...typography.watchTitle, color: lightColors.text, marginBottom: spacing.lg },
+  wordmark: { fontSize: 21, fontWeight: '700', color: colors.text, letterSpacing: -0.3 },
+  heading: { ...typography.watchTitle, color: colors.text, marginBottom: spacing.lg },
   input: {
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: radii.card,
     paddingHorizontal: spacing.lg,
     paddingVertical: 14,
     fontSize: 16,
-    color: lightColors.text,
+    color: colors.text,
     marginBottom: spacing.md,
   },
-  error: { ...typography.body, color: lightColors.accent, marginBottom: spacing.md },
-  label: { ...typography.chip, color: lightColors.text, marginBottom: spacing.xs, marginTop: spacing.sm },
-  fieldError: { ...typography.metadata, color: lightColors.accent, marginBottom: spacing.sm },
-  success: { ...typography.body, color: lightColors.text, marginBottom: spacing.md },
-  helper: { ...typography.metadata, color: lightColors.textSecondary, textAlign: 'center', marginTop: spacing.sm },
+  error: { ...typography.body, color: colors.accent, marginBottom: spacing.md },
+  label: { ...typography.chip, color: colors.text, marginBottom: spacing.xs, marginTop: spacing.sm },
+  fieldError: { ...typography.metadata, color: colors.accent, marginBottom: spacing.sm },
+  success: { ...typography.body, color: colors.text, marginBottom: spacing.md },
+  helper: { ...typography.metadata, color: colors.textSecondary, textAlign: 'center', marginTop: spacing.sm },
   forgotRow: { alignSelf: 'flex-end', paddingVertical: spacing.sm },
   resendRow: { alignSelf: 'flex-start', paddingVertical: spacing.sm },
-  forgotText: { ...typography.chip, color: lightColors.text },
+  forgotText: { ...typography.chip, color: colors.text },
   passwordRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: radii.card,
     paddingHorizontal: spacing.lg,
     marginBottom: spacing.md,
   },
-  passwordInput: { flex: 1, paddingVertical: 14, fontSize: 16, color: lightColors.text },
+  passwordInput: { flex: 1, paddingVertical: 14, fontSize: 16, color: colors.text },
   primaryButton: {
-    backgroundColor: lightColors.subscribeBackground,
+    backgroundColor: colors.subscribeBackground,
     borderRadius: radii.pill,
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: spacing.sm,
   },
   buttonDisabled: { opacity: 0.5 },
-  primaryButtonText: { fontSize: 16, fontWeight: '600', color: lightColors.subscribeText },
+  primaryButtonText: { fontSize: 16, fontWeight: '600', color: colors.subscribeText },
   switchRow: { alignItems: 'center', marginTop: spacing.xl, paddingVertical: spacing.md, minHeight: 44, justifyContent: 'center' },
-  switchText: { ...typography.body, color: lightColors.textSecondary },
-  switchStrong: { color: lightColors.text, fontWeight: '600' },
+  switchText: { ...typography.body, color: colors.textSecondary },
+  switchStrong: { color: colors.text, fontWeight: '600' },
 });

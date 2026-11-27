@@ -1,8 +1,8 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { lightColors, radii, spacing, typography } from '../../theme';
+import { radii, spacing, typography, useTheme, type ThemeColors } from '../../theme';
 import { useAuth } from '../../features/auth';
 import {
   addSearchHistory,
@@ -35,6 +35,8 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Search'>;
  * history and runs the full search on the results screen.
  */
 export function SearchScreen({ navigation }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { user } = useAuth();
   const userId = user?.id ?? null;
   const [query, setQuery] = useState('');
@@ -152,14 +154,14 @@ export function SearchScreen({ navigation }: Props) {
     <View style={styles.container}>
       <View style={styles.bar}>
         <Pressable onPress={() => goBackOrTab(navigation, 'Home')} hitSlop={10} accessibilityLabel="Back">
-          <MaterialIcons name="arrow-back" size={24} color={lightColors.text} />
+          <MaterialIcons name="arrow-back" size={24} color={colors.text} />
         </Pressable>
         <View style={styles.field}>
           <TextInput
             ref={inputRef}
             style={styles.input}
             placeholder="Search samagams"
-            placeholderTextColor={lightColors.textSecondary}
+            placeholderTextColor={colors.textSecondary}
             value={query}
             onChangeText={setQuery}
             onSubmitEditing={() => submit()}
@@ -170,7 +172,7 @@ export function SearchScreen({ navigation }: Props) {
           />
           {query ? (
             <Pressable onPress={onClearQuery} hitSlop={SMALL_ICON_HIT_SLOP} accessibilityLabel="Clear search" accessibilityRole="button">
-              <MaterialIcons name="close" size={20} color={lightColors.text} />
+              <MaterialIcons name="close" size={20} color={colors.text} />
             </Pressable>
           ) : null}
         </View>
@@ -181,7 +183,7 @@ export function SearchScreen({ navigation }: Props) {
           accessibilityLabel="Search"
           accessibilityRole="button"
         >
-          <MaterialIcons name="search" size={22} color={lightColors.subscribeText} />
+          <MaterialIcons name="search" size={22} color={colors.subscribeText} />
         </Pressable>
       </View>
 
@@ -198,7 +200,7 @@ export function SearchScreen({ navigation }: Props) {
                 onPress={() => submit(item.text)}
                 accessibilityRole="button"
               >
-                <MaterialIcons name="history" size={22} color={lightColors.textSecondary} />
+                <MaterialIcons name="history" size={22} color={colors.textSecondary} />
                 <View style={styles.rowTextWrap}>
                   <Text style={styles.rowText} numberOfLines={1}>
                     {item.text}
@@ -214,7 +216,7 @@ export function SearchScreen({ navigation }: Props) {
                 style={styles.removeBtn}
                 accessibilityLabel={`Remove "${item.text}" from search history`}
               >
-                <MaterialIcons name="close" size={20} color={lightColors.textSecondary} />
+                <MaterialIcons name="close" size={20} color={colors.textSecondary} />
               </Pressable>
             </View>
           )}
@@ -238,7 +240,7 @@ export function SearchScreen({ navigation }: Props) {
                       onPress={() => submit(video.title)}
                       accessibilityRole="button"
                     >
-                      <MaterialIcons name="play-circle-outline" size={22} color={lightColors.textSecondary} />
+                      <MaterialIcons name="play-circle-outline" size={22} color={colors.textSecondary} />
                       <Text style={styles.rowText} numberOfLines={1}>
                         {video.title}
                       </Text>
@@ -265,7 +267,7 @@ export function SearchScreen({ navigation }: Props) {
                 <MaterialIcons
                   name={item.source === 'history' ? 'history' : 'search'}
                   size={22}
-                  color={lightColors.textSecondary}
+                  color={colors.textSecondary}
                 />
                 <Text style={styles.rowText} numberOfLines={1}>
                   {item.text}
@@ -279,7 +281,7 @@ export function SearchScreen({ navigation }: Props) {
                 hitSlop={8}
                 accessibilityLabel={`Fill search with "${item.text}" without searching yet`}
               >
-                <MaterialIcons name="north-west" size={20} color={lightColors.textSecondary} />
+                <MaterialIcons name="north-west" size={20} color={colors.textSecondary} />
               </Pressable>
             </View>
           )}
@@ -338,8 +340,8 @@ function formatWhen(ts: number): string {
   return new Date(ts).toLocaleDateString();
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: lightColors.background, width: '100%', maxWidth: 960, alignSelf: 'center' },
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background, width: '100%', maxWidth: 960, alignSelf: 'center' },
   bar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -352,15 +354,15 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
     height: 44,
   },
-  input: { flex: 1, fontSize: 16, color: lightColors.text, outlineStyle: 'none' } as object,
+  input: { flex: 1, fontSize: 16, color: colors.text, outlineStyle: 'none' } as object,
   hint: {
     ...typography.body,
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
     paddingHorizontal: spacing.lg,
     marginTop: spacing.md,
   },
@@ -372,23 +374,23 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   rowMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  rowText: { ...typography.body, fontSize: 16, color: lightColors.text, flex: 1 },
+  rowText: { ...typography.body, fontSize: 16, color: colors.text, flex: 1 },
   clearRow: { paddingHorizontal: spacing.lg, paddingVertical: spacing.lg },
-  clearText: { ...typography.body, fontWeight: '600', color: lightColors.text },
-  clearTextArmed: { color: lightColors.accent },
+  clearText: { ...typography.body, fontWeight: '600', color: colors.text },
+  clearTextArmed: { color: colors.accent },
   headingRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingRight: spacing.lg,
   },
-  clearAllText: { ...typography.chip, color: lightColors.text, paddingVertical: spacing.sm },
+  clearAllText: { ...typography.chip, color: colors.text, paddingVertical: spacing.sm },
   removeBtn: { padding: spacing.sm },
   rowTextWrap: { flex: 1 },
-  rowSub: { ...typography.metadata, color: lightColors.textSecondary },
+  rowSub: { ...typography.metadata, color: colors.textSecondary },
   listHeading: {
     ...typography.metadata,
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: spacing.xs,
@@ -398,7 +400,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: lightColors.subscribeBackground,
+    backgroundColor: colors.subscribeBackground,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -410,11 +412,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    backgroundColor: lightColors.text,
+    backgroundColor: colors.text,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
-  undoText: { flex: 1, color: lightColors.subscribeText, fontSize: 14 },
+  undoText: { flex: 1, color: colors.subscribeText, fontSize: 14 },
   undoAction: { color: '#8AB4F8', fontSize: 14, fontWeight: '700' },
 });

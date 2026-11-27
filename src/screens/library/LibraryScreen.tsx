@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
@@ -17,7 +17,7 @@ import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { isSupabaseConfigured } from '../../lib/supabase';
-import { layout, lightColors, radii, spacing } from '../../theme';
+import { layout, radii, spacing, useTheme, type ThemeColors } from '../../theme';
 import { ICON_HIT_SLOP } from '../../lib/touch';
 import type { MainTabParamList } from '../../navigation/types';
 import {
@@ -59,6 +59,8 @@ const HISTORY_CARD_WIDTH = Math.round(Dimensions.get('window').width * 0.36);
  * imitated.)
  */
 export function LibraryScreen({ navigation }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { user, loading: authLoading } = useCurrentUser();
   const scrollRef = React.useRef<React.ElementRef<typeof ScrollView>>(null);
   useScrollToTop(scrollRef);
@@ -169,7 +171,7 @@ export function LibraryScreen({ navigation }: Props) {
               accessibilityLabel="Remove from history"
               style={styles.historyMore}
             >
-              <MaterialIcons name="more-horiz" size={20} color={lightColors.text} />
+              <MaterialIcons name="more-horiz" size={20} color={colors.text} />
             </Pressable>
           </View>
           <Text style={styles.historyChannel} numberOfLines={1}>
@@ -178,7 +180,7 @@ export function LibraryScreen({ navigation }: Props) {
         </View>
       );
     },
-    [openVideo, removeFromShelf],
+    [openVideo, removeFromShelf, colors, styles],
   );
 
   const displayName = profile?.display_name ?? null;
@@ -197,14 +199,14 @@ export function LibraryScreen({ navigation }: Props) {
           accessibilityRole="button"
         >
           <Text style={styles.accountsText}>Account</Text>
-          <MaterialIcons name="keyboard-arrow-down" size={20} color={lightColors.text} />
+          <MaterialIcons name="keyboard-arrow-down" size={20} color={colors.text} />
         </Pressable>
         <View style={styles.headerActions}>
           <Pressable onPress={() => navigation.navigate('Search')} hitSlop={ICON_HIT_SLOP} accessibilityLabel="Search" accessibilityRole="button">
-            <MaterialIcons name="search" size={24} color={lightColors.text} />
+            <MaterialIcons name="search" size={24} color={colors.text} />
           </Pressable>
           <Pressable onPress={() => navigation.navigate('Settings')} hitSlop={ICON_HIT_SLOP} accessibilityLabel="Settings" accessibilityRole="button">
-            <MaterialIcons name="settings" size={24} color={lightColors.text} />
+            <MaterialIcons name="settings" size={24} color={colors.text} />
           </Pressable>
         </View>
       </View>
@@ -272,7 +274,7 @@ export function LibraryScreen({ navigation }: Props) {
                 hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
                 accessibilityRole="button"
               >
-                <MaterialIcons name="dashboard" size={18} color={lightColors.text} />
+                <MaterialIcons name="dashboard" size={18} color={colors.text} />
                 <Text style={styles.adminLinkText}>Admin dashboard</Text>
               </Pressable>
             ) : null}
@@ -281,7 +283,7 @@ export function LibraryScreen({ navigation }: Props) {
           <View style={styles.signInBlock}>
             <View style={styles.signInRow}>
               <View style={styles.signInAvatar}>
-                <MaterialIcons name="person" size={32} color={lightColors.textSecondary} />
+                <MaterialIcons name="person" size={32} color={colors.textSecondary} />
               </View>
               <View style={styles.signInLines}>
                 <Text style={styles.signInTitle}>Sign in to see your library</Text>
@@ -333,7 +335,7 @@ export function LibraryScreen({ navigation }: Props) {
           accessibilityRole="button"
         >
           <Text style={styles.sectionHeading}>History</Text>
-          <MaterialIcons name="chevron-right" size={22} color={lightColors.text} />
+          <MaterialIcons name="chevron-right" size={22} color={colors.text} />
         </Pressable>
         {user && historyShelf.length > 0 ? (
           <FlatList
@@ -347,7 +349,7 @@ export function LibraryScreen({ navigation }: Props) {
           />
         ) : user && history.loading ? (
           <View style={[styles.sectionLoading, styles.sectionLoadingPadded]}>
-            <ActivityIndicator size="small" color={lightColors.textSecondary} />
+            <ActivityIndicator size="small" color={colors.textSecondary} />
             <Text style={styles.sectionLoadingText}>Loading…</Text>
           </View>
         ) : !user && local.entries.length > 0 ? (
@@ -396,7 +398,7 @@ export function LibraryScreen({ navigation }: Props) {
                       accessibilityLabel="Remove from device history"
                       style={styles.historyMore}
                     >
-                      <MaterialIcons name="more-horiz" size={20} color={lightColors.text} />
+                      <MaterialIcons name="more-horiz" size={20} color={colors.text} />
                     </Pressable>
                   </View>
                   <Text style={styles.historyChannel} numberOfLines={1}>
@@ -426,7 +428,7 @@ export function LibraryScreen({ navigation }: Props) {
         >
           <Pressable style={styles.chip} onPress={() => navigation.navigate('History')} hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }} accessibilityRole="button">
             <Text style={styles.chipText}>Recent</Text>
-            <MaterialIcons name="keyboard-arrow-down" size={18} color={lightColors.text} />
+            <MaterialIcons name="keyboard-arrow-down" size={18} color={colors.text} />
           </Pressable>
           <Pressable style={styles.chip} onPress={() => navigation.navigate('Saved')} hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }} accessibilityRole="button">
             <Text style={styles.chipText}>Saved</Text>
@@ -444,7 +446,7 @@ export function LibraryScreen({ navigation }: Props) {
           {summaries.data.length === 0 ? (
             summaries.loading ? (
               <View style={styles.sectionLoading}>
-                <ActivityIndicator size="small" color={lightColors.textSecondary} />
+                <ActivityIndicator size="small" color={colors.textSecondary} />
                 <Text style={styles.sectionLoadingText}>Loading…</Text>
               </View>
             ) : (
@@ -459,14 +461,14 @@ export function LibraryScreen({ navigation }: Props) {
           ) : null}
           {user ? (
             <Pressable style={styles.newPlaylistRow} onPress={() => setCreateOpen(true)} accessibilityRole="button">
-              <MaterialIcons name="add" size={24} color={lightColors.text} />
+              <MaterialIcons name="add" size={24} color={colors.text} />
               <Text style={styles.newPlaylistText}>New playlist</Text>
             </Pressable>
           ) : null}
           {summaries.data.length > playlistPreview.length ? (
             <Pressable style={styles.viewAllRow} onPress={() => navigation.navigate('Playlists')} hitSlop={{ top: 4, bottom: 4, left: 0, right: 0 }} accessibilityRole="button">
               <Text style={styles.viewAllText}>View all playlists</Text>
-              <MaterialIcons name="chevron-right" size={18} color={lightColors.textSecondary} />
+              <MaterialIcons name="chevron-right" size={18} color={colors.textSecondary} />
             </Pressable>
           ) : null}
         </View>
@@ -499,7 +501,7 @@ export function LibraryScreen({ navigation }: Props) {
                 />
               ) : (
                 <View style={[styles.collectionThumb, styles.thumbEmptyCenter]}>
-                  <MaterialIcons name="bookmark-border" size={30} color={lightColors.textSecondary} />
+                  <MaterialIcons name="bookmark-border" size={30} color={colors.textSecondary} />
                 </View>
               )}
             </View>
@@ -525,7 +527,7 @@ export function LibraryScreen({ navigation }: Props) {
             <View style={styles.collectionThumbWrap}>
               <View style={styles.stackEdge} pointerEvents="none" />
               <View style={[styles.collectionThumb, styles.thumbEmptyCenter]}>
-                <MaterialIcons name="groups" size={30} color={lightColors.textSecondary} />
+                <MaterialIcons name="groups" size={30} color={colors.textSecondary} />
               </View>
             </View>
             <View style={styles.collectionLines}>
@@ -546,8 +548,8 @@ export function LibraryScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: lightColors.background },
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background },
   // Bottom clearance for the overlay blur bottom bar (was 32 —
   // the 56dp overlay bar would cover the last library rows).
   scrollContent: { paddingBottom: layout.bottomNavHeight + 24 },
@@ -562,12 +564,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
     paddingVertical: 9,
   },
-  accountsText: { fontSize: 15, fontWeight: '500', color: lightColors.text },
+  accountsText: { fontSize: 15, fontWeight: '500', color: colors.text },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 22 },
   profileBlock: {
     flexDirection: 'row',
@@ -580,28 +582,28 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  profileInitial: { fontSize: 28, fontWeight: '600', color: lightColors.textSecondary },
+  profileInitial: { fontSize: 28, fontWeight: '600', color: colors.textSecondary },
   profileLines: { flex: 1 },
   skeletonLineWide: {
     height: 20,
     width: '62%',
     borderRadius: 4,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
   },
   skeletonLineNarrow: {
     height: 14,
     width: '44%',
     borderRadius: 4,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     marginTop: spacing.sm,
   },
   skeletonRows: { paddingHorizontal: spacing.lg, paddingTop: spacing.xl, gap: spacing.md },
-  profileName: { fontSize: 24, fontWeight: '600', color: lightColors.text },
-  profileMeta: { fontSize: 14, color: lightColors.textSecondary, marginTop: 3 },
+  profileName: { fontSize: 24, fontWeight: '600', color: colors.text },
+  profileMeta: { fontSize: 14, color: colors.textSecondary, marginTop: 3 },
   profileButtons: {
     flexDirection: 'row',
     gap: spacing.md,
@@ -614,11 +616,11 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     alignItems: 'center',
   },
-  pillDark: { backgroundColor: lightColors.subscribeBackground },
-  pillLight: { backgroundColor: lightColors.surfaceVariant },
+  pillDark: { backgroundColor: colors.subscribeBackground },
+  pillLight: { backgroundColor: colors.surfaceVariant },
   pillText: { fontSize: 15, fontWeight: '600' },
-  pillTextDark: { color: lightColors.subscribeText },
-  pillTextLight: { color: lightColors.text },
+  pillTextDark: { color: colors.subscribeText },
+  pillTextLight: { color: colors.text },
   adminLink: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -626,7 +628,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     marginTop: spacing.lg,
   },
-  adminLinkText: { fontSize: 15, fontWeight: '500', color: lightColors.text },
+  adminLinkText: { fontSize: 15, fontWeight: '500', color: colors.text },
   profileButtonsAlt: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
   errorBanner: {
     flexDirection: 'row',
@@ -634,33 +636,33 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     marginHorizontal: spacing.lg,
     marginTop: spacing.lg,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: radii.card,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
   },
-  errorBannerText: { flex: 1, fontSize: 13, color: lightColors.textSecondary },
-  errorBannerAction: { fontSize: 14, fontWeight: '700', color: lightColors.text },
+  errorBannerText: { flex: 1, fontSize: 13, color: colors.textSecondary },
+  errorBannerAction: { fontSize: 14, fontWeight: '700', color: colors.text },
   signInBlock: { paddingHorizontal: spacing.lg, paddingTop: spacing.md },
-  signInTitle: { fontSize: 17, fontWeight: '600', color: lightColors.text },
-  signInText: { fontSize: 13, lineHeight: 18, color: lightColors.textSecondary, marginTop: 3 },
+  signInTitle: { fontSize: 17, fontWeight: '600', color: colors.text },
+  signInText: { fontSize: 13, lineHeight: 18, color: colors.textSecondary, marginTop: 3 },
   signInButton: {
     alignSelf: 'flex-start',
     marginTop: spacing.lg,
-    backgroundColor: lightColors.subscribeBackground,
+    backgroundColor: colors.subscribeBackground,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.xl,
     minHeight: 44,
     justifyContent: 'center',
   },
-  signInButtonText: { fontSize: 15, fontWeight: '600', color: lightColors.subscribeText },
+  signInButtonText: { fontSize: 15, fontWeight: '600', color: colors.subscribeText },
   sectionHeadingRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
     marginTop: spacing.xxl,
   },
-  sectionHeading: { fontSize: 20, fontWeight: '600', color: lightColors.text },
+  sectionHeading: { fontSize: 20, fontWeight: '600', color: colors.text },
   libraryHeading: { paddingHorizontal: spacing.lg, marginTop: spacing.xxl },
   historyContent: { paddingHorizontal: spacing.lg, gap: spacing.md, paddingTop: spacing.md },
   historyCard: { width: HISTORY_CARD_WIDTH },
@@ -669,9 +671,9 @@ const styles = StyleSheet.create({
     width: '100%',
     aspectRatio: layout.thumbnailAspectRatio,
     borderRadius: radii.card,
-    backgroundColor: lightColors.playerBackground,
+    backgroundColor: colors.playerBackground,
   },
-  thumbEmpty: { backgroundColor: lightColors.surfaceVariant },
+  thumbEmpty: { backgroundColor: colors.surfaceVariant },
   progressTrack: {
     position: 'absolute',
     left: 0,
@@ -683,17 +685,17 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: radii.card,
     overflow: 'hidden',
   },
-  progressFill: { height: '100%', backgroundColor: lightColors.accent },
+  progressFill: { height: '100%', backgroundColor: colors.accent },
   historyTitleRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: spacing.sm },
   historyTitle: {
     flex: 1,
     fontSize: 14,
     lineHeight: 19,
     fontWeight: '600',
-    color: lightColors.text,
+    color: colors.text,
   },
   historyMore: { marginLeft: spacing.xs, marginTop: 1 },
-  historyChannel: { fontSize: 12, color: lightColors.textSecondary, marginTop: 2 },
+  historyChannel: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
   collectionRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -705,7 +707,7 @@ const styles = StyleSheet.create({
     width: '100%',
     aspectRatio: layout.thumbnailAspectRatio,
     borderRadius: radii.card,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
   },
   thumbEmptyCenter: { alignItems: 'center', justifyContent: 'center' },
   stackEdge: {
@@ -716,17 +718,17 @@ const styles = StyleSheet.create({
     height: 10,
     borderTopLeftRadius: radii.card,
     borderTopRightRadius: radii.card,
-    backgroundColor: lightColors.border,
+    backgroundColor: colors.border,
   },
   collectionLines: { flex: 1 },
-  collectionTitle: { fontSize: 17, fontWeight: '500', color: lightColors.text },
-  collectionMeta: { fontSize: 13, color: lightColors.textSecondary, marginTop: 3 },
+  collectionTitle: { fontSize: 17, fontWeight: '500', color: colors.text },
+  collectionMeta: { fontSize: 13, color: colors.textSecondary, marginTop: 3 },
   chipsContent: { paddingHorizontal: spacing.lg, gap: spacing.sm, paddingTop: spacing.md },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: 10,
     paddingHorizontal: spacing.md + 2,
     paddingVertical: 8,
@@ -737,7 +739,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -748,8 +750,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     marginTop: spacing.lg,
   },
-  channelRowText: { flex: 1, fontSize: 15, fontWeight: '500', color: lightColors.text },
-  chipText: { fontSize: 14, fontWeight: '500', color: lightColors.text },
+  channelRowText: { flex: 1, fontSize: 15, fontWeight: '500', color: colors.text },
+  chipText: { fontSize: 14, fontWeight: '500', color: colors.text },
   rowsBlock: { paddingHorizontal: spacing.lg },
   sectionLoading: {
     flexDirection: 'row',
@@ -758,20 +760,20 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
   },
   sectionLoadingPadded: { paddingHorizontal: spacing.lg },
-  sectionLoadingText: { fontSize: 14, color: lightColors.textSecondary },
-  rowsEmpty: { fontSize: 14, color: lightColors.textSecondary, paddingTop: spacing.md },
+  sectionLoadingText: { fontSize: 14, color: colors.textSecondary },
+  rowsEmpty: { fontSize: 14, color: colors.textSecondary, paddingTop: spacing.md },
   newPlaylistRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     paddingVertical: spacing.md,
   },
-  newPlaylistText: { fontSize: 15, fontWeight: '500', color: lightColors.text },
+  newPlaylistText: { fontSize: 15, fontWeight: '500', color: colors.text },
   viewAllRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm },
-  viewAllText: { fontSize: 14, fontWeight: '500', color: lightColors.textSecondary },
+  viewAllText: { fontSize: 14, fontWeight: '500', color: colors.textSecondary },
   emptyLine: {
     fontSize: 14,
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
   },

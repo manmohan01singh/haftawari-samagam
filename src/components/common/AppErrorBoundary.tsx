@@ -1,7 +1,7 @@
 import React, { Component, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { lightColors, radii, spacing, typography } from '../../theme';
+import { ThemeContext, radii, spacing, typography, type ThemeColors, type ThemeContextValue } from '../../theme';
 
 interface AppErrorBoundaryProps {
   children: ReactNode;
@@ -27,6 +27,12 @@ interface AppErrorBoundaryState {
  * throws. The error is logged for diagnosis.
  */
 export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorBoundaryState> {
+  static contextType = ThemeContext;
+
+  // No `context` field is redeclared: Component's base type already
+  // carries it (as any), and a redeclared field breaks both tsc
+  // (TS2612) and Metro's Babel (no `declare` class-field support).
+  // render() casts it to ThemeContextValue at the use site instead.
   state: AppErrorBoundaryState = { error: null };
 
   static getDerivedStateFromError(error: Error): AppErrorBoundaryState {
@@ -42,10 +48,12 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
   };
 
   render(): ReactNode {
+    const { colors } = this.context as ThemeContextValue;
+    const styles = createStyles(colors);
     if (this.state.error) {
       return (
         <View style={styles.container}>
-          <MaterialIcons name="error-outline" size={44} color={lightColors.textSecondary} />
+          <MaterialIcons name="error-outline" size={44} color={colors.textSecondary} />
           <Text style={styles.title}>Something went wrong</Text>
           <Text style={styles.message}>
             This screen hit a snag and could not be shown. Your account and recordings are fine —
@@ -66,32 +74,32 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
   }
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: spacing.xl,
-    backgroundColor: lightColors.background,
+    backgroundColor: colors.background,
   },
   title: {
     ...typography.sectionTitle,
-    color: lightColors.text,
+    color: colors.text,
     textAlign: 'center',
     marginTop: spacing.md,
   },
   message: {
     ...typography.body,
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
     textAlign: 'center',
     marginTop: spacing.sm,
   },
   button: {
-    backgroundColor: lightColors.subscribeBackground,
+    backgroundColor: colors.subscribeBackground,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.xl,
     paddingVertical: 11,
     marginTop: spacing.lg,
   },
-  buttonText: { fontSize: 15, fontWeight: '600', color: lightColors.subscribeText },
+  buttonText: { fontSize: 15, fontWeight: '600', color: colors.subscribeText },
 });

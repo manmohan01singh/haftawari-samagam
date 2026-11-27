@@ -1,9 +1,9 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { isSupabaseConfigured } from '../../lib/supabase';
-import { lightColors, spacing } from '../../theme';
+import { spacing, useTheme, type ThemeColors } from '../../theme';
 import { useCurrentUser, useSavedItems } from '../../features/library/hooks';
 import { removeSavedVideo } from '../../features/library/libraryService';
 import { formatDateLine } from '../../features/library/format';
@@ -28,6 +28,8 @@ type Props = NativeStackScreenProps<LibraryRootStackParamList, 'Saved'>;
  * refetches. Honest empty states throughout — no placeholder rows.
  */
 export function SavedScreen({ navigation }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { user, loading: authLoading } = useCurrentUser();
   const saved = useSavedItems(user?.id ?? null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -131,8 +133,8 @@ export function SavedScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: lightColors.background },
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background },
   listPad: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, flexGrow: 1 },
-  errorLine: { color: lightColors.accent, fontSize: 13, paddingBottom: spacing.sm },
+  errorLine: { color: colors.accent, fontSize: 13, paddingBottom: spacing.sm },
 });

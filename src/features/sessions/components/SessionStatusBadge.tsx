@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { lightColors, radii, spacing } from '../../../theme';
+import { radii, spacing, useTheme, type ThemeColors } from '../../../theme';
 import type { SessionStatus } from '../../../types/database';
 import { SESSION_LABELS } from '../types';
 
@@ -14,6 +14,8 @@ interface SessionStatusBadgeProps {
  * prerecorded recording together and is never labelled "LIVE".
  */
 export function SessionStatusBadge({ status }: SessionStatusBadgeProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <View
       style={[
@@ -33,7 +35,7 @@ export function SessionStatusBadge({ status }: SessionStatusBadgeProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -42,15 +44,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
   },
-  badgePlaying: { backgroundColor: lightColors.accent },
+  badgePlaying: { backgroundColor: colors.accent },
   badgeUpcoming: { backgroundColor: 'rgba(0,0,0,0.8)' },
   badgeCompleted: { backgroundColor: 'rgba(0,0,0,0.8)' },
   dot: {
     width: 7,
     height: 7,
     borderRadius: 3.5,
-    backgroundColor: lightColors.onAccent,
+    backgroundColor: colors.onAccent,
   },
-  textOnAccent: { color: lightColors.onAccent, fontSize: 11, fontWeight: '700', letterSpacing: 0.4 },
+  textOnAccent: { color: colors.onAccent, fontSize: 11, fontWeight: '700', letterSpacing: 0.4 },
   textMuted: { color: '#FFFFFF', fontSize: 11, fontWeight: '700', letterSpacing: 0.4 },
 });

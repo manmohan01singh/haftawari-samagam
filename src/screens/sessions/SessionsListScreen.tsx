@@ -23,7 +23,7 @@ import {
 import { deriveStatus } from '../../features/sessions/stateMachine';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import type { RootStackParamList } from '../../navigation/types';
-import { lightColors, spacing, typography } from '../../theme';
+import { spacing, typography, useTheme, type ThemeColors } from '../../theme';
 import type { SessionStatus } from '../../types/database';
 
 /**
@@ -62,6 +62,8 @@ const SECTION_TITLES: Record<VisibleStatus, string> = {
  * Cancelled sessions are not promoted in the list.
  */
 export function SessionsListScreen({ navigation, route }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   // Route param (Home "Live" tab / ?filter=live deep link): 'live' is
   // the ONLY recognised filter and it maps to the real NOW PLAYING
   // status vocabulary — there is no 'live' session status. Any other
@@ -202,7 +204,7 @@ export function SessionsListScreen({ navigation, route }: Props) {
         <Text style={styles.sectionCount}>{section.data.length}</Text>
       </View>
     ),
-    [],
+    [styles],
   );
 
   // Every state of this screen renders under the same top bar. Before
@@ -313,18 +315,18 @@ export function SessionsListScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: lightColors.background },
-  list: { flex: 1, backgroundColor: lightColors.background },
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.background },
+  list: { flex: 1, backgroundColor: colors.background },
   content: { paddingTop: spacing.lg, paddingBottom: spacing.xxl },
   emptyContainer: { flexGrow: 1 },
   center: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: lightColors.background,
+    backgroundColor: colors.background,
   },
-  loadingPad: { flex: 1, backgroundColor: lightColors.background, paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
+  loadingPad: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -336,8 +338,8 @@ const styles = StyleSheet.create({
   sectionCount: {
     fontSize: 13,
     fontWeight: '600',
-    color: lightColors.textSecondary,
-    backgroundColor: lightColors.surfaceVariant,
+    color: colors.textSecondary,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: 10,
     paddingHorizontal: 8,
     paddingVertical: 1,
@@ -345,8 +347,8 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     ...typography.sectionTitle,
-    color: lightColors.text,
+    color: colors.text,
     letterSpacing: 0.3,
   },
-  sectionTitlePlaying: { color: lightColors.accent },
+  sectionTitlePlaying: { color: colors.accent },
 });

@@ -1,8 +1,8 @@
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { layout, lightColors, radii, spacing, typography } from '../../theme';
+import { layout, radii, spacing, typography, useTheme, type ThemeColors } from '../../theme';
 import { formatDuration } from './VideoCard';
 import type { CardVideoData } from './cardData';
 import { CardActionSheet, type CardMenuAction } from '../common/CardActionSheet';
@@ -28,6 +28,8 @@ interface ShelfCardProps {
  * metadata lines. Used by Subscriptions, Search, Channel and Library.
  */
 export const ShelfCard = memo(function ShelfCard({ data, onPress, showAvatar = false, menuActions }: ShelfCardProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const isLive = data.broadcastState === 'live';
   const [menuOpen, setMenuOpen] = React.useState(false);
   return (
@@ -93,7 +95,7 @@ export const ShelfCard = memo(function ShelfCard({ data, onPress, showAvatar = f
                 accessibilityLabel="More actions"
                 style={styles.moreButton}
               >
-                <MaterialIcons name="more-horiz" size={20} color={lightColors.text} />
+                <MaterialIcons name="more-horiz" size={20} color={colors.text} />
               </Pressable>
             ) : null}
           </View>
@@ -115,7 +117,7 @@ export const ShelfCard = memo(function ShelfCard({ data, onPress, showAvatar = f
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   card: { paddingBottom: spacing.xl },
   thumbnailWrap: { position: 'relative' },
   thumbnail: {
@@ -124,9 +126,9 @@ const styles = StyleSheet.create({
     borderRadius: radii.card,
     // Phase 9 W2 (audit D14): placeholder is surfaceVariant like
     // FeedCard — playerBackground black read as a black rectangle.
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
   },
-  thumbnailEmpty: { backgroundColor: lightColors.surfaceVariant },
+  thumbnailEmpty: { backgroundColor: colors.surfaceVariant },
   liveBadge: {
     position: 'absolute',
     right: spacing.sm,
@@ -134,7 +136,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    backgroundColor: lightColors.accent,
+    backgroundColor: colors.accent,
     borderRadius: radii.liveBadge,
     paddingHorizontal: 6,
     paddingVertical: 3,
@@ -153,18 +155,18 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', marginTop: spacing.md, gap: spacing.md },
   avatarWrap: { position: 'relative', width: 48, height: 48 },
   avatar: { width: 48, height: 48, borderRadius: 24 },
-  avatarLiveRing: { borderWidth: 2.5, borderColor: lightColors.accent },
+  avatarLiveRing: { borderWidth: 2.5, borderColor: colors.accent },
   avatarFallback: {
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarInitial: { fontSize: 18, fontWeight: '600', color: lightColors.textSecondary },
+  avatarInitial: { fontSize: 18, fontWeight: '600', color: colors.textSecondary },
   avatarLivePill: {
     position: 'absolute',
     bottom: -6,
     alignSelf: 'center',
-    backgroundColor: lightColors.accent,
+    backgroundColor: colors.accent,
     borderRadius: 4,
     paddingHorizontal: 5,
     paddingVertical: 1,
@@ -172,8 +174,8 @@ const styles = StyleSheet.create({
   avatarLiveText: { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
   lines: { flex: 1 },
   titleRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  title: { flex: 1, ...typography.cardTitle, color: lightColors.text },
+  title: { flex: 1, ...typography.cardTitle, color: colors.text },
   moreButton: { marginLeft: spacing.sm, marginTop: 1, minWidth: 32, minHeight: 32, alignItems: 'center', justifyContent: 'center' },
-  channel: { fontSize: 13, color: lightColors.textSecondary, marginTop: 3 },
-  meta: { fontSize: 13, color: lightColors.textSecondary, marginTop: 1 },
+  channel: { fontSize: 13, color: colors.textSecondary, marginTop: 3 },
+  meta: { fontSize: 13, color: colors.textSecondary, marginTop: 1 },
 });

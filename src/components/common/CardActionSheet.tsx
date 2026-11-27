@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { lightColors, nativeApp, radii, spacing } from '../../theme';
+import { nativeApp, radii, spacing, useTheme, type ThemeColors } from '../../theme';
 
 export interface CardMenuAction {
   key: string;
@@ -24,6 +24,8 @@ interface CardActionSheetProps {
  * Pressable wrapping the sheet — that pattern swallowed taps on web).
  */
 export function CardActionSheet({ visible, onClose, actions }: CardActionSheetProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.backdrop}>
@@ -48,13 +50,13 @@ export function CardActionSheet({ visible, onClose, actions }: CardActionSheetPr
               <MaterialIcons
                 name={action.icon as keyof typeof MaterialIcons.glyphMap}
                 size={24}
-                color={lightColors.text}
+                color={colors.text}
               />
               <Text style={styles.label}>{action.label}</Text>
             </Pressable>
           ))}
           <Pressable style={styles.row} onPress={onClose} accessibilityRole="button">
-            <MaterialIcons name="close" size={24} color={lightColors.text} />
+            <MaterialIcons name="close" size={24} color={colors.text} />
             <Text style={styles.label}>Cancel</Text>
           </Pressable>
         </View>
@@ -63,12 +65,12 @@ export function CardActionSheet({ visible, onClose, actions }: CardActionSheetPr
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   backdropFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   sheet: {
     zIndex: 1,
-    backgroundColor: lightColors.surface,
+    backgroundColor: colors.surface,
     borderTopLeftRadius: nativeApp.watchSheet.topRadius,
     borderTopRightRadius: nativeApp.watchSheet.topRadius,
     paddingHorizontal: spacing.lg,
@@ -80,7 +82,7 @@ const styles = StyleSheet.create({
     width: nativeApp.watchSheet.dragHandleWidth,
     height: nativeApp.watchSheet.dragHandleHeight,
     borderRadius: radii.pill,
-    backgroundColor: lightColors.border,
+    backgroundColor: colors.border,
     marginBottom: spacing.md,
   },
   row: {
@@ -90,5 +92,5 @@ const styles = StyleSheet.create({
     minHeight: 52,
     paddingVertical: spacing.md,
   },
-  label: { fontSize: 15, fontWeight: '500', color: lightColors.text },
+  label: { fontSize: 15, fontWeight: '500', color: colors.text },
 });

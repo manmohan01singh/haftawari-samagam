@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { lightColors, radii, spacing, typography } from '../../theme';
+import { radii, spacing, typography, useTheme, type ThemeColors } from '../../theme';
 
 interface EmptyStateProps {
   title: string;
@@ -16,6 +16,8 @@ interface EmptyStateProps {
  * returns nothing (or is not configured yet) — never placeholder content.
  */
 export function EmptyState({ title, message, actionLabel, onAction }: EmptyStateProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <View style={styles.container}>
       <Text style={styles.title}>{title}</Text>
@@ -29,7 +31,7 @@ export function EmptyState({ title, message, actionLabel, onAction }: EmptyState
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
     alignItems: 'center',
@@ -42,21 +44,21 @@ const styles = StyleSheet.create({
   },
   title: {
     ...typography.sectionTitle,
-    color: lightColors.text,
+    color: colors.text,
     textAlign: 'center',
   },
   message: {
     ...typography.body,
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
     textAlign: 'center',
     marginTop: spacing.sm,
   },
   button: {
-    backgroundColor: lightColors.subscribeBackground,
+    backgroundColor: colors.subscribeBackground,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.xl,
     paddingVertical: 11,
     marginTop: spacing.lg,
   },
-  buttonText: { fontSize: 15, fontWeight: '600', color: lightColors.subscribeText },
+  buttonText: { fontSize: 15, fontWeight: '600', color: colors.subscribeText },
 });

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   KeyboardAvoidingView,
   Modal,
@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { lightColors, nativeApp, radii, spacing } from '../../../theme';
+import { nativeApp, radii, spacing, useTheme, type ThemeColors } from '../../../theme';
 
 interface CreatePlaylistSheetProps {
   visible: boolean;
@@ -25,6 +25,8 @@ interface CreatePlaylistSheetProps {
  * Resets itself every time it opens.
  */
 export function CreatePlaylistSheet({ visible, onCreate, onClose }: CreatePlaylistSheetProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [title, setTitle] = useState('');
   const [isPublic, setIsPublic] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -75,7 +77,7 @@ export function CreatePlaylistSheet({ visible, onCreate, onClose }: CreatePlayli
               value={title}
               onChangeText={setTitle}
               placeholder="Playlist title"
-              placeholderTextColor={lightColors.textSecondary}
+              placeholderTextColor={colors.textSecondary}
               maxLength={120}
               autoFocus
               returnKeyType="done"
@@ -85,9 +87,9 @@ export function CreatePlaylistSheet({ visible, onCreate, onClose }: CreatePlayli
               <MaterialIcons
                 name={isPublic ? 'radio-button-checked' : 'radio-button-unchecked'}
                 size={22}
-                color={lightColors.text}
+                color={colors.text}
               />
-              <MaterialIcons name="public" size={20} color={lightColors.textSecondary} />
+              <MaterialIcons name="public" size={20} color={colors.textSecondary} />
               <View style={styles.radioLines}>
                 <Text style={styles.radioTitle}>Public</Text>
                 <Text style={styles.radioMeta}>Anyone can see this playlist</Text>
@@ -97,9 +99,9 @@ export function CreatePlaylistSheet({ visible, onCreate, onClose }: CreatePlayli
               <MaterialIcons
                 name={!isPublic ? 'radio-button-checked' : 'radio-button-unchecked'}
                 size={22}
-                color={lightColors.text}
+                color={colors.text}
               />
-              <MaterialIcons name="lock" size={20} color={lightColors.textSecondary} />
+              <MaterialIcons name="lock" size={20} color={colors.textSecondary} />
               <View style={styles.radioLines}>
                 <Text style={styles.radioTitle}>Private</Text>
                 <Text style={styles.radioMeta}>Only you can see this playlist</Text>
@@ -126,12 +128,12 @@ export function CreatePlaylistSheet({ visible, onCreate, onClose }: CreatePlayli
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   backdropFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   sheetWrap: { zIndex: 1 },
   sheet: {
-    backgroundColor: lightColors.surface,
+    backgroundColor: colors.surface,
     borderTopLeftRadius: nativeApp.watchSheet.topRadius,
     borderTopRightRadius: nativeApp.watchSheet.topRadius,
     paddingHorizontal: spacing.lg,
@@ -143,25 +145,25 @@ const styles = StyleSheet.create({
     width: nativeApp.watchSheet.dragHandleWidth,
     height: nativeApp.watchSheet.dragHandleHeight,
     borderRadius: radii.pill,
-    backgroundColor: lightColors.border,
+    backgroundColor: colors.border,
     marginBottom: spacing.lg,
   },
-  heading: { fontSize: 18, fontWeight: '700', color: lightColors.text, marginBottom: spacing.md },
+  heading: { fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: spacing.md },
   input: {
     borderWidth: 1,
-    borderColor: lightColors.border,
+    borderColor: colors.border,
     borderRadius: radii.card,
     paddingHorizontal: spacing.md,
     paddingVertical: 11,
     fontSize: 16,
-    color: lightColors.text,
+    color: colors.text,
     marginBottom: spacing.md,
   },
   radioRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm },
   radioLines: { flex: 1 },
-  radioTitle: { fontSize: 15, fontWeight: '500', color: lightColors.text },
-  radioMeta: { fontSize: 13, color: lightColors.textSecondary, marginTop: 1 },
-  error: { color: lightColors.accent, fontSize: 13, marginTop: spacing.sm },
+  radioTitle: { fontSize: 15, fontWeight: '500', color: colors.text },
+  radioMeta: { fontSize: 13, color: colors.textSecondary, marginTop: 1 },
+  error: { color: colors.accent, fontSize: 13, marginTop: spacing.sm },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.lg },
   cancelButton: {
     borderRadius: radii.pill,
@@ -169,17 +171,17 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     minHeight: 44,
     justifyContent: 'center',
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
   },
-  cancelText: { fontSize: 14, fontWeight: '600', color: lightColors.text },
+  cancelText: { fontSize: 14, fontWeight: '600', color: colors.text },
   createButton: {
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
     paddingVertical: 10,
     minHeight: 44,
     justifyContent: 'center',
-    backgroundColor: lightColors.subscribeBackground,
+    backgroundColor: colors.subscribeBackground,
   },
-  createText: { fontSize: 14, fontWeight: '600', color: lightColors.subscribeText },
+  createText: { fontSize: 14, fontWeight: '600', color: colors.subscribeText },
   disabled: { opacity: 0.5 },
 });

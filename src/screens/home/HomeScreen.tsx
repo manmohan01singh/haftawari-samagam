@@ -38,7 +38,7 @@ import { FEED_LIST_PERF } from '../../lib/listPerf';
 import { listSessionsWithVideos } from '../../features/sessions/sessionService';
 import { deriveStatus } from '../../features/sessions/stateMachine';
 import { serverClock } from '../../features/sessions/serverClock';
-import { layout, lightColors, spacing, typography } from '../../theme';
+import { layout, spacing, typography, useTheme, type ThemeColors } from '../../theme';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
 
 type Props = CompositeScreenProps<
@@ -149,6 +149,8 @@ const HomeFeedCell = memo(function HomeFeedCell({
  * skeletons hold the layout (no jumps).
  */
 export function HomeScreen({ navigation }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { user, profile } = useAuth();
   // QA 89: tapping the Home tab while already on Home scrolls the
   // feed back to the top (useScrollToTop hooks the tab re-press).
@@ -477,7 +479,7 @@ export function HomeScreen({ navigation }: Props) {
         accessibilityRole="button"
         accessibilityLabel={liveSession ? `Now playing: ${liveSession.title}` : 'Samagam Sessions'}
       >
-        <MaterialIcons name="groups" size={24} color={lightColors.text} />
+        <MaterialIcons name="groups" size={24} color={colors.text} />
         <View style={styles.sessionsLines}>
           <Text style={styles.sessionsTitle}>Samagam Sessions</Text>
           <Text style={styles.sessionsSub} numberOfLines={1}>
@@ -486,10 +488,10 @@ export function HomeScreen({ navigation }: Props) {
               : 'Watch together at the scheduled time'}
           </Text>
         </View>
-        <MaterialIcons name="chevron-right" size={24} color={lightColors.textSecondary} />
+        <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
       </Pressable>
     ),
-    [navigation, liveSession],
+    [navigation, liveSession, colors, styles],
   );
 
   const renderItem = useCallback(
@@ -599,10 +601,10 @@ export function HomeScreen({ navigation }: Props) {
             onRefresh={onRefresh}
             ListFooterComponent={
               loadingMore ? (
-                <ActivityIndicator style={styles.footerSpinner} color={lightColors.textSecondary} />
+                <ActivityIndicator style={styles.footerSpinner} color={colors.textSecondary} />
               ) : exhausted ? (
                 <View style={styles.endOfFeed}>
-                  <MaterialIcons name="check-circle" size={18} color={lightColors.textSecondary} />
+                  <MaterialIcons name="check-circle" size={18} color={colors.textSecondary} />
                   <Text style={styles.endOfFeedText}>
                     That&rsquo;s every video from the sangat channels
                   </Text>
@@ -624,7 +626,7 @@ export function HomeScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   // Screenshot 01: cards are white containers on a light-grey page
   // ground — the grey shows in the gaps between cards and around the
   // sessions row. White-on-white made the feed read as one
@@ -644,10 +646,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
-  sessionsRowPressed: { backgroundColor: lightColors.surfaceVariant },
+  sessionsRowPressed: { backgroundColor: colors.surfaceVariant },
   sessionsLines: { flex: 1 },
-  sessionsTitle: { ...typography.channelName, fontWeight: '600', color: lightColors.text },
-  sessionsSub: { ...typography.metadata, color: lightColors.textSecondary, marginTop: 1 },
+  sessionsTitle: { ...typography.channelName, fontWeight: '600', color: colors.text },
+  sessionsSub: { ...typography.metadata, color: colors.textSecondary, marginTop: 1 },
   feedContent: { paddingBottom: layout.bottomNavHeight + 24 },
   footerSpinner: { paddingVertical: spacing.lg },
   endOfFeed: {
@@ -658,5 +660,5 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xl,
     paddingHorizontal: spacing.lg,
   },
-  endOfFeedText: { ...typography.metadata, color: lightColors.textSecondary, textAlign: 'center' },
+  endOfFeedText: { ...typography.metadata, color: colors.textSecondary, textAlign: 'center' },
 });

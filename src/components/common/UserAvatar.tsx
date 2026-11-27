@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { lightColors } from '../../theme';
+import { useTheme, type ThemeColors } from '../../theme';
 
 interface UserAvatarProps {
   /** Real profile photo URL (e.g. the synced Google DP), when one exists. */
@@ -24,6 +24,8 @@ interface UserAvatarProps {
  * in their own avatar slots.
  */
 export function UserAvatar({ avatarUrl, initial, size = 40, initialFontSize }: UserAvatarProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   // Remember WHICH url failed: a new URL (sign-in as someone else,
   // DP changed) automatically gets a fresh try, no effect needed.
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
@@ -47,17 +49,17 @@ export function UserAvatar({ avatarUrl, initial, size = 40, initialFontSize }: U
           {initial}
         </Text>
       ) : (
-        <MaterialIcons name="person" size={Math.round(size * 0.6)} color={lightColors.textSecondary} />
+        <MaterialIcons name="person" size={Math.round(size * 0.6)} color={colors.textSecondary} />
       )}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   fallback: {
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  initial: { fontWeight: '600', color: lightColors.textSecondary },
+  initial: { fontWeight: '600', color: colors.textSecondary },
 });

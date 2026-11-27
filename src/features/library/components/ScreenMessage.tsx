@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { lightColors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useTheme, type ThemeColors } from '../../../theme';
 
 interface ScreenMessageProps {
   title: string;
@@ -15,6 +15,8 @@ interface ScreenMessageProps {
  * (EmptyState has no button; this is its actionable sibling.)
  */
 export function ScreenMessage({ title, message, actionLabel, onAction }: ScreenMessageProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <View style={styles.container}>
       <Text style={styles.title}>{title}</Text>
@@ -29,32 +31,34 @@ export function ScreenMessage({ title, message, actionLabel, onAction }: ScreenM
 }
 
 export function ScreenLoading({ label = 'Loading…' }: { label?: string }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <View style={styles.container}>
-      <ActivityIndicator color={lightColors.text} />
+      <ActivityIndicator color={colors.text} />
       <Text style={[styles.message, styles.loadingLabel]}>{label}</Text>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: spacing.xl,
-    backgroundColor: lightColors.background,
+    backgroundColor: colors.background,
   },
-  title: { ...typography.sectionTitle, color: lightColors.text, textAlign: 'center' },
+  title: { ...typography.sectionTitle, color: colors.text, textAlign: 'center' },
   message: {
     ...typography.body,
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
     textAlign: 'center',
     marginTop: spacing.sm,
   },
   loadingLabel: { marginTop: spacing.md },
   button: {
-    backgroundColor: lightColors.subscribeBackground,
+    backgroundColor: colors.subscribeBackground,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.xl,
     paddingVertical: 11,
@@ -62,5 +66,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: spacing.lg,
   },
-  buttonText: { fontSize: 15, fontWeight: '600', color: lightColors.subscribeText },
+  buttonText: { fontSize: 15, fontWeight: '600', color: colors.subscribeText },
 });

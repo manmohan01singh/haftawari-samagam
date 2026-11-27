@@ -25,7 +25,7 @@ import {
 } from '../../features/channels';
 import { isShortVideo, type YouTubeVideoMetadata } from '../../lib/youtube';
 import { FEED_LIST_PERF } from '../../lib/listPerf';
-import { layout, lightColors, nativeApp, radii, spacing } from '../../theme';
+import { layout, nativeApp, radii, spacing, useTheme, type ThemeColors } from '../../theme';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
 
 type Props = CompositeScreenProps<
@@ -68,6 +68,8 @@ const FILTERS: { key: UploadFilter; label: string }[] = [
  * There is NO Shorts shelf (user decision).
  */
 export function SubscriptionsScreen({ navigation }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { user, profile } = useAuth();
   const listRef = useRef<FlatList<YouTubeVideoMetadata>>(null);
   useScrollToTop(listRef);
@@ -378,7 +380,7 @@ export function SubscriptionsScreen({ navigation }: Props) {
           accessibilityRole="button"
           accessibilityLabel={`Sort by date, currently ${sort === 'latest' ? 'latest first' : 'oldest first'}. Tap to change.`}
         >
-          <MaterialIcons name="swap-vert" size={18} color={lightColors.text} />
+          <MaterialIcons name="swap-vert" size={18} color={colors.text} />
           <Text style={styles.sortText}>{sort === 'latest' ? 'Latest' : 'Oldest'}</Text>
         </Pressable>
       </View>
@@ -458,8 +460,8 @@ export function SubscriptionsScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: lightColors.background },
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background },
   // Bottom clearance for the overlay blur bottom bar (UX Fix 3's
   // overlay change): without it the bar covers the last rows.
   listPad: { paddingHorizontal: spacing.lg, paddingBottom: layout.bottomNavHeight + 24 },
@@ -471,18 +473,18 @@ const styles = StyleSheet.create({
   },
   railItem: { width: 76, alignItems: 'center' },
   railAvatarWrap: { position: 'relative', borderRadius: nativeApp.avatarRail.avatarSize / 2 + 3, padding: 3 },
-  railAvatarSelected: { borderWidth: 2, borderColor: lightColors.text, padding: 1 },
+  railAvatarSelected: { borderWidth: 2, borderColor: colors.text, padding: 1 },
   railAvatar: {
     width: nativeApp.avatarRail.avatarSize,
     height: nativeApp.avatarRail.avatarSize,
     borderRadius: nativeApp.avatarRail.avatarSize / 2,
   },
   avatarFallback: {
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarInitial: { fontSize: 22, fontWeight: '600', color: lightColors.textSecondary },
+  avatarInitial: { fontSize: 22, fontWeight: '600', color: colors.textSecondary },
   liveDot: {
     position: 'absolute',
     right: 0,
@@ -490,14 +492,14 @@ const styles = StyleSheet.create({
     width: nativeApp.avatarRail.liveDotSize,
     height: nativeApp.avatarRail.liveDotSize,
     borderRadius: nativeApp.avatarRail.liveDotSize / 2,
-    backgroundColor: lightColors.accent,
+    backgroundColor: colors.accent,
     borderWidth: 2,
     borderColor: '#FFFFFF',
   },
   railName: {
     fontSize: nativeApp.avatarRail.nameFontSize,
     lineHeight: 15,
-    color: lightColors.text,
+    color: colors.text,
     marginTop: spacing.xs,
     textAlign: 'center',
     width: '100%',
@@ -516,7 +518,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 20,
     fontWeight: '600',
-    color: lightColors.text,
+    color: colors.text,
   },
   controlsRow: {
     flexDirection: 'row',
@@ -527,14 +529,14 @@ const styles = StyleSheet.create({
   },
   chipsRow: { flexDirection: 'row', gap: spacing.sm },
   chip: {
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.md,
     paddingVertical: 7,
   },
-  chipActive: { backgroundColor: lightColors.text },
-  chipText: { fontSize: 14, fontWeight: '500', color: lightColors.text },
-  chipTextActive: { color: lightColors.background },
+  chipActive: { backgroundColor: colors.text },
+  chipText: { fontSize: 14, fontWeight: '500', color: colors.text },
+  chipTextActive: { color: colors.background },
   sortButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -542,7 +544,7 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     paddingHorizontal: spacing.sm,
   },
-  sortText: { fontSize: 14, fontWeight: '600', color: lightColors.text },
+  sortText: { fontSize: 14, fontWeight: '600', color: colors.text },
   columnWrapper: { gap: spacing.md },
   skeletonRow: { flexDirection: 'row', gap: spacing.md },
   skeletonCell: { flex: 1 },

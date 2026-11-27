@@ -1,9 +1,9 @@
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { formatDuration } from '../../../components/video/VideoCard';
 import { listThumbnailUrl } from '../../../components/video/cardData';
-import { layout, lightColors, nativeApp, radii, spacing, typography } from '../../../theme';
+import { layout, nativeApp, radii, spacing, typography, useTheme, type ThemeColors } from '../../../theme';
 import type { SessionStatus } from '../../../types/database';
 import { formatCountdown, formatSessionDateTime, formatStartedAgo } from '../format';
 import type { SessionWithVideo } from '../sessionService';
@@ -23,6 +23,8 @@ interface SessionCardProps {
  * schedule line. All text comes from the real session + video rows.
  */
 export const SessionCard = memo(function SessionCard({ item, effectiveStatus, nowMs, onPress }: SessionCardProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { session, video } = item;
   const title = session.title ?? video?.title ?? 'Samagam';
   // List-sized thumbnail (hqdefault) — the stored URL is the full-res
@@ -80,7 +82,7 @@ export const SessionCard = memo(function SessionCard({ item, effectiveStatus, no
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   card: {
     marginHorizontal: nativeApp.shelfCard.thumbnailInset,
     marginBottom: spacing.xl,
@@ -91,9 +93,9 @@ const styles = StyleSheet.create({
     width: '100%',
     aspectRatio: layout.thumbnailAspectRatio,
     borderRadius: nativeApp.shelfCard.thumbnailRadius,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
   },
-  thumbnailEmpty: { backgroundColor: lightColors.surfaceVariant },
+  thumbnailEmpty: { backgroundColor: colors.surfaceVariant },
   badgeWrap: { position: 'absolute', right: spacing.sm, bottom: spacing.sm },
   durationBadge: {
     position: 'absolute',
@@ -106,16 +108,16 @@ const styles = StyleSheet.create({
   },
   durationText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600' },
   body: { marginTop: spacing.md },
-  title: { ...typography.cardTitle, color: lightColors.text },
+  title: { ...typography.cardTitle, color: colors.text },
   schedule: {
     ...typography.channelName,
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
     marginTop: 2,
   },
   videoTitle: {
     ...typography.metadata,
     fontSize: 13,
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
     marginTop: 1,
   },
 });

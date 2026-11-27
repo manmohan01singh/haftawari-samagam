@@ -1,8 +1,8 @@
 import { useFocusEffect } from '@react-navigation/native';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { EmptyState } from '../../../components/common/EmptyState';
-import { lightColors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useTheme, type ThemeColors } from '../../../theme';
 import type { AuditLog, Profile } from '../../../types/database';
 import { fetchProfilesByIds, listAuditLogs } from '../adminService';
 import { AdminGate } from '../components/AdminGate';
@@ -26,6 +26,8 @@ function detailsSummary(details: Record<string, unknown> | null): string | null 
 }
 
 function AuditLogsContent() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [logs, setLogs] = useState<AuditLog[] | null>(null);
   const [actors, setActors] = useState<Map<string, Profile>>(new Map());
   const [error, setError] = useState<string | null>(null);
@@ -97,8 +99,8 @@ export function AdminAuditLogsScreen() {
   return <AdminGate>{() => <AuditLogsContent />}</AdminGate>;
 }
 
-const styles = StyleSheet.create({
-  help: { ...typography.body, color: lightColors.textSecondary },
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
+  help: { ...typography.body, color: colors.textSecondary },
   listHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -106,13 +108,13 @@ const styles = StyleSheet.create({
   },
   card: {
     borderWidth: 1,
-    borderColor: lightColors.border,
+    borderColor: colors.border,
     borderRadius: radii.card,
     padding: spacing.md,
     gap: spacing.xs,
-    backgroundColor: lightColors.surface,
+    backgroundColor: colors.surface,
   },
-  action: { ...typography.chip, color: lightColors.text },
-  meta: { ...typography.metadata, color: lightColors.textSecondary },
-  details: { ...typography.body, color: lightColors.textSecondary },
+  action: { ...typography.chip, color: colors.text },
+  meta: { ...typography.metadata, color: colors.textSecondary },
+  details: { ...typography.body, color: colors.textSecondary },
 });

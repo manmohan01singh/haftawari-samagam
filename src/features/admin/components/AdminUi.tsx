@@ -1,4 +1,4 @@
-import React, { useEffect, useState, type ReactNode } from 'react';
+import React, { useEffect, useState, useMemo, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -9,7 +9,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-import { lightColors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useTheme, type ThemeColors } from '../../../theme';
 import type { PublishState, SessionStatus, UserRole } from '../../../types/database';
 
 /**
@@ -46,6 +46,8 @@ export function friendlyError(err: unknown): string {
 /** Shared building blocks for the admin dashboard screens. */
 
 export function AdminScroll({ children }: { children: ReactNode }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.screenContent}>
       {children}
@@ -54,15 +56,19 @@ export function AdminScroll({ children }: { children: ReactNode }) {
 }
 
 export function LoadingView({ label }: { label: string }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <View style={styles.centered}>
-      <ActivityIndicator color={lightColors.text} />
+      <ActivityIndicator color={colors.text} />
       <Text style={styles.muted}>{label}</Text>
     </View>
   );
 }
 
 export function ErrorBanner({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <View style={styles.errorBox}>
       <Text style={styles.errorText}>{message}</Text>
@@ -76,10 +82,14 @@ export function ErrorBanner({ message, onRetry }: { message: string; onRetry?: (
 }
 
 export function SectionTitle({ children }: { children: ReactNode }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return <Text style={styles.sectionTitle}>{children}</Text>;
 }
 
 export function StatCard({ label, value }: { label: string; value: number }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <View style={styles.statCard}>
       <Text style={styles.statValue}>{value}</Text>
@@ -103,6 +113,8 @@ export function AdminButton({
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <Pressable
       onPress={onPress}
@@ -177,6 +189,8 @@ export function Chip({
   label: string;
   tone?: 'neutral' | 'dark' | 'accent' | 'outline';
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <View
       style={[
@@ -260,37 +274,37 @@ export function formatDuration(totalSeconds: number | null): string {
   return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
-export const adminStyles = StyleSheet.create({
+export const createAdminStyles = (colors: ThemeColors) => StyleSheet.create({
   input: {
     borderWidth: 1,
-    borderColor: lightColors.border,
+    borderColor: colors.border,
     borderRadius: radii.card,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
     ...typography.body,
-    color: lightColors.text,
-    backgroundColor: lightColors.surface,
+    color: colors.text,
+    backgroundColor: colors.surface,
   },
   fieldLabel: {
     ...typography.metadata,
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
     marginBottom: spacing.xs,
     textTransform: 'uppercase',
   },
 });
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: lightColors.background, width: '100%', maxWidth: 960, alignSelf: 'center' },
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.background, width: '100%', maxWidth: 960, alignSelf: 'center' },
   screenContent: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxl },
   centered: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.md,
-    backgroundColor: lightColors.background,
+    backgroundColor: colors.background,
     padding: spacing.xl,
   },
-  muted: { ...typography.body, color: lightColors.textSecondary, textAlign: 'center' },
+  muted: { ...typography.body, color: colors.textSecondary, textAlign: 'center' },
   errorBox: {
     backgroundColor: '#FDECEC',
     borderRadius: radii.card,
@@ -300,46 +314,46 @@ const styles = StyleSheet.create({
   errorText: { ...typography.body, color: '#8B0000' },
   retryButton: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.sm },
   retryText: { ...typography.chip, color: '#8B0000', textDecorationLine: 'underline' },
-  sectionTitle: { ...typography.sectionTitle, color: lightColors.text },
+  sectionTitle: { ...typography.sectionTitle, color: colors.text },
   statCard: {
     flexGrow: 1,
     flexBasis: '30%',
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: radii.card,
     padding: spacing.md,
     gap: spacing.xs,
   },
-  statValue: { fontSize: 24, lineHeight: 30, fontWeight: '700', color: lightColors.text },
-  statLabel: { ...typography.metadata, color: lightColors.textSecondary },
+  statValue: { fontSize: 24, lineHeight: 30, fontWeight: '700', color: colors.text },
+  statLabel: { ...typography.metadata, color: colors.textSecondary },
   button: {
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     minHeight: 44,
     justifyContent: 'center',
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     alignItems: 'center',
   },
-  buttonPrimary: { backgroundColor: lightColors.subscribeBackground },
+  buttonPrimary: { backgroundColor: colors.subscribeBackground },
   buttonDanger: { backgroundColor: '#FDECEC' },
   buttonDisabled: { opacity: 0.5 },
-  buttonText: { ...typography.chip, color: lightColors.text },
-  buttonTextPrimary: { color: lightColors.subscribeText },
+  buttonText: { ...typography.chip, color: colors.text },
+  buttonTextPrimary: { color: colors.subscribeText },
   buttonTextDanger: { color: '#8B0000' },
   chip: {
     borderRadius: radii.pill,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     alignSelf: 'flex-start',
   },
-  chipDark: { backgroundColor: lightColors.subscribeBackground },
-  chipAccent: { backgroundColor: lightColors.accent },
+  chipDark: { backgroundColor: colors.subscribeBackground },
+  chipAccent: { backgroundColor: colors.accent },
   chipOutline: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: lightColors.border,
+    borderColor: colors.border,
   },
-  chipText: { fontSize: 11, lineHeight: 14, fontWeight: '700', color: lightColors.text },
+  chipText: { fontSize: 11, lineHeight: 14, fontWeight: '700', color: colors.text },
   chipTextLight: { color: '#FFFFFF' },
 });

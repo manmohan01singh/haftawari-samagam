@@ -1,8 +1,8 @@
 import { useFocusEffect } from '@react-navigation/native';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { EmptyState } from '../../../components/common/EmptyState';
-import { lightColors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useTheme, type ThemeColors } from '../../../theme';
 import type { ChatMessage, Profile } from '../../../types/database';
 import {
   fetchProfilesByIds,
@@ -27,6 +27,8 @@ import {
 } from '../components/AdminUi';
 
 function ModerationContent({ ctx }: { ctx: AdminContext }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [sessions, setSessions] = useState<SessionWithVideo[] | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[] | null>(null);
@@ -191,11 +193,11 @@ export function AdminChatModerationScreen() {
   return <AdminGate>{(ctx) => <ModerationContent ctx={ctx} />}</AdminGate>;
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   sessionOptions: { gap: spacing.sm },
   sessionOption: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
   notice: { ...typography.body, color: '#1B5E20' },
-  help: { ...typography.body, color: lightColors.textSecondary },
+  help: { ...typography.body, color: colors.textSecondary },
   listHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -203,11 +205,11 @@ const styles = StyleSheet.create({
   },
   card: {
     borderWidth: 1,
-    borderColor: lightColors.border,
+    borderColor: colors.border,
     borderRadius: radii.card,
     padding: spacing.md,
     gap: spacing.xs,
-    backgroundColor: lightColors.surface,
+    backgroundColor: colors.surface,
   },
   cardRemoved: { opacity: 0.65, borderStyle: 'dashed' },
   cardTop: {
@@ -216,8 +218,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: spacing.md,
   },
-  author: { ...typography.chip, color: lightColors.text, flex: 1 },
-  body: { ...typography.body, color: lightColors.text },
-  meta: { ...typography.metadata, color: lightColors.textSecondary },
+  author: { ...typography.chip, color: colors.text, flex: 1 },
+  body: { ...typography.body, color: colors.text },
+  meta: { ...typography.metadata, color: colors.textSecondary },
   actions: { flexDirection: 'row', marginTop: spacing.xs },
 });

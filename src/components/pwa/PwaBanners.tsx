@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { lightColors, radii, spacing, typography } from '../../theme';
+import { radii, spacing, typography, useTheme, type ThemeColors } from '../../theme';
 import {
   INSTALL_AVAILABLE_EVENT,
   SW_UPDATE_EVENT,
@@ -40,6 +40,8 @@ function isIosSafari(): boolean {
 }
 
 export function PwaBanners() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [updateReady, setUpdateReady] = useState(false);
   const [installReady, setInstallReady] = useState(false);
   const [iosInstall, setIosInstall] = useState<boolean>(() => {
@@ -170,7 +172,7 @@ export function PwaBanners() {
   return null;
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   wrap: {
     position: 'absolute',
     left: 0,
@@ -184,7 +186,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    backgroundColor: lightColors.subscribeBackground,
+    backgroundColor: colors.subscribeBackground,
     borderRadius: radii.card,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
@@ -195,14 +197,14 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 6,
   },
-  text: { ...typography.body, color: lightColors.subscribeText, flexShrink: 1 },
-  offlineBanner: { backgroundColor: lightColors.accent },
+  text: { ...typography.body, color: colors.subscribeText, flexShrink: 1 },
+  offlineBanner: { backgroundColor: colors.accent },
   primary: {
-    backgroundColor: lightColors.surface,
+    backgroundColor: colors.surface,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
-  primaryText: { ...typography.chip, color: lightColors.text },
-  dismiss: { ...typography.chip, color: lightColors.subscribeText },
+  primaryText: { ...typography.chip, color: colors.text },
+  dismiss: { ...typography.chip, color: colors.subscribeText },
 });

@@ -5,9 +5,9 @@
  * fades out after the hook clears it. Both are effect-only patterns
  * the two rules cannot prove safe, so they are disabled for this
  * file only (refs precedent: SwipeableRow). */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
-import { lightColors, radii, spacing } from '../../theme';
+import { radii, spacing, useTheme, type ThemeColors } from '../../theme';
 
 /**
  * Minimal toast hook + view: transient visible feedback for actions
@@ -29,6 +29,8 @@ export function useToast(durationMs = 2600): {
 }
 
 export function Toast({ message }: { message: string | null }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   // P9/W4: fade in/out. The component keeps the last message rendered
   // while it fades out (200ms) after `message` clears, then unmounts;
   // fade-in is 180ms. API unchanged — callers still pass the hook's
@@ -68,7 +70,7 @@ export function Toast({ message }: { message: string | null }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   wrap: {
     position: 'absolute',
     left: 0,
@@ -78,11 +80,11 @@ const styles = StyleSheet.create({
     zIndex: 50,
   },
   pill: {
-    backgroundColor: lightColors.text,
+    backgroundColor: colors.text,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     maxWidth: '88%',
   },
-  text: { color: lightColors.subscribeText, fontSize: 14, fontWeight: '500', textAlign: 'center' },
+  text: { color: colors.subscribeText, fontSize: 14, fontWeight: '500', textAlign: 'center' },
 });

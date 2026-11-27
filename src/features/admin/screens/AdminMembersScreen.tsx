@@ -1,8 +1,8 @@
 import { useFocusEffect } from '@react-navigation/native';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { EmptyState } from '../../../components/common/EmptyState';
-import { lightColors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useTheme, type ThemeColors } from '../../../theme';
 import type { Profile } from '../../../types/database';
 import { listMembers } from '../adminService';
 import { AdminGate } from '../components/AdminGate';
@@ -19,6 +19,8 @@ import {
 } from '../components/AdminUi';
 
 function MembersContent() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [members, setMembers] = useState<Profile[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -95,20 +97,20 @@ export function AdminMembersScreen() {
   return <AdminGate>{() => <MembersContent />}</AdminGate>;
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   noteBox: {
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: radii.card,
     padding: spacing.md,
     gap: spacing.sm,
   },
-  noteTitle: { ...typography.chip, color: lightColors.text },
-  note: { ...typography.body, color: lightColors.textSecondary },
+  noteTitle: { ...typography.chip, color: colors.text },
+  note: { ...typography.body, color: colors.textSecondary },
   sql: {
     ...typography.body,
-    color: lightColors.text,
+    color: colors.text,
     fontFamily: 'monospace',
-    backgroundColor: lightColors.surface,
+    backgroundColor: colors.surface,
     borderRadius: radii.badge,
     padding: spacing.sm,
   },
@@ -119,11 +121,11 @@ const styles = StyleSheet.create({
   },
   card: {
     borderWidth: 1,
-    borderColor: lightColors.border,
+    borderColor: colors.border,
     borderRadius: radii.card,
     padding: spacing.md,
     gap: spacing.xs,
-    backgroundColor: lightColors.surface,
+    backgroundColor: colors.surface,
   },
   cardTop: {
     flexDirection: 'row',
@@ -131,11 +133,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: spacing.md,
   },
-  name: { ...typography.cardTitle, color: lightColors.text, flex: 1 },
-  meta: { ...typography.metadata, color: lightColors.textSecondary },
+  name: { ...typography.cardTitle, color: colors.text, flex: 1 },
+  meta: { ...typography.metadata, color: colors.textSecondary },
   idText: {
     ...typography.metadata,
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
     fontFamily: 'monospace',
     fontSize: 11,
   },

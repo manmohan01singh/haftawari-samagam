@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { lightColors, nativeApp, radii, spacing } from '../../../theme';
+import { nativeApp, radii, spacing, useTheme, type ThemeColors } from '../../../theme';
 import {
   addVideoToPlaylist,
   createPlaylist,
@@ -39,6 +39,8 @@ interface AddToPlaylistSheetProps {
  * adds the recording to it in the same flow.
  */
 export function AddToPlaylistSheet({ visible, userId, videoId, onClose, onChanged }: AddToPlaylistSheetProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [rows, setRows] = useState<PlaylistMembership[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -127,7 +129,7 @@ export function AddToPlaylistSheet({ visible, userId, videoId, onClose, onChange
           <View style={styles.headerRow}>
             <Text style={styles.heading}>Save to playlist</Text>
             <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close">
-              <MaterialIcons name="close" size={24} color={lightColors.text} />
+              <MaterialIcons name="close" size={24} color={colors.text} />
             </Pressable>
           </View>
 
@@ -141,7 +143,7 @@ export function AddToPlaylistSheet({ visible, userId, videoId, onClose, onChange
           ) : (
             <>
           <Pressable style={styles.newRow} onPress={() => setCreateOpen(true)} accessibilityRole="button">
-            <MaterialIcons name="add" size={24} color={lightColors.text} />
+            <MaterialIcons name="add" size={24} color={colors.text} />
             <Text style={styles.newText}>New playlist</Text>
           </Pressable>
 
@@ -172,7 +174,7 @@ export function AddToPlaylistSheet({ visible, userId, videoId, onClose, onChange
                   <MaterialIcons
                     name={item.containsVideo ? 'check-box' : 'check-box-outline-blank'}
                     size={24}
-                    color={lightColors.text}
+                    color={colors.text}
                   />
                   <View style={styles.rowLines}>
                     <Text style={styles.rowTitle} numberOfLines={1}>
@@ -184,9 +186,9 @@ export function AddToPlaylistSheet({ visible, userId, videoId, onClose, onChange
                     </Text>
                   </View>
                   {busyId === item.playlist.id ? (
-                    <ActivityIndicator size="small" color={lightColors.textSecondary} />
+                    <ActivityIndicator size="small" color={colors.textSecondary} />
                   ) : item.playlist.is_public ? null : (
-                    <MaterialIcons name="lock" size={16} color={lightColors.textSecondary} />
+                    <MaterialIcons name="lock" size={16} color={colors.textSecondary} />
                   )}
                 </Pressable>
               )}
@@ -206,12 +208,12 @@ export function AddToPlaylistSheet({ visible, userId, videoId, onClose, onChange
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   backdropFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   sheet: {
     zIndex: 1,
-    backgroundColor: lightColors.surface,
+    backgroundColor: colors.surface,
     borderTopLeftRadius: nativeApp.watchSheet.topRadius,
     borderTopRightRadius: nativeApp.watchSheet.topRadius,
     paddingHorizontal: spacing.lg,
@@ -224,31 +226,31 @@ const styles = StyleSheet.create({
     width: nativeApp.watchSheet.dragHandleWidth,
     height: nativeApp.watchSheet.dragHandleHeight,
     borderRadius: radii.pill,
-    backgroundColor: lightColors.border,
+    backgroundColor: colors.border,
     marginBottom: spacing.md,
   },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  heading: { fontSize: 18, fontWeight: '700', color: lightColors.text },
+  heading: { fontSize: 18, fontWeight: '700', color: colors.text },
   newRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     paddingVertical: spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: lightColors.border,
+    borderBottomColor: colors.border,
   },
-  newText: { fontSize: 15, fontWeight: '500', color: lightColors.text },
-  error: { color: lightColors.accent, fontSize: 13, marginTop: spacing.sm },
+  newText: { fontSize: 15, fontWeight: '500', color: colors.text },
+  error: { color: colors.accent, fontSize: 13, marginTop: spacing.sm },
   loadingBox: { paddingVertical: spacing.lg, gap: spacing.md },
   skeletonRow: {
     height: 44,
     borderRadius: radii.card,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
   },
-  emptyText: { fontSize: 14, color: lightColors.textSecondary, paddingVertical: spacing.lg },
+  emptyText: { fontSize: 14, color: colors.textSecondary, paddingVertical: spacing.lg },
   list: { flexGrow: 0 },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md },
   rowLines: { flex: 1 },
-  rowTitle: { fontSize: 15, fontWeight: '500', color: lightColors.text },
-  rowMeta: { fontSize: 13, color: lightColors.textSecondary, marginTop: 1 },
+  rowTitle: { fontSize: 15, fontWeight: '500', color: colors.text },
+  rowMeta: { fontSize: 13, color: colors.textSecondary, marginTop: 1 },
 });

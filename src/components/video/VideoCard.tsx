@@ -1,8 +1,8 @@
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import type { Video } from '../../types/database';
-import { layout, lightColors, radii, spacing, typography } from '../../theme';
+import { layout, radii, spacing, typography, useTheme, type ThemeColors } from '../../theme';
 import { UserAvatar } from '../common/UserAvatar';
 
 interface VideoCardProps {
@@ -36,6 +36,8 @@ export const VideoCard = memo(function VideoCard({
   channelAvatarUrl,
   channelName,
 }: VideoCardProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const initial = channelName?.replace('@', '').charAt(0).toUpperCase() ?? null;
   return (
     <Pressable
@@ -84,7 +86,7 @@ export function formatDuration(totalSeconds: number): string {
   return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   card: { marginBottom: spacing.lg },
   // Press feedback (P10): same 0.92 pressed opacity as FeedCard.
   cardPressed: { opacity: 0.92 },
@@ -93,9 +95,9 @@ const styles = StyleSheet.create({
     width: '100%',
     aspectRatio: layout.thumbnailAspectRatio,
     borderRadius: radii.card,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
   },
-  thumbnailEmpty: { backgroundColor: lightColors.surfaceVariant },
+  thumbnailEmpty: { backgroundColor: colors.surfaceVariant },
   durationBadge: {
     position: 'absolute',
     right: spacing.sm,
@@ -108,6 +110,6 @@ const styles = StyleSheet.create({
   durationText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600' },
   metaRow: { flexDirection: 'row', marginTop: spacing.md, gap: layout.cardInnerGap },
   metaText: { flex: 1 },
-  title: { ...typography.cardTitle, color: lightColors.text },
-  metadata: { ...typography.metadata, color: lightColors.textSecondary, marginTop: 2 },
+  title: { ...typography.cardTitle, color: colors.text },
+  metadata: { ...typography.metadata, color: colors.textSecondary, marginTop: 2 },
 });

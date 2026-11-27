@@ -1,9 +1,9 @@
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { layout, lightColors } from '../../theme';
+import { layout, useTheme, type ThemeColors } from '../../theme';
 import { BarBlurBackground } from './BarBlurBackground';
 
 export interface BottomNavItem {
@@ -56,6 +56,8 @@ interface BottomNavProps {
  * itself (see below).
  */
 export const BottomNav = memo(function BottomNav({ items, activeKey, onPress, overlay }: BottomNavProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   // The bar must clear the device gesture/home area itself — the old
   // comment claimed "the caller applies safe-area padding", but no
   // caller did, so on gesture-nav Android the slots sat under the
@@ -90,7 +92,7 @@ export const BottomNav = memo(function BottomNav({ items, activeKey, onPress, ov
               // opens the official channel; only the glyph matches
               // the reference geometry now).
               <View style={styles.createCircle}>
-                <MaterialIcons name="add" size={20} color={lightColors.text} />
+                <MaterialIcons name="add" size={20} color={colors.text} />
               </View>
             ) : item.kind === 'avatar' ? (
               item.avatarUrl ? (
@@ -104,7 +106,7 @@ export const BottomNav = memo(function BottomNav({ items, activeKey, onPress, ov
                       </View>
                     ) : (
                       <View style={[styles.avatar, styles.avatarFallback, active && styles.avatarActive]}>
-                        <MaterialIcons name="person" size={18} color={lightColors.textSecondary} />
+                        <MaterialIcons name="person" size={18} color={colors.textSecondary} />
                       </View>
                     )
                   }
@@ -118,7 +120,7 @@ export const BottomNav = memo(function BottomNav({ items, activeKey, onPress, ov
                 // a person glyph inside the avatar circle, the same
                 // treatment the header account slot uses, app-wide.
                 <View style={[styles.avatar, styles.avatarFallback, active && styles.avatarActive]}>
-                  <MaterialIcons name="person" size={18} color={lightColors.textSecondary} />
+                  <MaterialIcons name="person" size={18} color={colors.textSecondary} />
                 </View>
               )
             ) : (
@@ -131,7 +133,7 @@ export const BottomNav = memo(function BottomNav({ items, activeKey, onPress, ov
               <MaterialIcons
                 name={((active && item.activeIcon) || item.icon || 'home') as keyof typeof MaterialIcons.glyphMap}
                 size={24}
-                color={active ? lightColors.text : lightColors.textSecondary}
+                color={active ? colors.text : colors.textSecondary}
               />
             )}
           </Pressable>
@@ -170,14 +172,14 @@ function NavAvatarImage({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   bar: {
     height: layout.bottomNavHeight,
     // No solid background: BarBlurBackground (translucent white +
     // backdrop blur) is the bar's material now (user request,
     // 27 Nov 2026). Geometry from round 2 is unchanged.
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: lightColors.border,
+    borderTopColor: colors.border,
     overflow: 'hidden',
   },
   barOverlay: {
@@ -198,7 +200,7 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: lightColors.text,
+    borderColor: colors.text,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -206,11 +208,11 @@ const styles = StyleSheet.create({
   // Active-state cue for the avatar slot (QA 50): a 2px ring in the
   // primary text colour; icon slots cue by glyph colour only (full
   // text colour active vs textSecondary inactive — NO pill, per ref).
-  avatarActive: { borderWidth: 2, borderColor: lightColors.text },
+  avatarActive: { borderWidth: 2, borderColor: colors.text },
   avatarFallback: {
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarInitial: { fontSize: 13, fontWeight: '600', color: lightColors.textSecondary },
+  avatarInitial: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
 });

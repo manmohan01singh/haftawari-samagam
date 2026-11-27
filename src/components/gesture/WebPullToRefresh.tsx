@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -9,7 +9,7 @@ import {
   type NativeSyntheticEvent,
 } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { lightColors } from '../../theme';
+import { useTheme, type ThemeColors } from '../../theme';
 
 /**
  * Web pull-to-refresh (UX Fix 2, gestures round).
@@ -84,6 +84,8 @@ export function useWebPullToRefresh({
   onRefresh,
   refreshing,
 }: WebPullToRefreshOptions): WebPullToRefresh {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [pull, setPull] = useState(0);
   const offsetRef = useRef(0);
   const startYRef = useRef<number | null>(null);
@@ -164,12 +166,12 @@ export function useWebPullToRefresh({
         ]}
       >
         {refreshing ? (
-          <ActivityIndicator color={lightColors.text} size="small" />
+          <ActivityIndicator color={colors.text} size="small" />
         ) : (
           <MaterialIcons
             name="arrow-downward"
             size={20}
-            color={engaged ? lightColors.accent : lightColors.textSecondary}
+            color={engaged ? colors.accent : colors.textSecondary}
           />
         )}
       </View>
@@ -188,7 +190,7 @@ export function useWebPullToRefresh({
   };
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   indicator: {
     position: 'absolute',
     top: 6,
@@ -196,9 +198,9 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: lightColors.surface,
+    backgroundColor: colors.surface,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: lightColors.border,
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 50,

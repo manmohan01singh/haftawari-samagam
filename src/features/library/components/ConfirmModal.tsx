@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import { lightColors, radii, spacing } from '../../../theme';
+import { radii, spacing, useTheme, type ThemeColors } from '../../../theme';
 
 interface ConfirmModalProps {
   visible: boolean;
@@ -28,6 +28,8 @@ export function ConfirmModal({
   onConfirm,
   onCancel,
 }: ConfirmModalProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={busy ? undefined : onCancel}>
       {/* While an action is busy the backdrop must not dismiss the
@@ -64,7 +66,7 @@ export function ConfirmModal({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -76,12 +78,12 @@ const styles = StyleSheet.create({
     zIndex: 1,
     width: '100%',
     maxWidth: 400,
-    backgroundColor: lightColors.surface,
+    backgroundColor: colors.surface,
     borderRadius: radii.banner,
     padding: spacing.xl,
   },
-  title: { fontSize: 18, fontWeight: '700', color: lightColors.text },
-  message: { fontSize: 14, lineHeight: 20, color: lightColors.textSecondary, marginTop: spacing.sm },
+  title: { fontSize: 18, fontWeight: '700', color: colors.text },
+  message: { fontSize: 14, lineHeight: 20, color: colors.textSecondary, marginTop: spacing.sm },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.xl },
   cancelButton: {
     borderRadius: radii.pill,
@@ -89,18 +91,18 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     minHeight: 44,
     justifyContent: 'center',
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
   },
   backdropFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
-  cancelText: { fontSize: 14, fontWeight: '600', color: lightColors.text },
+  cancelText: { fontSize: 14, fontWeight: '600', color: colors.text },
   confirmButton: {
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
     paddingVertical: 10,
     minHeight: 44,
     justifyContent: 'center',
-    backgroundColor: lightColors.accent,
+    backgroundColor: colors.accent,
   },
-  confirmText: { fontSize: 14, fontWeight: '600', color: lightColors.onAccent },
+  confirmText: { fontSize: 14, fontWeight: '600', color: colors.onAccent },
   disabled: { opacity: 0.6 },
 });

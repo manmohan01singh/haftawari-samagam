@@ -1,8 +1,8 @@
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { layout, lightColors, nativeApp, radii, spacing } from '../../../theme';
+import { layout, nativeApp, radii, spacing, useTheme, type ThemeColors } from '../../../theme';
 import type { PlaylistSummary } from '../types';
 import { downgradeYouTubeThumbnailUrl } from '../../../components/video/cardData';
 
@@ -25,6 +25,8 @@ interface PlaylistRowProps {
  * plain surface with a playlist glyph — never a fabricated image.
  */
 export const PlaylistRow = memo(function PlaylistRow({ summary, onPress, onMenu }: PlaylistRowProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { playlist, itemCount, coverThumbnailUrl, isOwn } = summary;
   const metaParts = [
     playlist.is_public ? 'Public' : 'Private',
@@ -51,7 +53,7 @@ export const PlaylistRow = memo(function PlaylistRow({ summary, onPress, onMenu 
           />
         ) : (
           <View style={[styles.thumb, styles.thumbEmpty]}>
-            <MaterialIcons name="playlist-play" size={30} color={lightColors.textSecondary} />
+            <MaterialIcons name="playlist-play" size={30} color={colors.textSecondary} />
           </View>
         )}
         <View style={styles.countBadge} pointerEvents="none">
@@ -75,14 +77,14 @@ export const PlaylistRow = memo(function PlaylistRow({ summary, onPress, onMenu 
           accessibilityLabel={`More actions for ${playlist.title}`}
           style={styles.menuButton}
         >
-          <MaterialIcons name="more-vert" size={20} color={lightColors.textSecondary} />
+          <MaterialIcons name="more-vert" size={20} color={colors.textSecondary} />
         </Pressable>
       ) : null}
     </Pressable>
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -103,16 +105,16 @@ const styles = StyleSheet.create({
     height: 10,
     borderTopLeftRadius: radii.card,
     borderTopRightRadius: radii.card,
-    backgroundColor: lightColors.border,
+    backgroundColor: colors.border,
   },
   thumb: {
     width: '100%',
     aspectRatio: layout.thumbnailAspectRatio,
     borderRadius: radii.card,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
   },
   thumbEmpty: {
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -131,6 +133,6 @@ const styles = StyleSheet.create({
   countText: { color: '#FFFFFF', fontSize: 11, fontWeight: '600' },
   lines: { flex: 1 },
   menuButton: { padding: 4 },
-  title: { fontSize: 17, fontWeight: '500', color: lightColors.text },
-  meta: { fontSize: 13, color: lightColors.textSecondary, marginTop: 3 },
+  title: { fontSize: 17, fontWeight: '500', color: colors.text },
+  meta: { fontSize: 13, color: colors.textSecondary, marginTop: 3 },
 });

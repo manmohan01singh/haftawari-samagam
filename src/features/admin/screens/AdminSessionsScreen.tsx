@@ -4,7 +4,7 @@ import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { EmptyState } from '../../../components/common/EmptyState';
 import { useServerClock } from '../../sessions/hooks/useServerClock';
 import { deriveStatus } from '../../sessions/stateMachine';
-import { lightColors, spacing, typography } from '../../../theme';
+import { spacing, typography, useTheme, type ThemeColors } from '../../../theme';
 import type { SessionStatus, Video } from '../../../types/database';
 import {
   cancelSession,
@@ -23,7 +23,7 @@ import {
   LoadingView,
   SESSION_STATUS_LABEL,
   SectionTitle,
-  adminStyles,
+  createAdminStyles,
   formatDateTime,
   sessionStatusTone,
   friendlyError,
@@ -62,6 +62,9 @@ function splitLocal(iso: string): { date: string; time: string } {
 }
 
 function SessionsContent({ ctx }: { ctx: AdminContext }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const adminStyles = useMemo(() => createAdminStyles(colors), [colors]);
   // Server-clock tick (30s): the list below groups sessions by their
   // EFFECTIVE (derived) status, so a session whose start time arrives
   // moves UPCOMING → NOW PLAYING here on its own — the stored status
@@ -283,7 +286,7 @@ function SessionsContent({ ctx }: { ctx: AdminContext }) {
           value={title}
           onChangeText={setTitle}
           placeholder="Haftawari Samagam"
-          placeholderTextColor={lightColors.textSecondary}
+          placeholderTextColor={colors.textSecondary}
         />
 
         <Text style={styles.help}>
@@ -297,7 +300,7 @@ function SessionsContent({ ctx }: { ctx: AdminContext }) {
               value={startDate}
               onChangeText={setStartDate}
               placeholder="YYYY-MM-DD"
-              placeholderTextColor={lightColors.textSecondary}
+              placeholderTextColor={colors.textSecondary}
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="numbers-and-punctuation"
@@ -310,7 +313,7 @@ function SessionsContent({ ctx }: { ctx: AdminContext }) {
               value={startTime}
               onChangeText={setStartTime}
               placeholder="17:00"
-              placeholderTextColor={lightColors.textSecondary}
+              placeholderTextColor={colors.textSecondary}
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="numbers-and-punctuation"
@@ -326,7 +329,7 @@ function SessionsContent({ ctx }: { ctx: AdminContext }) {
               value={endDate}
               onChangeText={setEndDate}
               placeholder="Same as start date"
-              placeholderTextColor={lightColors.textSecondary}
+              placeholderTextColor={colors.textSecondary}
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="numbers-and-punctuation"
@@ -339,7 +342,7 @@ function SessionsContent({ ctx }: { ctx: AdminContext }) {
               value={endTime}
               onChangeText={setEndTime}
               placeholder="19:00"
-              placeholderTextColor={lightColors.textSecondary}
+              placeholderTextColor={colors.textSecondary}
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="numbers-and-punctuation"
@@ -450,19 +453,19 @@ export function AdminSessionsScreen() {
   return <AdminGate>{(ctx) => <SessionsContent ctx={ctx} />}</AdminGate>;
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   form: { gap: spacing.md },
-  help: { ...typography.body, color: lightColors.textSecondary },
+  help: { ...typography.body, color: colors.textSecondary },
   notice: { ...typography.body, color: '#1B5E20' },
   videoOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   dateRow: { flexDirection: 'row', gap: spacing.md },
   dateField: { flex: 1 },
   previewBox: {
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: 12,
     padding: spacing.md,
   },
-  previewText: { ...typography.body, color: lightColors.text },
+  previewText: { ...typography.body, color: colors.text },
   problemsBox: {
     backgroundColor: '#FDECEC',
     borderRadius: 12,
@@ -477,16 +480,16 @@ const styles = StyleSheet.create({
   },
   group: { gap: spacing.sm },
   groupHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  groupCount: { ...typography.metadata, color: lightColors.textSecondary },
+  groupCount: { ...typography.metadata, color: colors.textSecondary },
   card: {
     borderWidth: 1,
-    borderColor: lightColors.border,
+    borderColor: colors.border,
     borderRadius: 12,
     padding: spacing.md,
     gap: spacing.xs,
-    backgroundColor: lightColors.surface,
+    backgroundColor: colors.surface,
   },
-  cardTitle: { ...typography.cardTitle, color: lightColors.text },
-  meta: { ...typography.metadata, color: lightColors.textSecondary },
+  cardTitle: { ...typography.cardTitle, color: colors.text },
+  meta: { ...typography.metadata, color: colors.textSecondary },
   actions: { flexDirection: 'row', marginTop: spacing.sm },
 });

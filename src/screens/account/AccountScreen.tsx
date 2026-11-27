@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -7,7 +7,7 @@ import { StackHeader } from '../../components/layout/StackHeader';
 import { StackTabBar } from '../../components/layout/StackTabBar';
 import { UserAvatar } from '../../components/common/UserAvatar';
 import { useAuth } from '../../features/auth';
-import { lightColors, radii, spacing, typography } from '../../theme';
+import { radii, spacing, typography, useTheme, type ThemeColors } from '../../theme';
 import type { RootStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Account'>;
@@ -19,6 +19,8 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Account'>;
  * and sign-out. Signed-out visitors get sign-in / sign-up entries.
  */
 export function AccountScreen({ navigation }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { user, profile, isAdmin, loading, signOut } = useAuth();
   const [signOutError, setSignOutError] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
@@ -63,18 +65,18 @@ export function AccountScreen({ navigation }: Props) {
             </View>
 
             <Pressable style={styles.row} onPress={() => navigation.navigate('History')} accessibilityRole="button">
-              <MaterialIcons name="history" size={24} color={lightColors.text} />
+              <MaterialIcons name="history" size={24} color={colors.text} />
               <Text style={styles.rowText}>History</Text>
-              <MaterialIcons name="chevron-right" size={22} color={lightColors.textSecondary} />
+              <MaterialIcons name="chevron-right" size={22} color={colors.textSecondary} />
             </Pressable>
             <Pressable
               style={styles.row}
               onPress={() => navigation.navigate('MainTabs', { screen: 'Library' })}
               accessibilityRole="button"
             >
-              <MaterialIcons name="video-library" size={24} color={lightColors.text} />
+              <MaterialIcons name="video-library" size={24} color={colors.text} />
               <Text style={styles.rowText}>Your library</Text>
-              <MaterialIcons name="chevron-right" size={22} color={lightColors.textSecondary} />
+              <MaterialIcons name="chevron-right" size={22} color={colors.textSecondary} />
             </Pressable>
             {isAdmin ? (
               <Pressable
@@ -82,9 +84,9 @@ export function AccountScreen({ navigation }: Props) {
                 onPress={() => navigation.navigate('Admin', { screen: 'AdminOverview' })}
                 accessibilityRole="button"
               >
-                <MaterialIcons name="admin-panel-settings" size={24} color={lightColors.text} />
+                <MaterialIcons name="admin-panel-settings" size={24} color={colors.text} />
                 <Text style={styles.rowText}>Admin dashboard</Text>
-                <MaterialIcons name="chevron-right" size={22} color={lightColors.textSecondary} />
+                <MaterialIcons name="chevron-right" size={22} color={colors.textSecondary} />
               </Pressable>
             ) : null}
 
@@ -126,60 +128,60 @@ export function AccountScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: lightColors.background },
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.lg },
   profileBlock: { alignItems: 'center', paddingVertical: spacing.lg },
   avatarWrap: { marginBottom: spacing.md },
-  name: { fontSize: 20, fontWeight: '700', color: lightColors.text, textAlign: 'center' },
+  name: { fontSize: 20, fontWeight: '700', color: colors.text, textAlign: 'center' },
   meta: {
     ...typography.body,
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
     textAlign: 'center',
     marginTop: spacing.xs,
   },
   roleChip: {
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.md,
     paddingVertical: 4,
     marginTop: spacing.sm,
   },
-  roleText: { fontSize: 13, fontWeight: '600', color: lightColors.text },
+  roleText: { fontSize: 13, fontWeight: '600', color: colors.text },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.lg,
     paddingVertical: spacing.lg,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: lightColors.border,
+    borderBottomColor: colors.border,
   },
-  rowText: { flex: 1, fontSize: 16, color: lightColors.text },
+  rowText: { flex: 1, fontSize: 16, color: colors.text },
   signOutButton: {
     borderWidth: 1,
-    borderColor: lightColors.border,
+    borderColor: colors.border,
     borderRadius: radii.pill,
     paddingVertical: 13,
     alignItems: 'center',
     marginTop: spacing.xxl,
   },
-  signOutText: { fontSize: 15, fontWeight: '600', color: lightColors.text },
-  signOutError: { fontSize: 13, color: lightColors.accent, textAlign: 'center', marginTop: spacing.xl },
+  signOutText: { fontSize: 15, fontWeight: '600', color: colors.text },
+  signOutError: { fontSize: 13, color: colors.accent, textAlign: 'center', marginTop: spacing.xl },
   primaryButton: {
-    backgroundColor: lightColors.subscribeBackground,
+    backgroundColor: colors.subscribeBackground,
     borderRadius: radii.pill,
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: spacing.xl,
   },
-  primaryButtonText: { fontSize: 16, fontWeight: '600', color: lightColors.subscribeText },
+  primaryButtonText: { fontSize: 16, fontWeight: '600', color: colors.subscribeText },
   outlineButton: {
     borderWidth: 1,
-    borderColor: lightColors.border,
+    borderColor: colors.border,
     borderRadius: radii.pill,
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: spacing.md,
   },
-  outlineButtonText: { fontSize: 16, fontWeight: '600', color: lightColors.text },
+  outlineButtonText: { fontSize: 16, fontWeight: '600', color: colors.text },
 });

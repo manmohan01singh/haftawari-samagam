@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { lightColors, nativeApp, radii, spacing, typography } from '../../../theme';
+import { nativeApp, radii, spacing, typography, useTheme, type ThemeColors } from '../../../theme';
 import { useCurrentChatUser, type ChatUser } from '../useSessionChat';
 import { ChatAvatar } from './ChatAvatar';
 
@@ -43,6 +43,8 @@ export function ChatPreviewCard({
   onSignInPress,
   prominent = false,
 }: ChatPreviewCardProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { user, authLoading } = useCurrentChatUser(currentUser);
   const identityName = user?.displayName?.trim() ? user.displayName : null;
 
@@ -74,11 +76,11 @@ export function ChatPreviewCard({
         <View style={styles.headerRight}>
           {participantCount !== undefined ? (
             <View style={styles.countWrap}>
-              <MaterialIcons name="person" size={16} color={lightColors.textSecondary} />
+              <MaterialIcons name="person" size={16} color={colors.textSecondary} />
               <Text style={styles.countText}>{participantCount}</Text>
             </View>
           ) : null}
-          <MaterialIcons name="chevron-right" size={20} color={lightColors.textSecondary} />
+          <MaterialIcons name="chevron-right" size={20} color={colors.textSecondary} />
         </View>
       </View>
       <Pressable style={styles.inputRow} onPress={handlePress} accessibilityRole="button">
@@ -86,7 +88,7 @@ export function ChatPreviewCard({
           <ChatAvatar userId={user.id} displayName={user.displayName} />
         ) : (
           <View style={styles.signedOutAvatar}>
-            <MaterialIcons name="person" size={22} color={lightColors.textSecondary} />
+            <MaterialIcons name="person" size={22} color={colors.textSecondary} />
           </View>
         )}
         <View style={styles.pill}>
@@ -104,24 +106,24 @@ export function ChatPreviewCard({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   card: {
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: nativeApp.chatCard.radius,
     padding: nativeApp.chatCard.padding,
   },
   cardProminent: {
     borderWidth: 2,
-    borderColor: lightColors.accent,
+    borderColor: colors.accent,
   },
   openButton: {
     marginTop: spacing.md,
-    backgroundColor: lightColors.subscribeBackground,
+    backgroundColor: colors.subscribeBackground,
     borderRadius: radii.pill,
     paddingVertical: 10,
     alignItems: 'center',
   },
-  openButtonText: { ...typography.chip, color: lightColors.subscribeText },
+  openButtonText: { ...typography.chip, color: colors.subscribeText },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -132,7 +134,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 22,
     fontWeight: '600',
-    color: lightColors.text,
+    color: colors.text,
   },
   headerRight: {
     flexDirection: 'row',
@@ -146,7 +148,7 @@ const styles = StyleSheet.create({
   },
   countText: {
     fontSize: 13,
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
   },
   inputRow: {
     flexDirection: 'row',
@@ -157,14 +159,14 @@ const styles = StyleSheet.create({
     width: nativeApp.chatSheet.avatarSize,
     height: nativeApp.chatSheet.avatarSize,
     borderRadius: nativeApp.chatSheet.avatarSize / 2,
-    backgroundColor: lightColors.border,
+    backgroundColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
   pill: {
     flex: 1,
-    backgroundColor: lightColors.surface,
+    backgroundColor: colors.surface,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
@@ -172,6 +174,6 @@ const styles = StyleSheet.create({
   },
   pillText: {
     fontSize: 14,
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
   },
 });

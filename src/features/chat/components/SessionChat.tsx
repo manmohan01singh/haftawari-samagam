@@ -21,7 +21,14 @@ import {
   View,
 } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { lightColors, nativeApp, radii, spacing, typography } from '../../../theme';
+import {
+  nativeApp,
+  radii,
+  spacing,
+  typography,
+  useTheme,
+  type ThemeColors,
+} from '../../../theme';
 import { useSessionChat, type ChatUser } from '../useSessionChat';
 import { ICON_HIT_SLOP, SMALL_ICON_HIT_SLOP } from '../../../lib/touch';
 import type { ChatMessageWithAuthor } from '../types';
@@ -87,6 +94,8 @@ export function SessionChat({
   onJoinPress,
   keyboardVerticalOffset = 0,
 }: SessionChatProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const chat = useSessionChat(sessionId, {
     participantCount,
     currentUser,
@@ -214,7 +223,7 @@ export function SessionChat({
   } else if (chat.authLoading || chat.hasJoined === null) {
     body = (
       <View style={styles.centerState}>
-        <ActivityIndicator color={lightColors.textSecondary} />
+        <ActivityIndicator color={colors.textSecondary} />
       </View>
     );
   } else if (!chat.user) {
@@ -248,7 +257,7 @@ export function SessionChat({
   } else if (chat.loading) {
     body = (
       <View style={styles.centerState}>
-        <ActivityIndicator color={lightColors.textSecondary} />
+        <ActivityIndicator color={colors.textSecondary} />
       </View>
     );
   } else if (chat.messages.length === 0) {
@@ -277,7 +286,7 @@ export function SessionChat({
         ListFooterComponent={
           chat.loadingMore ? (
             <View style={styles.loadingMore}>
-              <ActivityIndicator size="small" color={lightColors.textSecondary} />
+              <ActivityIndicator size="small" color={colors.textSecondary} />
             </View>
           ) : undefined
         }
@@ -286,6 +295,22 @@ export function SessionChat({
         initialNumToRender={20}
         maxToRenderPerBatch={20}
         windowSize={11}
+        // Scroll smoothness (Phase 12): keep the viewport anchored
+        // to the message the user is actually reading when the data
+        // changes underneath it — a new message arriving (prepended
+        // at index 0 of the inverted data) or a history page loading
+        // in at the far end must not shift or jump the visible rows.
+        // autoscrollToTopThreshold (inverted list: "top" = the
+        // latest-message end) preserves the chat convention that a
+        // user already sitting at the latest message follows new
+        // arrivals, while a user scrolled up into history is left
+        // exactly where they are. removeClippedSubviews is
+        // deliberately NOT set: with variable-height inverted rows
+        // it can blank rows mid-fling on Android.
+        maintainVisibleContentPosition={{
+          minIndexForVisible: 0,
+          autoscrollToTopThreshold: 100,
+        }}
         style={styles.messageList}
       />
       </>
@@ -323,7 +348,7 @@ export function SessionChat({
             accessibilityLabel="Close chat"
             hitSlop={ICON_HIT_SLOP}
           >
-            <MaterialIcons name="close" size={24} color={lightColors.text} />
+            <MaterialIcons name="close" size={24} color={colors.text} />
           </Pressable>
         ) : null}
       </View>
@@ -331,7 +356,7 @@ export function SessionChat({
         <Text style={styles.subLabel}>All messages</Text>
         {chat.participantCount !== null ? (
           <View style={styles.countWrap}>
-            <MaterialIcons name="person" size={16} color={lightColors.textSecondary} />
+            <MaterialIcons name="person" size={16} color={colors.textSecondary} />
             <Text style={styles.subLabel}>{chat.participantCount}</Text>
           </View>
         ) : null}
@@ -378,7 +403,7 @@ export function SessionChat({
                 value={draft}
                 onChangeText={setDraft}
                 placeholder="Chat…"
-                placeholderTextColor={lightColors.textSecondary}
+                placeholderTextColor={colors.textSecondary}
                 maxLength={MAX_MESSAGE_LENGTH}
                 multiline
                 returnKeyType="send"
@@ -396,12 +421,12 @@ export function SessionChat({
                 style={!draft.trim() ? styles.sendDisabled : undefined}
               >
                 {chat.sending ? (
-                  <ActivityIndicator size="small" color={lightColors.accent} />
+                  <ActivityIndicator size="small" color={colors.accent} />
                 ) : (
                   <MaterialIcons
                     name="send"
                     size={22}
-                    color={draft.trim() ? lightColors.accent : lightColors.textSecondary}
+                    color={draft.trim() ? colors.accent : colors.textSecondary}
                   />
                 )}
               </Pressable>
@@ -418,9 +443,9 @@ export function SessionChat({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   sheet: {
-    backgroundColor: lightColors.surface,
+    backgroundColor: colors.surface,
     borderTopLeftRadius: nativeApp.watchSheet.topRadius,
     borderTopRightRadius: nativeApp.watchSheet.topRadius,
     overflow: 'hidden',
@@ -434,7 +459,7 @@ const styles = StyleSheet.create({
     width: nativeApp.watchSheet.dragHandleWidth,
     height: nativeApp.watchSheet.dragHandleHeight,
     borderRadius: radii.pill,
-    backgroundColor: lightColors.border,
+    backgroundColor: colors.border,
   },
   headerRow: {
     flexDirection: 'row',
@@ -447,7 +472,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     lineHeight: 30,
     fontWeight: '700',
-    color: lightColors.text,
+    color: colors.text,
   },
   subRow: {
     flexDirection: 'row',
@@ -459,7 +484,7 @@ const styles = StyleSheet.create({
   },
   subLabel: {
     ...typography.body,
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
   },
   countWrap: {
     flexDirection: 'row',
@@ -473,8 +498,8 @@ const styles = StyleSheet.create({
   messageList: { flex: 1 },
   listErrorBanner: {
     ...typography.metadata,
-    color: lightColors.accent,
-    backgroundColor: lightColors.surfaceVariant,
+    color: colors.accent,
+    backgroundColor: colors.surfaceVariant,
     marginHorizontal: spacing.lg,
     marginTop: spacing.sm,
     padding: spacing.sm,
@@ -483,7 +508,7 @@ const styles = StyleSheet.create({
   sendDisabled: { opacity: 0.5 },
   charCount: {
     ...typography.metadata,
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
     textAlign: 'right',
     marginHorizontal: spacing.lg,
     paddingBottom: spacing.sm,
@@ -503,37 +528,37 @@ const styles = StyleSheet.create({
   },
   stateTitle: {
     ...typography.sectionTitle,
-    color: lightColors.text,
+    color: colors.text,
     textAlign: 'center',
   },
   stateMessage: {
     ...typography.body,
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
     textAlign: 'center',
     marginTop: spacing.sm,
   },
   stateButton: {
     marginTop: spacing.lg,
-    backgroundColor: lightColors.subscribeBackground,
+    backgroundColor: colors.subscribeBackground,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.md,
   },
   stateButtonText: {
     ...typography.chip,
-    color: lightColors.subscribeText,
+    color: colors.subscribeText,
   },
   noticeBox: {
     marginHorizontal: spacing.lg,
     marginTop: spacing.sm,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: nativeApp.chatSheet.noticeRadius,
     padding: spacing.md,
   },
   noticeText: {
     fontSize: 13,
     lineHeight: 18,
-    color: lightColors.text,
+    color: colors.text,
   },
   identityRow: {
     flexDirection: 'row',
@@ -544,12 +569,12 @@ const styles = StyleSheet.create({
   },
   identityText: {
     ...typography.metadata,
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
     flex: 1,
   },
   errorText: {
     ...typography.metadata,
-    color: lightColors.accent,
+    color: colors.accent,
     marginHorizontal: spacing.lg,
     marginTop: spacing.sm,
   },
@@ -561,7 +586,7 @@ const styles = StyleSheet.create({
   inputPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
@@ -571,7 +596,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     ...typography.body,
-    color: lightColors.text,
+    color: colors.text,
     maxHeight: 100,
     paddingVertical: 2,
   },

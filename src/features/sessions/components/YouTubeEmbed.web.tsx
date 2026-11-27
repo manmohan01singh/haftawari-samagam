@@ -3,12 +3,13 @@ import React, {
   memo,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
 } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
-import { layout, lightColors } from '../../../theme';
+import { layout, useTheme, type ThemeColors } from '../../../theme';
 import type { YouTubeEmbedHandle } from './YouTubeEmbed';
 
 export type { YouTubeEmbedHandle };
@@ -34,6 +35,8 @@ export const YouTubeEmbed = memo(
     { youtubeVideoId, startSeconds, autoplay = false, onTimeUpdate, onReady },
     ref,
   ) {
+    const { colors } = useTheme();
+    const styles = useMemo(() => createStyles(colors), [colors]);
     // Freeze the start offset at mount (UX perf pass): the caller
     // passes a LIVE session offset that changes on every clock tick,
     // and the iframe src is built from it — without freezing, the src
@@ -133,7 +136,7 @@ export const YouTubeEmbed = memo(
   }),
 );
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   facade: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   poster: { width: '100%', height: '100%' },
   spinnerWrap: {
@@ -148,6 +151,6 @@ const styles = StyleSheet.create({
   wrap: {
     width: '100%',
     aspectRatio: layout.thumbnailAspectRatio,
-    backgroundColor: lightColors.playerBackground,
+    backgroundColor: colors.playerBackground,
   },
 });

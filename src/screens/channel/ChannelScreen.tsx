@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -34,7 +34,7 @@ import {
   type YouTubeVideoMetadata,
 } from '../../lib/youtube';
 import { apiCardData as baseApiCardData, formatDateLine } from '../../components/video/cardData';
-import { lightColors, nativeApp, radii, spacing } from '../../theme';
+import { nativeApp, radii, spacing, useTheme, type ThemeColors } from '../../theme';
 import type { RootStackParamList } from '../../navigation/types';
 import { FEED_LIST_PERF } from '../../lib/listPerf';
 
@@ -57,6 +57,8 @@ const liveSearchCache = new Map<string, { at: number; items: YouTubeVideoMetadat
  * reports as live now or upcoming; it is not a Samagam session label.
  */
 export function ChannelScreen({ route, navigation }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const channelId = route.params.channelId ?? OFFICIAL_CHANNEL_ID;
   const isOfficial = channelId === OFFICIAL_CHANNEL_ID;
   const official = useOfficialChannel();
@@ -225,7 +227,7 @@ export function ChannelScreen({ route, navigation }: Props) {
         </View>
       );
     },
-    [channel, navigation, columns, shareVideo],
+    [channel, navigation, columns, shareVideo, styles],
   );
 
   const keyExtractor = useCallback((item: YouTubeVideoMetadata) => item.youtubeVideoId, []);
@@ -254,10 +256,10 @@ export function ChannelScreen({ route, navigation }: Props) {
           right={
             <>
               <Pressable onPress={() => navigation.navigate('Search')} hitSlop={10} accessibilityLabel="Search">
-                <MaterialIcons name="search" size={24} color={lightColors.text} />
+                <MaterialIcons name="search" size={24} color={colors.text} />
               </Pressable>
               <Pressable onPress={() => setMenuOpen(true)} hitSlop={10} accessibilityLabel="Channel options">
-                <MaterialIcons name="more-vert" size={24} color={lightColors.text} />
+                <MaterialIcons name="more-vert" size={24} color={colors.text} />
               </Pressable>
             </>
           }
@@ -309,7 +311,7 @@ export function ChannelScreen({ route, navigation }: Props) {
             {/* Same rule as the Search channel block: the badge belongs
                 to the official channel's verified-music record only. */}
             {isOfficial ? (
-              <MaterialIcons name="verified" size={16} color={lightColors.textSecondary} style={styles.verifiedBadge} />
+              <MaterialIcons name="verified" size={16} color={colors.textSecondary} style={styles.verifiedBadge} />
             ) : null}
           </View>
           {channel.handle ? <Text style={styles.handleLine}>{channel.handle}</Text> : null}
@@ -342,9 +344,9 @@ export function ChannelScreen({ route, navigation }: Props) {
         >
           {following ? (
             <>
-              <MaterialIcons name="notifications" size={20} color={lightColors.text} />
+              <MaterialIcons name="notifications" size={20} color={colors.text} />
               <Text style={[styles.subscribeText, styles.subscribeTextActive]}>Subscribed</Text>
-              <MaterialIcons name="expand-more" size={18} color={lightColors.text} />
+              <MaterialIcons name="expand-more" size={18} color={colors.text} />
             </>
           ) : (
             <Text style={styles.subscribeText}>Subscribe</Text>
@@ -462,7 +464,7 @@ export function ChannelScreen({ route, navigation }: Props) {
         onEndReachedThreshold={0.6}
         ListFooterComponent={
           loadingMore ? (
-            <ActivityIndicator style={styles.footerSpinner} color={lightColors.textSecondary} />
+            <ActivityIndicator style={styles.footerSpinner} color={colors.textSecondary} />
           ) : undefined
         }
         ListEmptyComponent={
@@ -508,7 +510,7 @@ export function ChannelScreen({ route, navigation }: Props) {
                 void Linking.openURL(`https://www.youtube.com/channel/${channelId}`);
               }}
             >
-              <MaterialIcons name="open-in-new" size={22} color={lightColors.text} />
+              <MaterialIcons name="open-in-new" size={22} color={colors.text} />
               <Text style={styles.menuText}>Open in YouTube</Text>
             </Pressable>
             <Pressable
@@ -525,7 +527,7 @@ export function ChannelScreen({ route, navigation }: Props) {
                 });
               }}
             >
-              <MaterialIcons name="share" size={22} color={lightColors.text} />
+              <MaterialIcons name="share" size={22} color={colors.text} />
               <Text style={styles.menuText}>Share channel</Text>
             </Pressable>
             <Pressable
@@ -536,7 +538,7 @@ export function ChannelScreen({ route, navigation }: Props) {
                 navigation.navigate('Sessions');
               }}
             >
-              <MaterialIcons name="groups" size={22} color={lightColors.text} />
+              <MaterialIcons name="groups" size={22} color={colors.text} />
               <Text style={styles.menuText}>Samagam Sessions</Text>
             </Pressable>
             <Pressable
@@ -544,7 +546,7 @@ export function ChannelScreen({ route, navigation }: Props) {
               accessibilityRole="button"
               onPress={() => setMenuOpen(false)}
             >
-              <MaterialIcons name="close" size={22} color={lightColors.text} />
+              <MaterialIcons name="close" size={22} color={colors.text} />
               <Text style={styles.menuText}>Cancel</Text>
             </Pressable>
           </Pressable>
@@ -555,8 +557,8 @@ export function ChannelScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: lightColors.background },
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background },
   listPad: { paddingHorizontal: spacing.lg },
   topBarBleed: { marginHorizontal: -spacing.lg },
   banner: {
@@ -570,7 +572,7 @@ const styles = StyleSheet.create({
     // edge-to-edge with no letterbox and no crop.
     marginHorizontal: -spacing.lg,
     aspectRatio: 1546 / 256,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
   },
   identity: {
     flexDirection: 'row',
@@ -588,7 +590,7 @@ const styles = StyleSheet.create({
     borderRadius: nativeApp.searchChannel.avatarSize / 2,
   },
   avatarFallback: {
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -604,34 +606,34 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
   },
   avatarLiveText: { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
-  avatarInitial: { fontSize: 30, fontWeight: '600', color: lightColors.textSecondary },
+  avatarInitial: { fontSize: 30, fontWeight: '600', color: colors.textSecondary },
   name: {
     fontSize: nativeApp.searchChannel.nameFontSize, // 20
     lineHeight: 25,
     fontWeight: '700',
-    color: lightColors.text,
+    color: colors.text,
     flexShrink: 1,
   },
   handleLine: {
     fontSize: 14,
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
     marginTop: 3,
   },
   metaLine: {
     fontSize: 14,
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
     marginTop: 2,
   },
   description: {
     fontSize: 14,
     lineHeight: 20,
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
     marginTop: spacing.sm,
   },
   gridCell: { flex: 1 },
   columnWrapper: { gap: spacing.lg },
   descriptionWrap: { marginTop: spacing.md },
-  moreText: { fontSize: 14, fontWeight: '600', color: lightColors.text, marginTop: spacing.xs },
+  moreText: { fontSize: 14, fontWeight: '600', color: colors.text, marginTop: spacing.xs },
   subscribePill: {
     alignSelf: 'stretch',
     height: 40, // m.youtube channel page at 412px: ~41px tall, ~91% width
@@ -639,45 +641,45 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
-    backgroundColor: lightColors.subscribeBackground,
+    backgroundColor: colors.subscribeBackground,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
   },
-  subscribePillActive: { backgroundColor: lightColors.surfaceVariant },
-  subscribeText: { fontSize: 15, fontWeight: '600', color: lightColors.subscribeText },
-  subscribeTextActive: { color: lightColors.text },
-  followNote: { fontSize: 11, color: lightColors.textSecondary, marginTop: 6 },
+  subscribePillActive: { backgroundColor: colors.surfaceVariant },
+  subscribeText: { fontSize: 15, fontWeight: '600', color: colors.subscribeText },
+  subscribeTextActive: { color: colors.text },
+  followNote: { fontSize: 11, color: colors.textSecondary, marginTop: 6 },
   skelBanner: {
     marginHorizontal: -spacing.lg,
     aspectRatio: 1546 / 256,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
   },
   skelIdentity: { flexDirection: 'row', gap: spacing.lg, paddingTop: spacing.lg },
   skelAvatar: {
     width: nativeApp.searchChannel.avatarSize,
     height: nativeApp.searchChannel.avatarSize,
     borderRadius: nativeApp.searchChannel.avatarSize / 2,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
   },
   skelLines: { flex: 1, justifyContent: 'center', gap: spacing.sm },
-  skelBar: { height: 14, borderRadius: 7, backgroundColor: lightColors.surfaceVariant },
+  skelBar: { height: 14, borderRadius: 7, backgroundColor: colors.surfaceVariant },
   skelPills: { marginTop: spacing.lg, marginBottom: spacing.xl },
   skelPill: {
     height: 40,
     borderRadius: radii.pill,
-    backgroundColor: lightColors.surfaceVariant,
+    backgroundColor: colors.surfaceVariant,
   },
   tabs: {
     flexDirection: 'row',
     gap: spacing.xl,
     marginTop: spacing.xl,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: lightColors.border,
+    borderBottomColor: colors.border,
   },
   tab: { paddingBottom: spacing.sm },
-  tabActive: { borderBottomWidth: 2, borderBottomColor: lightColors.text },
-  tabLabel: { fontSize: 15, fontWeight: '500', color: lightColors.textSecondary },
-  tabLabelActive: { color: lightColors.text, fontWeight: '600' },
+  tabActive: { borderBottomWidth: 2, borderBottomColor: colors.text },
+  tabLabel: { fontSize: 15, fontWeight: '500', color: colors.textSecondary },
+  tabLabelActive: { color: colors.text, fontWeight: '600' },
   footerSpinner: { paddingVertical: spacing.lg },
   menuBackdrop: {
     flex: 1,
@@ -689,7 +691,7 @@ const styles = StyleSheet.create({
   menuCard: {
     width: '100%',
     maxWidth: 360,
-    backgroundColor: lightColors.surface,
+    backgroundColor: colors.surface,
     borderRadius: 16,
     paddingVertical: spacing.sm,
   },
@@ -700,5 +702,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
-  menuText: { fontSize: 15, color: lightColors.text },
+  menuText: { fontSize: 15, color: colors.text },
 });

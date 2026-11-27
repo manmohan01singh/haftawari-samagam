@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
-import { layout, lightColors } from '../../theme';
+import { layout, useTheme, type ThemeColors } from '../../theme';
 
 interface YouTubePlayerProps {
   youtubeVideoId: string;
@@ -21,6 +21,8 @@ interface YouTubePlayerProps {
  * or its ads once playback is possible.
  */
 export function YouTubePlayer({ youtubeVideoId }: YouTubePlayerProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [loaded, setLoaded] = useState(false);
   const embedUrl = `https://www.youtube.com/embed/${encodeURIComponent(youtubeVideoId)}?rel=0&playsinline=1`;
   return (
@@ -51,11 +53,11 @@ export function YouTubePlayer({ youtubeVideoId }: YouTubePlayerProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   wrap: {
     width: '100%',
     aspectRatio: layout.thumbnailAspectRatio,
-    backgroundColor: lightColors.playerBackground,
+    backgroundColor: colors.playerBackground,
   },
   facade: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   poster: { width: '100%', height: '100%' },
