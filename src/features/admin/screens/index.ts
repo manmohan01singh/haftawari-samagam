@@ -1,6 +1,7 @@
 export { AdminOverviewScreen } from './AdminOverviewScreen';
 export { AdminChannelsScreen } from './AdminChannelsScreen';
 export { AdminVideosScreen } from './AdminVideosScreen';
+export { AdminHostedScreen } from './AdminHostedScreen';
 export { AdminSessionsScreen } from './AdminSessionsScreen';
 export { AdminCategoriesScreen } from './AdminCategoriesScreen';
 export { AdminMembersScreen } from './AdminMembersScreen';
