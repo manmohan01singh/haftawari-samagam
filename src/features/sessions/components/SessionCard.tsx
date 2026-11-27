@@ -51,6 +51,9 @@ export const SessionCard = memo(function SessionCard({ item, effectiveStatus, no
         ) : (
           <View style={[styles.thumbnail, styles.thumbnailEmpty]} />
         )}
+        {/* Status badge bottom-RIGHT, matching the reference LIVE-pill
+            position on shelf/feed thumbnails (REFERENCE_UI §1/§2);
+            previously it sat bottom-left, unlike every other card. */}
         <View style={styles.badgeWrap} pointerEvents="none">
           <SessionStatusBadge status={effectiveStatus} />
         </View>
@@ -91,10 +94,10 @@ const styles = StyleSheet.create({
     backgroundColor: lightColors.surfaceVariant,
   },
   thumbnailEmpty: { backgroundColor: lightColors.surfaceVariant },
-  badgeWrap: { position: 'absolute', left: spacing.sm, bottom: spacing.sm },
+  badgeWrap: { position: 'absolute', right: spacing.sm, bottom: spacing.sm },
   durationBadge: {
     position: 'absolute',
-    right: spacing.sm,
+    left: spacing.sm,
     bottom: spacing.sm,
     backgroundColor: 'rgba(0,0,0,0.8)',
     borderRadius: radii.badge,

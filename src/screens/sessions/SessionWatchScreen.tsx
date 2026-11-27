@@ -2,9 +2,9 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   AppState,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -223,6 +223,20 @@ export function SessionWatchScreen({ route, navigation }: Props) {
         void serverClock.sync().then(() => seekToSessionPosition());
       }
     });
+    // Web reconnect path: AppState does not fire for a network drop /
+    // restore in the PWA, so the browser 'online' event re-syncs the
+    // clock and re-seeks as well. Native reconnects surface through
+    // AppState + the Realtime channels' own resubscription.
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const onOnline = () => {
+        void serverClock.sync().then(() => seekToSessionPosition());
+      };
+      window.addEventListener('online', onOnline);
+      return () => {
+        sub.remove();
+        window.removeEventListener('online', onOnline);
+      };
+    }
     return () => sub.remove();
   }, [seekToSessionPosition]);
 
@@ -324,11 +338,19 @@ export function SessionWatchScreen({ route, navigation }: Props) {
     );
   }
   if (loading) {
+    // Skeleton in the real watch geometry (player block + sheet lines),
+    // not a lone spinner — the layout must not jump when data arrives.
     return (
-      <View style={styles.stateScreen}>
-        {backBar}
-        <View style={styles.center}>
-          <ActivityIndicator color={lightColors.text} />
+      <View style={styles.root}>
+        <View style={styles.playerSkeleton}>
+          <Text style={styles.playerSkeletonLabel}>Loading Samagam…</Text>
+        </View>
+        <View style={styles.sheetSkeleton}>
+          <View style={[styles.skelLine, { width: '85%' }]} />
+          <View style={[styles.skelLine, { width: '52%', marginTop: 8 }]} />
+          <View style={[styles.skelPill, { marginTop: spacing.lg }]} />
+          <View style={[styles.skelLine, { width: '92%', height: 14, marginTop: spacing.lg }]} />
+          <View style={[styles.skelLine, { width: '78%', height: 14, marginTop: 6 }]} />
         </View>
       </View>
     );
@@ -355,31 +377,8 @@ export function SessionWatchScreen({ route, navigation }: Props) {
   const isCompleted = status === 'completed';
   const showEmbed = (isPlaying || isCompleted) && video;
 
-  const participantBits: string[] = [];
-  if (presenceCount != null) {
-    participantBits.push(
-      `${presenceCount} here now`
-    );
-  }
-  if (joinedCount != null) {
-    participantBits.push(`${joinedCount} joined`);
-  }
-
   return (
     <View style={styles.root}>
-      {/* QA26/27: floating back target — this screen had no way back at all. */}
-      <Pressable
-        style={styles.backButton}
-        onPress={() => {
-          if (navigation.canGoBack()) navigation.goBack();
-          else navigation.navigate('Sessions');
-        }}
-        hitSlop={6}
-        accessibilityRole="button"
-        accessibilityLabel="Back"
-      >
-        <MaterialIcons name="arrow-back" size={24} color="#FFFFFF" />
-      </Pressable>
       {/* Player area (pinned at top, per reference) */}
       <View style={styles.playerArea}>
         {/* Back affordance over the player. This screen previously had
@@ -439,10 +438,29 @@ export function SessionWatchScreen({ route, navigation }: Props) {
           ) : (
             <Text style={styles.statusText}>CANCELLED</Text>
           )}
-          {participantBits.length > 0 ? (
-            <Text style={styles.metaText}> · {participantBits.join(' · ')}</Text>
-          ) : null}
         </View>
+
+        {/* Presence vs roster, honestly side by side: "here now" is the
+            REAL Realtime presence count (people in this room right
+            now); "joined" is the REAL session_participants roster
+            count (people who tapped Join). They measure different
+            things and are never merged into one number. */}
+        {presenceCount != null || joinedCount != null ? (
+          <View style={styles.countsRow}>
+            {presenceCount != null ? (
+              <View style={styles.countChip}>
+                <View style={styles.presenceDot} />
+                <Text style={styles.countChipText}>{presenceCount} here now</Text>
+              </View>
+            ) : null}
+            {joinedCount != null ? (
+              <View style={styles.countChip}>
+                <MaterialIcons name="group" size={15} color={lightColors.textSecondary} />
+                <Text style={styles.countChipText}>{joinedCount} joined</Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
 
         <Text style={styles.scheduleLine}>
           {isPlaying
@@ -459,6 +477,20 @@ export function SessionWatchScreen({ route, navigation }: Props) {
             accessibilityRole="button"
           >
             <Text style={styles.syncButtonText}>Sync to Samagam position</Text>
+          </Pressable>
+        ) : null}
+
+        {isCompleted ? (
+          <Pressable
+            onPress={() => {
+              embedRef.current?.seekTo(0);
+              playerTimeRef.current = 0;
+              embedRef.current?.play();
+            }}
+            style={({ pressed }) => [styles.syncButton, pressed && styles.pressed]}
+            accessibilityRole="button"
+          >
+            <Text style={styles.syncButtonText}>Watch again from the start</Text>
           </Pressable>
         ) : null}
 
@@ -484,13 +516,20 @@ export function SessionWatchScreen({ route, navigation }: Props) {
                 </Text>
               </Pressable>
             ) : (
-              <Pressable
-                onPress={() => navigation.navigate('SignIn')}
-                style={styles.joinPill}
-                accessibilityRole="button"
-              >
-                <Text style={styles.joinPillText}>Sign in to join</Text>
-              </Pressable>
+              <View>
+                <Pressable
+                  onPress={() => navigation.navigate('SignIn')}
+                  style={styles.joinPill}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.joinPillText}>Sign in to join</Text>
+                </Pressable>
+                <Text style={styles.signInExplain}>
+                  You can watch this Samagam without an account. Joining
+                  (so sangat can see you are here) and chatting need you
+                  to sign in first.
+                </Text>
+              </View>
             )}
           </View>
         )}
@@ -527,6 +566,7 @@ export function SessionWatchScreen({ route, navigation }: Props) {
             sessionId={sessionId}
             participantCount={presenceCount ?? joinedCount ?? undefined}
             onPress={() => setChatOpen(true)}
+            onSignInPress={() => navigation.navigate('SignIn')}
             prominent={isPlaying}
           />
         </View>
@@ -561,23 +601,51 @@ export function SessionWatchScreen({ route, navigation }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: lightColors.playerBackground },
-  backButton: {
-    position: 'absolute',
-    top: spacing.sm,
-    left: spacing.sm,
-    zIndex: 10,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+  playerSkeleton: {
+    width: '100%',
+    aspectRatio: layout.thumbnailAspectRatio,
+    backgroundColor: lightColors.surfaceVariant,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  center: {
+  playerSkeletonLabel: { ...typography.metadata, color: lightColors.textSecondary },
+  sheetSkeleton: {
     flex: 1,
+    backgroundColor: lightColors.surface,
+    borderTopLeftRadius: nativeApp.watchSheet.topRadius,
+    borderTopRightRadius: nativeApp.watchSheet.topRadius,
+    marginTop: -nativeApp.watchSheet.topRadius,
+    padding: spacing.lg,
+  },
+  skelLine: { height: 18, borderRadius: 4, backgroundColor: lightColors.surfaceVariant },
+  skelPill: {
+    width: 150,
+    height: 40,
+    borderRadius: radii.pill,
+    backgroundColor: lightColors.surfaceVariant,
+  },
+  countsRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: lightColors.background,
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    flexWrap: 'wrap',
+  },
+  countChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs + 2,
+    backgroundColor: lightColors.surfaceVariant,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 5,
+  },
+  presenceDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#2E7D32' },
+  countChipText: { fontSize: 13, fontWeight: '600', color: lightColors.text },
+  signInExplain: {
+    ...typography.body,
+    color: lightColors.textSecondary,
+    marginTop: spacing.sm,
   },
   playerArea: { backgroundColor: lightColors.playerBackground },
   thumbnailWrap: { position: 'relative' },
@@ -605,7 +673,6 @@ const styles = StyleSheet.create({
     color: lightColors.textSecondary,
   },
   statusPlaying: { color: lightColors.accent },
-  metaText: { fontSize: 13, color: lightColors.textSecondary },
   scheduleLine: {
     ...typography.channelName,
     color: lightColors.textSecondary,
