@@ -22,11 +22,14 @@
  *  - Shorts are filtered with the app's isShortVideo rule (locked:
  *    NO Shorts anywhere), and scheduled premieres that have no real
  *    duration yet are skipped (they are not watchable recordings).
- *  - A per-channel fetch failure (quota, network) retires ONLY that
- *    channel for this pager's lifetime; every other source keeps
- *    flowing. The feed reports `exhausted` only when every source is
- *    genuinely drained — with thousands of uploads per channel that
- *    is, in practice, never.
+ *  - A per-channel fetch failure (quota, network) pauses ONLY that
+ *    channel for the current next() call; it is retried on the next
+ *    scroll from the same scan position (Phase 13: permanent
+ *    retirement let a rate-limited key empty the topic chips and
+ *    falsely report the feed exhausted). The feed reports
+ *    `exhausted` only when every source is genuinely drained —
+ *    with thousands of uploads per channel that is, in practice,
+ *    never.
  *  - Quota: one uploads page = playlistItems (1 unit) + videos.list
  *    (1 unit). The FIRST page of each channel goes through the shared
  *    30-minute AsyncStorage cache (getUploadsCached, also used by
@@ -87,14 +90,33 @@ export type HomeChip = (typeof HOME_CHIPS)[number];
  * common spelling variants the sangat actually uses (the locked
  * examples: sakhi/sakhiyan — 'sakhi' is a substring of 'sakhiyan',
  * so one keyword covers both — and haadbiti/hadbiti/haadbeeti).
+ *
+ * Phase 13 widening (verified against 1,610 real upload titles
+ * pulled from the 9 registry channels, 2026-11-27): the channels
+ * also title videos in Gurmukhi script (ਸਿਮਰਨ, ਕਥਾ, ਕੀਰਤਨ, ਸਾਖੀ,
+ * ਹਾਦਬੀਤੀ, ਪਾਠ — e.g. Hazur Sahib's Gurmukhi Hukamnama titles and
+ * SGPC's ਅਖੰਡ ਪਾਠ uploads matched NOTHING before) and use spaced
+ * forms like "Hadd Biti", so both scripts and the spaced variants
+ * are first-class keywords now.
  */
 const TOPIC_KEYWORDS: Record<string, string[]> = {
-  Simran: ['simran'],
-  Katha: ['katha'],
-  Kirtan: ['kirtan', 'keertan'],
-  Sakhi: ['sakhi', 'saakhi'],
-  Haadbiti: ['haadbiti', 'hadbiti', 'haadbeeti', 'hadbeeti'],
-  Path: ['path', 'paath'],
+  Simran: ['simran', 'ਸਿਮਰਨ'],
+  Katha: ['katha', 'ਕਥਾ'],
+  Kirtan: ['kirtan', 'keertan', 'ਕੀਰਤਨ'],
+  Sakhi: ['sakhi', 'saakhi', 'ਸਾਖੀ'],
+  Haadbiti: [
+    'haadbiti',
+    'hadbiti',
+    'haadbeeti',
+    'hadbeeti',
+    'haddbiti',
+    'hadd biti',
+    'haad biti',
+    'ਹਾਦਬੀਤੀ',
+    'ਹੱਦ ਬੀਤੀ',
+    'ਹਾਦ ਬੀਤੀ',
+  ],
+  Path: ['path', 'paath', 'ਪਾਠ'],
 };
 
 const AMRITVELA_HANDLES = new Set(['@amritvelatrustlive', '@amritvelatrust']);
@@ -209,9 +231,15 @@ const MAX_CATALOGUE_PAGES = 10;
 /**
  * Per channel per next() call, how many uploads pages may be scanned
  * while hunting topic matches — bounds quota/time per scroll step;
- * the scan simply continues on the next onEndReached.
+ * the scan simply continues on the next onEndReached. Only pages
+ * actually absorbed for matching count against the budget: the two
+ * priming fetches (cache page + token page) are overhead, and when
+ * they consumed budget (Phase 11) a sparse topic effectively got
+ * only ~4 pages ≈ 100 titles per channel per call — for a topic
+ * like Haadbiti (~1% of titles) that routinely found nothing and
+ * the chip looked empty (Phase 13 fix).
  */
-const MAX_SCAN_PAGES_PER_CALL = 6;
+const MAX_SCAN_PAGES_PER_CALL = 10;
 
 interface ChannelCursor {
   channel: AppChannel;
@@ -224,6 +252,17 @@ interface ChannelCursor {
   /** Token priming (one direct page-1 fetch to learn the token) has run. */
   tokenPrimed: boolean;
   exhausted: boolean;
+  /**
+   * A fetch failed during the current next() call. The channel is
+   * skipped for the rest of that call and RETRIED on the next one —
+   * a transient failure (quota blip, network) must not retire a
+   * channel for the pager's lifetime or mark the feed exhausted
+   * (Phase 13 fix: Phase 11 retired the channel permanently on any
+   * error, so a rate-limited key emptied the sparse topic chips —
+   * which need ~10× the calls of the channel chips — while the
+   * channel chips still worked off page 1 / the uploads cache).
+   */
+  failed: boolean;
 }
 
 export interface HomeFeedPager {
@@ -306,6 +345,7 @@ export function createHomeFeedPager({ channels, filter, seed }: HomeFeedPagerOpt
       primed: false,
       tokenPrimed: false,
       exhausted: !isYouTubeConfigured,
+      failed: false,
     }));
 
   /** Filter + dedupe a raw uploads page into a cursor's buffer. */
@@ -320,25 +360,29 @@ export function createHomeFeedPager({ channels, filter, seed }: HomeFeedPagerOpt
   /**
    * Make sure the cursor's buffer holds at least one item, fetching
    * pages as needed. Returns false when the channel can produce no
-   * more items (drained or failed). Topic scans keep pulling pages
-   * until a match lands, bounded per call by MAX_SCAN_PAGES_PER_CALL.
+   * more items in this call (drained, or a fetch failed — see the
+   * `failed` flag). Topic scans keep pulling pages until a match
+   * lands, bounded per call by MAX_SCAN_PAGES_PER_CALL absorbed
+   * pages; the scan position persists on the cursor, so the next
+   * onEndReached simply continues deeper into the uploads.
    */
   async function fillBuffer(cursor: ChannelCursor): Promise<boolean> {
     if (cursor.buffer.length > 0) return true;
-    if (cursor.exhausted) return false;
+    if (cursor.exhausted || cursor.failed) return false;
     let scans = 0;
     while (cursor.buffer.length === 0 && !cursor.exhausted && scans < MAX_SCAN_PAGES_PER_CALL) {
-      scans++;
       try {
         if (!cursor.primed) {
           // First page via the shared 30-min cache (2 units saved on
           // every repeat visit; shared with Subscriptions/Channel).
+          // It IS an absorbed page, so it counts as a scan page.
           cursor.primed = true;
           const videos = await getUploadsCached(
             cursor.channel.youtubeChannelId,
             cursor.uploadsPlaylistId,
           );
           absorb(cursor, videos);
+          scans++;
           // A short first page means the uploads playlist has no
           // second page; a full one needs token priming below.
           if (videos.length < 25) cursor.exhausted = true;
@@ -349,6 +393,7 @@ export function createHomeFeedPager({ channels, filter, seed }: HomeFeedPagerOpt
           // token, so continuing past page 1 costs ONE direct page-1
           // fetch purely to learn the token; its videos are already
           // in `seen`/buffer flow and dedupe drops any repeat.
+          // Also overhead — not counted as a scan page.
           cursor.tokenPrimed = true;
           const page = await fetchChannelUploads(cursor.uploadsPlaylistId);
           cursor.nextPageToken = page.nextPageToken;
@@ -363,10 +408,14 @@ export function createHomeFeedPager({ channels, filter, seed }: HomeFeedPagerOpt
         cursor.nextPageToken = page.nextPageToken;
         if (!page.nextPageToken) cursor.exhausted = true;
         absorb(cursor, page.videos);
+        scans++;
       } catch {
-        // Quota / network failure retires THIS channel for the
-        // pager's lifetime; the other sources keep flowing.
-        cursor.exhausted = true;
+        // Transient failure (quota blip / network): pause THIS
+        // channel for the rest of this next() call only. It is NOT
+        // exhausted — the next scroll retries from the same cursor
+        // position, and the feed's `exhausted` stays false, so the
+        // screen never claims "that's every video" over a blip.
+        cursor.failed = true;
       }
     }
     return cursor.buffer.length > 0;
@@ -386,6 +435,10 @@ export function createHomeFeedPager({ channels, filter, seed }: HomeFeedPagerOpt
   }
 
   async function next(count: number): Promise<{ items: HomeFeedItem[]; exhausted: boolean }> {
+    // A channel that failed during the previous call gets a fresh
+    // chance on every new call (scroll / refresh); within one call
+    // it is tried once, so a dead key cannot spin the round-robin.
+    for (const cursor of cursors) cursor.failed = false;
     await ensureCatalogue();
     const collected: HomeFeedItem[] = [];
     // Round-robin: one item per source per round, catalogue first in

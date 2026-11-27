@@ -23,6 +23,7 @@ import { useEffect, useState } from 'react';
 
 import { supabase } from '../../lib/supabase';
 import { fetchChannelByHandle } from '../../lib/youtube';
+import { getChannelAvatarsCached } from './channelCache';
 import { OFFICIAL_CHANNEL } from '../search/config';
 import { SUGGESTED_CHANNELS } from './suggested';
 import type { ChannelRecord } from '../../types/database';
@@ -169,6 +170,28 @@ function toAppChannel(row: ChannelRecord): AppChannel {
   };
 }
 
+/**
+ * Fill avatarUrl for channels that carry none (the built-in
+ * registry stores no DP — Sakhiyan and the gurdwara channels all
+ * shipped avatarUrl: null, so the Subscriptions rail and Home cards
+ * showed initials instead of the channel DP). Resolved from the
+ * YouTube API via the cached batch lookup in channelCache (one
+ * channels.list call, 6h cache); on any failure the channel keeps
+ * null and surfaces fall back to the letter/initial avatar.
+ */
+async function withResolvedAvatars(channels: AppChannel[]): Promise<AppChannel[]> {
+  const missing = channels.filter((c) => !c.avatarUrl && c.youtubeChannelId);
+  if (missing.length === 0) return channels;
+  try {
+    const avatars = await getChannelAvatarsCached(missing.map((c) => c.youtubeChannelId));
+    return channels.map((c) =>
+      c.avatarUrl ? c : { ...c, avatarUrl: avatars.get(c.youtubeChannelId) ?? null },
+    );
+  } catch {
+    return channels;
+  }
+}
+
 const CACHE_TTL_MS = 5 * 60 * 1000;
 let cached: { fetchedAt: number; channels: AppChannel[] } | null = null;
 let inflight: Promise<AppChannel[]> | null = null;
@@ -207,9 +230,10 @@ export async function fetchActiveChannels(): Promise<AppChannel[]> {
         return registry;
       }
     })()
-      .then((channels) => {
-        cached = { fetchedAt: Date.now(), channels };
-        return channels;
+      .then(async (channels) => {
+        const filled = await withResolvedAvatars(channels);
+        cached = { fetchedAt: Date.now(), channels: filled };
+        return filled;
       })
       .finally(() => {
         inflight = null;
