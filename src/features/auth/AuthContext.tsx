@@ -134,22 +134,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loadProfile = useCallback(async (user: User) => {
     if (!supabase) return;
-    const { data } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
-    // Ignore stale responses if the signed-in user changed meanwhile.
-    if (profileForUser.current !== user.id) return;
-    const row = (data as Profile | null) ?? null;
-    // Expose the metadata-merged row immediately: a Google user's DP
-    // shows even before the sync write lands — and even before
-    // migration 0004 adds the avatar_url column (see profileSync).
-    setProfile(mergeProfileWithMetadata(row, extractMetadataProfile(user)));
-    // Persist the metadata name/photo onto the row (no-op when the
-    // metadata carries neither, e.g. a plain email account). The
-    // guard is re-checked so a sign-out mid-sync cannot resurrect a
-    // stale profile.
-    const synced = await syncProfileFromMetadata(user, row);
-    if (profileForUser.current === user.id && synced) {
-      setProfile(synced);
+    // Retry on failure: this fetch previously read only `data` and
+    // ignored `error`, so one transient failure (network blip, cold
+    // backend) silently set profile=null — and with it isAdmin=false:
+    // the Library "Admin dashboard" entry vanished and the Admin
+    // route was never registered, with nothing ever retrying. Now a
+    // failed fetch retries with backoff, and a failure NEVER clobbers
+    // an already-loaded profile with null.
+    const delaysMs = [0, 600, 1800];
+    for (let attempt = 0; attempt < delaysMs.length; attempt += 1) {
+      if (delaysMs[attempt] > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delaysMs[attempt]));
+      }
+      // Abandon retries if the signed-in user changed meanwhile.
+      if (profileForUser.current !== user.id) return;
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (error) continue;
+      // Ignore stale responses if the signed-in user changed meanwhile.
+      if (profileForUser.current !== user.id) return;
+      const row = (data as Profile | null) ?? null;
+      // Expose the metadata-merged row immediately: a Google user's DP
+      // shows even before the sync write lands — and even before
+      // migration 0004 adds the avatar_url column (see profileSync).
+      setProfile(mergeProfileWithMetadata(row, extractMetadataProfile(user)));
+      // Persist the metadata name/photo onto the row (no-op when the
+      // metadata carries neither, e.g. a plain email account). The
+      // guard is re-checked so a sign-out mid-sync cannot resurrect a
+      // stale profile.
+      const synced = await syncProfileFromMetadata(user, row);
+      if (profileForUser.current === user.id && synced) {
+        setProfile(synced);
+      }
+      return;
     }
+    // All attempts failed: keep whatever profile is already loaded
+    // (possibly null on a first-ever sign-in). The next auth event or
+    // an explicit refreshProfile() call re-runs this fetch.
   }, []);
 
   useEffect(() => {

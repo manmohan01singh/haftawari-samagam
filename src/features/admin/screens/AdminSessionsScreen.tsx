@@ -2,6 +2,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { EmptyState } from '../../../components/common/EmptyState';
+import { useServerClock } from '../../sessions/hooks/useServerClock';
+import { deriveStatus } from '../../sessions/stateMachine';
 import { lightColors, spacing, typography } from '../../../theme';
 import type { SessionStatus, Video } from '../../../types/database';
 import {
@@ -60,6 +62,12 @@ function splitLocal(iso: string): { date: string; time: string } {
 }
 
 function SessionsContent({ ctx }: { ctx: AdminContext }) {
+  // Server-clock tick (30s): the list below groups sessions by their
+  // EFFECTIVE (derived) status, so a session whose start time arrives
+  // moves UPCOMING → NOW PLAYING here on its own — the stored status
+  // column is only ever written at create ('upcoming') / cancel time
+  // and would otherwise leave this screen permanently stale.
+  const { nowMs } = useServerClock(30_000);
   const [sessions, setSessions] = useState<SessionWithVideo[] | null>(null);
   const [publishedVideos, setPublishedVideos] = useState<Video[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -139,9 +147,21 @@ function SessionsContent({ ctx }: { ctx: AdminContext }) {
   const grouped = useMemo(() => {
     const map = new Map<SessionStatus, SessionWithVideo[]>();
     for (const status of STATUS_ORDER) map.set(status, []);
-    for (const s of sessions ?? []) map.get(s.status)?.push(s);
+    for (const s of sessions ?? []) {
+      // Group by the EFFECTIVE status derived from the server clock
+      // (same state machine as the user-facing screens), not the raw
+      // stored column — stored is written only at create/cancel.
+      const effective = deriveStatus({
+        storedStatus: s.status,
+        scheduledStartAt: s.scheduled_start_at,
+        scheduledEndAt: s.scheduled_end_at,
+        durationSeconds: s.video?.duration_seconds ?? null,
+        nowMs,
+      });
+      map.get(effective)?.push(s);
+    }
     return map;
-  }, [sessions]);
+  }, [sessions, nowMs]);
 
   const onCreate = async () => {
     setFormError(null);
@@ -192,6 +212,7 @@ function SessionsContent({ ctx }: { ctx: AdminContext }) {
                 title: video.title,
                 youtube_video_id: video.youtube_video_id,
                 thumbnail_url: video.thumbnail_url,
+                duration_seconds: video.duration_seconds,
               }
             : null,
         },

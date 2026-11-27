@@ -36,8 +36,14 @@ export type RootStackParamList = {
   Saved: undefined;
   /** All playlists list screen (library stream). */
   Playlists: undefined;
-  /** Samagam sessions list (sessions stream). */
-  Sessions: undefined;
+  /**
+   * Samagam sessions list (sessions stream). `filter` is parsed
+   * defensively by the screen: the only recognised value is 'live'
+   * (the Home "Live" tab), which the screen maps to the real
+   * NOW PLAYING status — any other/absent value shows the full list.
+   * An unrecognised param must never crash or blank the screen.
+   */
+  Sessions: { filter?: string } | undefined;
   /** Synchronized Samagam watch screen (sessions stream). */
   SessionWatch: { sessionId: string };
   History: undefined;

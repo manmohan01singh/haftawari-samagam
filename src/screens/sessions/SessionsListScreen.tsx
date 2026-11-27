@@ -63,11 +63,19 @@ const SECTION_TITLES: Record<VisibleStatus, string> = {
  * the server clock (state machine), so every device groups identically.
  * Cancelled sessions are not promoted in the list.
  */
-export function SessionsListScreen({ navigation }: Props) {
-  // 30s tick, not the 1s default: every label on this screen
-  // (countdowns, "started … ago") is minute-granularity, and the 1s
-  // tick re-rendered the whole list every second for no visible gain.
-  const { nowMs } = useServerClock(30_000);
+export function SessionsListScreen({ navigation, route }: Props) {
+  // Route param (Home "Live" tab / ?filter=live deep link): 'live' is
+  // the ONLY recognised filter and it maps to the real NOW PLAYING
+  // status vocabulary — there is no 'live' session status. Any other
+  // value (or none) means the full, unfiltered list; an unexpected
+  // param must never crash or blank this screen.
+  const liveOnly = route.params?.filter === 'live';
+  // 15s tick: labels on this screen are minute-granularity, but the
+  // UPCOMING → NOW PLAYING flip itself must be SEEN by a user sitting
+  // on this screen — the derived sections below re-compute from this
+  // tick (server-clock corrected), so the flip lands within one tick
+  // with no reload and no manual trigger.
+  const { nowMs } = useServerClock(15_000);
   const [items, setItems] = useState<SessionWithVideo[]>([]);
   // When the backend is not configured there is nothing to load.
   const [loading, setLoading] = useState(isSupabaseConfigured);
@@ -145,11 +153,13 @@ export function SessionsListScreen({ navigation }: Props) {
     grouped.completed.sort((a, b) =>
       b.session.scheduled_start_at.localeCompare(a.session.scheduled_start_at),
     );
-    const order: VisibleStatus[] = ['now_playing', 'upcoming', 'completed'];
+    const order: VisibleStatus[] = liveOnly
+      ? ['now_playing']
+      : ['now_playing', 'upcoming', 'completed'];
     return order
       .filter((status) => grouped[status].length > 0)
       .map((status) => ({ status, title: SECTION_TITLES[status], data: grouped[status] }));
-  }, [items, nowMs]);
+  }, [items, nowMs, liveOnly]);
 
   const handlePressSession = useCallback(
     (sessionId: string) => navigation.navigate('SessionWatch', { sessionId }),
@@ -283,12 +293,21 @@ export function SessionsListScreen({ navigation }: Props) {
       updateCellsBatchingPeriod={50}
       removeClippedSubviews
       ListEmptyComponent={
-        <EmptyState
-          title="No Samagams scheduled"
-          message="Samagam Sessions are scheduled group playbacks of recordings — everyone watches together, starting at the same position. When one is scheduled it will appear here as UPCOMING, then NOW PLAYING while it runs. Until then, you can watch any recording from the home feed."
-          actionLabel="Browse recordings"
-          onAction={() => navigation.navigate('MainTabs', { screen: 'Home' })}
-        />
+        liveOnly ? (
+          <EmptyState
+            title="No live Samagam right now"
+            message="No Samagam Session is NOW PLAYING at the moment. Scheduled Samagams appear here as UPCOMING and start playing for everyone together at their scheduled time."
+            actionLabel="View all sessions"
+            onAction={() => navigation.setParams({ filter: undefined })}
+          />
+        ) : (
+          <EmptyState
+            title="No Samagams scheduled"
+            message="Samagam Sessions are scheduled group playbacks of recordings — everyone watches together, starting at the same position. When one is scheduled it will appear here as UPCOMING, then NOW PLAYING while it runs. Until then, you can watch any recording from the home feed."
+            actionLabel="Browse recordings"
+            onAction={() => navigation.navigate('MainTabs', { screen: 'Home' })}
+          />
+        )
       }
       stickySectionHeadersEnabled={false}
     />

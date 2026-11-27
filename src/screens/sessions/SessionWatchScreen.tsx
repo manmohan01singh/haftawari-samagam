@@ -308,6 +308,32 @@ export function SessionWatchScreen({ route, navigation }: Props) {
     };
   }, [sessionId]);
 
+  // Web tab close / navigation away: React unmount cleanup does not
+  // reliably run when the page itself is being torn down, so without
+  // this a closed tab left its Presence entry (and a stale 'joined'
+  // roster row) behind until the Realtime socket timed out — inflating
+  // the "here now" count for everyone else. pagehide is the reliable
+  // teardown signal on web (beforeunload as the older-browser
+  // fallback); both fire the same best-effort deregistration.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const onPageHide = () => {
+      if (presenceChannelRef.current) {
+        void leavePresence(presenceChannelRef.current).catch(() => undefined);
+        presenceChannelRef.current = null;
+      }
+      if (joinedRef.current && userRef.current) {
+        void leaveSession(sessionId, userRef.current.userId).catch(() => undefined);
+      }
+    };
+    window.addEventListener('pagehide', onPageHide);
+    window.addEventListener('beforeunload', onPageHide);
+    return () => {
+      window.removeEventListener('pagehide', onPageHide);
+      window.removeEventListener('beforeunload', onPageHide);
+    };
+  }, [sessionId]);
+
   // Loading / error / unavailable states get the same back bar as the
   // loaded screen — before this they were bare full-screen messages
   // with no on-screen way out.
@@ -590,6 +616,10 @@ export function SessionWatchScreen({ route, navigation }: Props) {
               participantCount={presenceCount ?? joinedCount ?? undefined}
               hasJoined={joined}
               onJoinPress={() => void onToggleJoin()}
+              onSignInPress={() => {
+                setChatOpen(false);
+                navigation.navigate('SignIn');
+              }}
               onClose={() => setChatOpen(false)}
             />
           </View>
