@@ -19,6 +19,7 @@ import { Toast, useToast } from '../../components/common/Toast';
 import { shareContent, shareFeedback } from '../../lib/share';
 import { FeedCard } from '../../components/video/FeedCard';
 import { YouTubePlayer } from '../../components/video/YouTubePlayer';
+import { HostedWatchPlayer } from '../../components/video/HostedWatchPlayer';
 import {
   apiCardData,
   supabaseCardData,
@@ -56,13 +57,16 @@ import { goBackOrTab } from '../../navigation/safeBack';
 import { BackButton } from '../../components/layout/StackHeader';
 import { recordLocalWatch } from '../../features/library/localHistory';
 import { ICON_HIT_SLOP } from '../../lib/touch';
-import type { Video } from '../../types/database';
+import type { Video, VideoSource } from '../../types/database';
 import type { RootStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Watch'>;
 
 interface ResolvedWatch {
-  youtubeVideoId: string;
+  /** NULL for hosted rows — they have no YouTube id (migration 0005). */
+  youtubeVideoId: string | null;
+  /** Media source; rows fetched before migration 0005 default to 'youtube'. */
+  source: VideoSource;
   title: string;
   description: string;
   channelId: string | null;
@@ -178,7 +182,8 @@ export function WatchScreen({ route, navigation }: Props) {
   const [upNextSavedIds, setUpNextSavedIds] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState(false);
   const [readyFor, setReadyFor] = useState<string | null>(null);
-  const playerReady = resolved != null && readyFor === resolved.youtubeVideoId;
+  const playerKey = resolved ? (resolved.youtubeVideoId ?? resolved.row?.id ?? null) : null;
+  const playerReady = resolved != null && playerKey != null && readyFor === playerKey;
   const [savedState, setSavedState] = useState<{ rowId: string; saved: boolean } | null>(null);
   // Like/Dislike (round-3): NO state at all. The pair previously kept
   // a local toggle that rendered a FILLED black thumb — a persistent
@@ -207,6 +212,30 @@ export function WatchScreen({ route, navigation }: Props) {
         if (videoRowId && isSupabaseConfigured) {
           row = await fetchVideoByRowId(videoRowId);
           if (!row) throw new Error('This recording could not be found.');
+        }
+        // Hosted rows (migration 0005) have no YouTube id and never
+        // touch the YouTube API: everything shown comes from the row
+        // itself, and playback is minted later by HostedWatchPlayer.
+        if (row && (row.source ?? 'youtube') === 'hosted') {
+          if (!active) return;
+          setWatchState({
+            key: watchKey,
+            resolved: {
+              youtubeVideoId: null,
+              source: 'hosted',
+              title: row.title,
+              description: row.description ?? '',
+              channelId: null,
+              channelTitle: '',
+              metaLine: formatDateLine(row.published_at ?? row.created_at),
+              thumbnailUrl: row.thumbnail_url,
+              durationSeconds: row.duration_seconds,
+              row,
+              isLive: false,
+            },
+            error: null,
+          });
+          return;
         }
         const ytId = row?.youtube_video_id ?? youtubeVideoId;
         if (!ytId) throw new Error('This recording could not be found.');
@@ -252,6 +281,7 @@ export function WatchScreen({ route, navigation }: Props) {
           key: watchKey,
           resolved: {
             youtubeVideoId: ytId,
+            source: 'youtube',
             title: row?.title ?? meta?.title ?? '',
             description: row?.description ?? meta?.description ?? '',
             channelId: meta?.channelId ?? null,
@@ -446,7 +476,7 @@ export function WatchScreen({ route, navigation }: Props) {
   //  - SERVER: catalogue rows only, fired when the signed-in user
   //    is known (whenever auth resolves), once per row per mount.
   useEffect(() => {
-    if (!resolved) return;
+    if (!resolved || !resolved.youtubeVideoId) return;
     if (localHistoryRecordedFor.current === resolved.youtubeVideoId) return;
     localHistoryRecordedFor.current = resolved.youtubeVideoId;
     void recordLocalWatch({
@@ -470,13 +500,17 @@ export function WatchScreen({ route, navigation }: Props) {
   // and the embed never loads on any other screen.
   useEffect(() => {
     if (!resolved) return;
-    const ytId = resolved.youtubeVideoId;
+    const ytId = resolved.youtubeVideoId ?? resolved.row?.id ?? null;
     const t = setTimeout(() => setReadyFor(ytId), 60);
     return () => clearTimeout(t);
   }, [resolved]);
 
   const onShare = useCallback(() => {
     if (!resolved) return;
+    if (!resolved.youtubeVideoId) {
+      showToast('This recording plays inside the app and has no YouTube link to share');
+      return;
+    }
     void shareContent(
       resolved.title,
       `https://www.youtube.com/watch?v=${resolved.youtubeVideoId}`,
@@ -638,7 +672,13 @@ export function WatchScreen({ route, navigation }: Props) {
           collapse/expand, and playback does not restart. */}
       <View style={[styles.playerBox, mini && styles.playerBoxMini]}>
         {playerReady ? (
-          <YouTubePlayer youtubeVideoId={resolved.youtubeVideoId} />
+          resolved.source === 'hosted' && resolved.row ? (
+            <HostedWatchPlayer videoId={resolved.row.id} thumbnailUrl={resolved.thumbnailUrl} />
+          ) : resolved.youtubeVideoId ? (
+            <YouTubePlayer youtubeVideoId={resolved.youtubeVideoId} />
+          ) : (
+            <View style={styles.playerThumb} />
+          )
         ) : (
           <>
             {resolved.thumbnailUrl ? (
