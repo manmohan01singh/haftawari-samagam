@@ -11,12 +11,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
-import type { Profile } from '../../types/database';
 import {
   fetchHistory,
   fetchPlaylistDetail,
   fetchPlaylistSummaries,
-  fetchProfile,
   fetchSavedItems,
 } from './libraryService';
 import type { HistoryItem, PlaylistDetail, PlaylistSummary, SavedItem } from './types';
@@ -48,19 +46,14 @@ export function useCurrentUser(): { user: User | null; loading: boolean } {
   return { user, loading };
 }
 
-/** The signed-in user's profile row (display name, role), or null. */
-export function useProfile(userId: string | null): { profile: Profile | null; reload: () => void } {
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const reload = useCallback(() => {
-    if (!userId || !isSupabaseConfigured) return;
-    fetchProfile(userId)
-      .then(setProfile)
-      .catch(() => setProfile(null));
-  }, [userId]);
-  useEffect(reload, [reload]);
-  // Never leak a previous user's profile after sign-out / account switch.
-  return { profile: userId ? profile : null, reload };
-}
+/**
+ * NOTE: there is deliberately no useProfile hook here any more.
+ * The profile has ONE source of truth — AuthContext (useAuth) —
+ * after the Library header kept a private one-shot copy that went
+ * stale when Edit Profile saved a new name (Account showed the new
+ * name, the You header kept the old one). Screens must read
+ * `profile` from useAuth(), never fetch their own copy.
+ */
 
 interface ListResource<T> {
   data: T[];

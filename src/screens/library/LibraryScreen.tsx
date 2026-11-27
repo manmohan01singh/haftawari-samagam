@@ -21,12 +21,11 @@ import { layout, radii, spacing, useTheme, type ThemeColors } from '../../theme'
 import { ICON_HIT_SLOP } from '../../lib/touch';
 import type { MainTabParamList } from '../../navigation/types';
 import {
-  useCurrentUser,
   useHistory,
   usePlaylistSummaries,
-  useProfile,
   useSavedItems,
 } from '../../features/library/hooks';
+import { useAuth } from '../../features/auth';
 import { createPlaylist, removeHistoryEntry } from '../../features/library/libraryService';
 import { OFFICIAL_CHANNEL_HANDLE } from '../../lib/youtube';
 import { resumeRatio } from '../../features/library/format';
@@ -61,10 +60,18 @@ const HISTORY_CARD_WIDTH = Math.round(Dimensions.get('window').width * 0.36);
 export function LibraryScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { user, loading: authLoading } = useCurrentUser();
+  // ONE source of truth for identity: AuthContext. This screen used
+  // to keep TWO private copies — useCurrentUser for the user and a
+  // one-shot useProfile fetch for the profile — and the profile copy
+  // was never refreshed, so after Edit Profile saved a new name the
+  // Account page (AuthContext) showed the new name while this header
+  // kept showing the old one ("Mamm") for the whole session. The
+  // profile now comes from the same live context as Account,
+  // Settings and the headers, and the focus effect below re-pulls
+  // it via refreshProfile() as a belt-and-braces.
+  const { user, profile, loading: authLoading, refreshProfile } = useAuth();
   const scrollRef = React.useRef<React.ElementRef<typeof ScrollView>>(null);
   useScrollToTop(scrollRef);
-  const { profile } = useProfile(user?.id ?? null);
   const history = useHistory(user?.id ?? null);
   const saved = useSavedItems(user?.id ?? null);
   const summaries = usePlaylistSummaries(user?.id ?? null);
@@ -90,7 +97,11 @@ export function LibraryScreen({ navigation }: Props) {
       reloadHistory();
       reloadSaved();
       reloadSummaries();
-    }, [reloadLocal, reloadHistory, reloadSaved, reloadSummaries]),
+      // Re-pull the profile row too: an Edit Profile save in this
+      // session must show here the moment the user returns to this
+      // tab, even if the context update was somehow missed.
+      void refreshProfile();
+    }, [reloadLocal, reloadHistory, reloadSaved, reloadSummaries, refreshProfile]),
   );
 
   const refreshing = history.refreshing || saved.refreshing || summaries.refreshing;
