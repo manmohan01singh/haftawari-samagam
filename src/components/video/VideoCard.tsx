@@ -1,14 +1,19 @@
 import React, { memo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import type { Video } from '../../types/database';
 import { layout, lightColors, radii, spacing, typography } from '../../theme';
+import { UserAvatar } from '../common/UserAvatar';
 
 interface VideoCardProps {
   video: Video;
   /** Real view metadata line supplied by the caller (never fabricated here). */
   metadataLine?: string;
   onPress?: (video: Video) => void;
+  /** Real channel avatar URL when the caller has one (the Video row itself carries no channel fields). */
+  channelAvatarUrl?: string | null;
+  /** Channel name/handle for the avatar's initial fallback. */
+  channelName?: string | null;
 }
 
 /**
@@ -16,10 +21,30 @@ interface VideoCardProps {
  * duration badge bottom-right, 36px channel avatar, 2-line title,
  * grey channel + metadata lines. Renders only the real `Video` row it
  * is given.
+ *
+ * Phase 9 W2 (audit §7): the declared `onPress` is actually wired —
+ * the card is a Pressable that calls `onPress(video)` (it previously
+ * rendered an unpressable View) — and the avatar slot renders a real
+ * avatar (caller-supplied image, else the channel initial, else the
+ * generic person treatment via UserAvatar) instead of an empty
+ * placeholder View.
  */
-export const VideoCard = memo(function VideoCard({ video, metadataLine }: VideoCardProps) {
+export const VideoCard = memo(function VideoCard({
+  video,
+  metadataLine,
+  onPress,
+  channelAvatarUrl,
+  channelName,
+}: VideoCardProps) {
+  const initial = channelName?.replace('@', '').charAt(0).toUpperCase() ?? null;
   return (
-    <View style={styles.card}>
+    <Pressable
+      onPress={onPress ? () => onPress(video) : undefined}
+      disabled={!onPress}
+      style={styles.card}
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={video.title}
+    >
       <View style={styles.thumbnailWrap}>
         {video.thumbnail_url ? (
           <Image source={{ uri: video.thumbnail_url }} style={styles.thumbnail} contentFit="cover" cachePolicy="memory-disk" recyclingKey={video.id} />
@@ -33,7 +58,7 @@ export const VideoCard = memo(function VideoCard({ video, metadataLine }: VideoC
         ) : null}
       </View>
       <View style={styles.metaRow}>
-        <View style={styles.avatar} />
+        <UserAvatar avatarUrl={channelAvatarUrl} initial={initial} size={layout.avatarSm} />
         <View style={styles.metaText}>
           <Text style={styles.title} numberOfLines={2}>
             {video.title}
@@ -45,7 +70,7 @@ export const VideoCard = memo(function VideoCard({ video, metadataLine }: VideoC
           ) : null}
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 });
 
@@ -80,12 +105,6 @@ const styles = StyleSheet.create({
   },
   durationText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600' },
   metaRow: { flexDirection: 'row', marginTop: spacing.md, gap: layout.cardInnerGap },
-  avatar: {
-    width: layout.avatarSm,
-    height: layout.avatarSm,
-    borderRadius: layout.avatarSm / 2,
-    backgroundColor: lightColors.surfaceVariant,
-  },
   metaText: { flex: 1 },
   title: { ...typography.cardTitle, color: lightColors.text },
   metadata: { ...typography.metadata, color: lightColors.textSecondary, marginTop: 2 },

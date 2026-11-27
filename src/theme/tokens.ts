@@ -42,8 +42,12 @@ export const radii = {
   banner: 16,
   /** Buttons, chips, search field — fully rounded. */
   pill: 999,
-  /** Duration / status badge on a thumbnail. */
+  /** Duration badge on a thumbnail (Phase 9 W2: unified — duration = 4 everywhere). */
   badge: 4,
+  /** LIVE badge on a thumbnail (Phase 9 W2: unified — LIVE = 6 everywhere). */
+  liveBadge: 6,
+  /** Category chips (ChipsRow) — ~8px, not the 12px card radius. */
+  chipRadius: 8,
 } as const;
 
 export const spacing = {
@@ -65,6 +69,8 @@ export const typography = {
   cardTitle: { fontSize: 16, lineHeight: 22, fontWeight: '600' as const },
   channelName: { fontSize: 14, lineHeight: 20, fontWeight: '400' as const },
   metadata: { fontSize: 12, lineHeight: 18, fontWeight: '400' as const },
+  /** Card metadata on full-width feed cards (reference ≈13–14px; `metadata` 12 stays for compact rows). */
+  metadataLg: { fontSize: 13, lineHeight: 18, fontWeight: '400' as const },
   chip: { fontSize: 14, lineHeight: 20, fontWeight: '500' as const },
   sectionTitle: { fontSize: 18, lineHeight: 24, fontWeight: '700' as const },
   body: { fontSize: 14, lineHeight: 20, fontWeight: '400' as const },
@@ -86,6 +92,8 @@ export interface ThemeColors {
   playerBackground: string;
   /** Pale blue-grey tint behind the search channel-result block (ref-3 / §3). */
   searchTint: string;
+  /** Pale pill behind the selected SecondaryTabs item (ref-1; Phase 9 W2 tokenised). */
+  secondaryTabSelectedBg: string;
 }
 
 export const lightColors: ThemeColors = {
@@ -103,6 +111,7 @@ export const lightColors: ThemeColors = {
   selectedChipText: '#FFFFFF',
   playerBackground: '#000000',
   searchTint: '#E8EEF2',
+  secondaryTabSelectedBg: '#F8E9EC',
 };
 
 export const darkColors: ThemeColors = {
@@ -120,6 +129,7 @@ export const darkColors: ThemeColors = {
   selectedChipText: '#0F0F0F',
   playerBackground: '#000000',
   searchTint: '#1C262C',
+  secondaryTabSelectedBg: '#3A2A2E',
 };
 
 /**
@@ -144,7 +154,10 @@ export const nativeApp = {
   secondaryTabs: {
     textSize: 16,
     selectedPalePill: true, // selected = pale pill bg; unselected = plain text
-    horizontalPadding: 16,
+    // Phase 9 W2: token follows the measured layout — the round-2 pixel
+    // pass set item horizontal padding to 12 (spacing.md); the old 16
+    // disagreed with the code, so the token now records 12.
+    horizontalPadding: 12,
   },
   /** Home feed card (screenshot 01). */
   feedCard: {

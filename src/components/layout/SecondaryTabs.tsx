@@ -62,10 +62,13 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   item: {
-    paddingHorizontal: 12,
+    // Phase 9 W2: item horizontal padding IS the measured
+    // nativeApp.secondaryTabs.horizontalPadding token (12 = spacing.md;
+    // token corrected to match this layout, see tokens.ts).
+    paddingHorizontal: nativeApp.secondaryTabs.horizontalPadding,
     paddingVertical: 6,
     borderRadius: radii.pill,
   },
-  itemSelected: { backgroundColor: '#F8E9EC' },
+  itemSelected: { backgroundColor: lightColors.secondaryTabSelectedBg },
   label: { fontSize: nativeApp.secondaryTabs.textSize, color: lightColors.text },
 });

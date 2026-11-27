@@ -2,7 +2,7 @@ import React, { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { layout, lightColors, radii, spacing } from '../../theme';
+import { layout, lightColors, radii, spacing, typography } from '../../theme';
 import { formatDuration } from './VideoCard';
 import type { CardVideoData } from './cardData';
 import { CardActionSheet, type CardMenuAction } from '../common/CardActionSheet';
@@ -122,7 +122,9 @@ const styles = StyleSheet.create({
     width: '100%',
     aspectRatio: layout.thumbnailAspectRatio,
     borderRadius: radii.card,
-    backgroundColor: lightColors.playerBackground,
+    // Phase 9 W2 (audit D14): placeholder is surfaceVariant like
+    // FeedCard — playerBackground black read as a black rectangle.
+    backgroundColor: lightColors.surfaceVariant,
   },
   thumbnailEmpty: { backgroundColor: lightColors.surfaceVariant },
   liveBadge: {
@@ -133,7 +135,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 3,
     backgroundColor: lightColors.accent,
-    borderRadius: 6,
+    borderRadius: radii.liveBadge,
     paddingHorizontal: 6,
     paddingVertical: 3,
   },
@@ -143,7 +145,7 @@ const styles = StyleSheet.create({
     right: spacing.sm,
     bottom: spacing.sm,
     backgroundColor: 'rgba(0,0,0,0.8)',
-    borderRadius: 6,
+    borderRadius: radii.badge,
     paddingHorizontal: 6,
     paddingVertical: 3,
   },
@@ -170,7 +172,7 @@ const styles = StyleSheet.create({
   avatarLiveText: { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
   lines: { flex: 1 },
   titleRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  title: { flex: 1, fontSize: 16, lineHeight: 22, fontWeight: '600', color: lightColors.text },
+  title: { flex: 1, ...typography.cardTitle, color: lightColors.text },
   moreButton: { marginLeft: spacing.sm, marginTop: 1, minWidth: 32, minHeight: 32, alignItems: 'center', justifyContent: 'center' },
   channel: { fontSize: 13, color: lightColors.textSecondary, marginTop: 3 },
   meta: { fontSize: 13, color: lightColors.textSecondary, marginTop: 1 },

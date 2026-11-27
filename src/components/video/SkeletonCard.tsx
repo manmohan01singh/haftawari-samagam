@@ -1,5 +1,5 @@
-import React, { memo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import React, { memo, useEffect, useRef } from 'react';
+import { Animated, StyleSheet, View } from 'react-native';
 import { layout, lightColors, nativeApp, radii, spacing } from '../../theme';
 
 /**
@@ -10,26 +10,43 @@ import { layout, lightColors, nativeApp, radii, spacing } from '../../theme';
  * VideoListRow geometry (40%-width thumbnail at left, lines at right)
  * used by History / Saved / Playlist lists (QA round 2, issue 16:
  * those screens showed a lone "Loading…" on a huge empty page).
+ *
+ * Phase 9 W2 (audit §9): the skeleton now PULSES — an RN Animated
+ * opacity loop (0.55 ↔ 1, 1100ms per leg, native driver) on the whole
+ * skeleton container. Previously every block was a flat static View,
+ * which read as a frozen/broken page on slow loads. No new dependency.
  */
 export const SkeletonCard = memo(function SkeletonCard({
   variant,
 }: {
   variant: 'feed' | 'shelf' | 'row';
 }) {
+  const pulse = useRef(new Animated.Value(0.55)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 1100, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0.55, duration: 1100, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+
   if (variant === 'row') {
     return (
-      <View style={styles.rowCard}>
+      <Animated.View style={[styles.rowCard, { opacity: pulse }]}>
         <View style={styles.rowThumb} />
         <View style={styles.rowLines}>
           <View style={[styles.line, { width: '88%' }]} />
           <View style={[styles.lineSm, { width: '45%', marginTop: 7 }]} />
         </View>
-      </View>
+      </Animated.View>
     );
   }
   const isFeed = variant === 'feed';
   return (
-    <View style={isFeed ? styles.feedCard : styles.shelfCard}>
+    <Animated.View style={[isFeed ? styles.feedCard : styles.shelfCard, { opacity: pulse }]}>
       <View style={[styles.thumbnail, isFeed ? styles.thumbnailFeed : styles.thumbnailShelf]} />
       <View style={isFeed ? styles.feedBody : styles.shelfBody}>
         {isFeed ? (
@@ -51,26 +68,25 @@ export const SkeletonCard = memo(function SkeletonCard({
           </>
         )}
       </View>
-    </View>
+    </Animated.View>
   );
 });
 
 const styles = StyleSheet.create({
-  // Feed skeleton mirrors the real FeedCard container: white body with
-  // 20px rounded bottom corners, 20px of page ground below the card.
-  feedCard: { marginBottom: 12 },
+  // Feed skeleton mirrors the real FeedCard container: Phase 9 W2
+  // flattened the card (no radii), so the skeleton matches — flat
+  // thumbnail, flat white body, 16px of page ground below the card.
+  feedCard: { marginBottom: spacing.lg },
   shelfCard: { paddingBottom: spacing.xl },
   thumbnail: {
     width: '100%',
     aspectRatio: layout.thumbnailAspectRatio,
     backgroundColor: lightColors.surfaceVariant,
   },
-  thumbnailFeed: { borderTopLeftRadius: 16, borderTopRightRadius: 16 },
+  thumbnailFeed: {},
   thumbnailShelf: { borderRadius: radii.card },
   feedBody: {
     backgroundColor: lightColors.surface,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
     paddingHorizontal: nativeApp.feedCard.bodyPadding,
     paddingTop: spacing.md,
     paddingBottom: spacing.md,
