@@ -94,6 +94,53 @@ for (const rel of functions) {
   check(`${rel} has no hard-coded secrets`, !leaked, leaked ? `matched ${leaked}` : '');
 }
 
+// ── 2b. Upload validation (server-side enforcement) ─────────────────
+const s3Shared = read('supabase/functions/_shared/s3.ts');
+check('s3.ts exposes headObject (server-measured HEAD)', !!s3Shared && s3Shared.includes('export async function headObject'));
+const uploadFn = read('supabase/functions/r2-upload/index.ts');
+if (uploadFn) {
+  check(
+    'r2-upload MIME allowlist (mp4/webm/quicktime)',
+    uploadFn.includes('"video/mp4"') &&
+      uploadFn.includes('"video/webm"') &&
+      uploadFn.includes('"video/quicktime"'),
+  );
+  check('r2-upload refuses unsupported types (UNSUPPORTED_MEDIA_TYPE)', uploadFn.includes('UNSUPPORTED_MEDIA_TYPE'));
+  check(
+    'r2-upload size cap 8 GiB (FILE_TOO_LARGE)',
+    uploadFn.includes('MAX_OBJECT_BYTES = 8 * 1024 * 1024 * 1024') && uploadFn.includes('FILE_TOO_LARGE'),
+  );
+  check(
+    'r2-upload verify-object action (OBJECT_NOT_FOUND)',
+    uploadFn.includes('"verify-object"') && uploadFn.includes('OBJECT_NOT_FOUND') && uploadFn.includes('headObject'),
+  );
+  check(
+    'r2-upload content signature check (ftyp / EBML, mismatch + no silent pass)',
+    uploadFn.includes('CONTENT_SIGNATURE_MISMATCH') &&
+      uploadFn.includes('CONTENT_SIGNATURE_CHECK_FAILED') &&
+      uploadFn.includes('"ftyp"') &&
+      uploadFn.includes('0x1a') &&
+      uploadFn.includes('bytes=0-31'),
+  );
+  check(
+    'r2-upload audit trail (upload_completed / object_verified, best-effort)',
+    uploadFn.includes('writeAudit') &&
+      uploadFn.includes('hosted.upload_completed') &&
+      uploadFn.includes('hosted.object_verified') &&
+      uploadFn.includes('auditQuietly'),
+  );
+}
+const adminService = read('src/features/admin/adminService.ts');
+check(
+  'adminService verifyHostedAsset overwrites size with measured values',
+  !!adminService && adminService.includes('verifyHostedAsset') && adminService.includes("'verify-object'"),
+);
+const adminScreen = read('src/features/admin/screens/AdminHostedScreen.tsx');
+check(
+  'Admin UI verifies before marking ready',
+  !!adminScreen && adminScreen.includes('verifyHostedAsset(asset.id'),
+);
+
 // ── 3. HostedPlayer handle API ───────────────────────────────────────
 const player = read('src/components/video/HostedPlayer.tsx');
 check('HostedPlayer exists', player !== null);

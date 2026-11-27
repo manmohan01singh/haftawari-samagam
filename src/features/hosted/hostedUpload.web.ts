@@ -26,6 +26,9 @@ interface SignResponse {
   url?: string;
   upload_id?: string;
   ok?: boolean;
+  exists?: boolean;
+  size_bytes?: number;
+  content_type?: string | null;
   error?: string;
   detail?: string;
 }
@@ -83,7 +86,15 @@ export async function uploadOriginalToR2(
 ): Promise<void> {
   const total = file.size;
   if (total <= SINGLE_PUT_MAX) {
-    const { url } = await callR2Upload({ action: 'presign-put', key, content_type: file.type });
+    // size_bytes is advisory at signing time (the signer refuses a
+    // declared size over the 8 GiB cap); the hard, server-measured
+    // check happens later via the signer's verify-object action.
+    const { url } = await callR2Upload({
+      action: 'presign-put',
+      key,
+      content_type: file.type,
+      size_bytes: file.size,
+    });
     if (!url) throw new Error('The upload signer returned no URL.');
     await xhrPut(url, file, (loaded) => onProgress?.({ loadedBytes: loaded, totalBytes: total }));
     onProgress?.({ loadedBytes: total, totalBytes: total });
@@ -94,6 +105,7 @@ export async function uploadOriginalToR2(
     action: 'create-multipart',
     key,
     content_type: file.type,
+    size_bytes: file.size,
   });
   if (!uploadId) throw new Error('The upload signer returned no upload id.');
   try {

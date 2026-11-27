@@ -164,6 +164,50 @@ inside the tier; overage auto-bills slowly if the library outgrows
 
 ## 7. Honest limitations
 
+- **Upload validation — enforced server-side (not advisory).**
+  The `r2-upload` Edge Function is the enforcement point; the UI
+  only mirrors it:
+  - **MIME allowlist:** only `video/mp4`, `video/webm` and
+    `video/quicktime` may be signed for upload (`presign-put` /
+    `create-multipart`). Anything else — including a missing
+    content type — is refused with `400 UNSUPPORTED_MEDIA_TYPE`.
+  - **Size cap:** one original may be at most **8 GiB**
+    (`MAX_OBJECT_BYTES`). A declared `size_bytes` over the cap is
+    refused at signing time (`413 FILE_TOO_LARGE`); that check is
+    advisory only, because a client can lie about its own file.
+  - **Verify-before-ready (the hard check):** an asset may be
+    marked `ready` only after the admin UI runs the signer's
+    `verify-object` action, which HEADs the object in R2
+    (`headObject` in `_shared/s3.ts`) and checks the
+    **server-measured** facts: missing object →
+    `404 OBJECT_NOT_FOUND`; measured size over the cap → `413`;
+    stored content type present and not allowlisted → `400`.
+    On success the asset row's `size_bytes` (and `content_type`
+    when R2 reports one) are overwritten with the measured values —
+    client-claimed size/type never survive to `ready`. If
+    verification fails, the status change is refused and the error
+    is shown to the admin.
+  - **Content signature (magic bytes):** HEAD metadata can claim
+    any type, so `verify-object` additionally fetches the object's
+    first 32 bytes (Range GET on a short-lived presigned URL) and
+    checks the signature against the type: MP4/QuickTime must carry
+    the ISO-BMFF `ftyp` box at bytes 4–8; WebM must start with the
+    EBML header `1A 45 DF A3`. A mismatch is refused with
+    `400 CONTENT_SIGNATURE_MISMATCH`; if the bytes cannot be
+    fetched at all, verification fails (`502
+    CONTENT_SIGNATURE_CHECK_FAILED`) — it never passes silently.
+    When R2 reports no content type, any one known video signature
+    is accepted; an unrecognized header still fails.
+  - **Function-side audit trail:** `r2-upload` itself appends
+    `audit_logs` entries for a completed multipart upload
+    (`hosted.upload_completed`) and a successful verification
+    (`hosted.object_verified`, with the measured size/type), actor
+    = the calling admin. These writes are best-effort: an audit
+    failure never changes the function's response.
+  - What this does NOT prove: that the bytes beyond the header are
+    a playable, untampered video (no full-file checksum/transcode
+    verification yet), or anything about HLS segment objects —
+    verification covers the uploaded original only.
 - **HLS segment signing.** A signed master playlist does not by
   itself make segments private: the player requests segments by
   relative URL, unsigned. What is guaranteed today: no public or

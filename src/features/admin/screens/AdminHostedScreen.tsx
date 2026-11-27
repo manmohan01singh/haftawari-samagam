@@ -12,6 +12,7 @@ import {
   setVideoPublishState,
   updateHostedAsset,
   upsertHostedAsset,
+  verifyHostedAsset,
   type HostedVideoBundle,
 } from '../adminService';
 import { AdminGate, type AdminContext } from '../components/AdminGate';
@@ -39,7 +40,13 @@ function displayError(err: unknown): string {
     raw.includes('R2_NOT_CONFIGURED') ||
     raw.includes('ONLY_READY_COPY') ||
     raw.includes('ASSET_IN_ACTIVE_SESSION') ||
-    raw.includes('NO_READY_REPLACEMENT')
+    raw.includes('NO_READY_REPLACEMENT') ||
+    raw.includes('OBJECT_NOT_FOUND') ||
+    raw.includes('FILE_TOO_LARGE') ||
+    raw.includes('UNSUPPORTED_MEDIA_TYPE') ||
+    raw.includes('CONTENT_SIGNATURE_MISMATCH') ||
+    raw.includes('CONTENT_SIGNATURE_CHECK_FAILED') ||
+    raw.includes('Verification failed')
   ) {
     return raw;
   }
@@ -320,15 +327,22 @@ function ManagePanel({
   const onSetStatus = (status: 'processing' | 'ready' | 'failed') =>
     run(async () => {
       if (!asset) throw new Error('Upload the original file first.');
-      if (status === 'ready' && !hlsKey.trim()) {
-        throw new Error('Set the HLS master playlist key before marking the asset ready.');
+      if (status === 'ready') {
+        if (!hlsKey.trim()) {
+          throw new Error('Set the HLS master playlist key before marking the asset ready.');
+        }
+        // Verify BEFORE ready: the server HEADs the object in R2 and
+        // overwrites size/type with measured values. If the object is
+        // missing, oversized or a disallowed type this throws, the
+        // error shows above, and the status is NOT changed.
+        await verifyHostedAsset(asset.id, ctx.userId);
       }
       await updateHostedAsset(
         asset,
         { status, hlsMasterKey: hlsKey.trim() || null },
         ctx.userId,
       );
-    }, `Asset marked ${status}.`);
+    }, status === 'ready' ? 'Verified in R2 and marked ready.' : `Asset marked ${status}.`);
 
   const onDeleteAsset = (confirmOnlyCopy: boolean) =>
     run(async () => {

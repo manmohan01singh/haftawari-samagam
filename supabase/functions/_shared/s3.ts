@@ -230,6 +230,32 @@ export async function deleteObject(cfg: R2Config, key: string): Promise<void> {
   }
 }
 
+export interface HeadObjectResult {
+  sizeBytes: number;
+  contentType: string | null;
+}
+
+/**
+ * HEAD an object — server-measured metadata, no body. Returns null
+ * when the object does not exist (404). This is the ONLY trustworthy
+ * source of an uploaded object's size/type: anything the client
+ * claims about its own upload is unverified until measured here.
+ */
+export async function headObject(
+  cfg: R2Config,
+  key: string,
+): Promise<HeadObjectResult | null> {
+  const res = await s3Fetch(cfg, "HEAD", key);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`R2 head failed for ${key} (${res.status})`);
+  const len = res.headers.get("content-length");
+  const sizeBytes = len !== null ? Number(len) : NaN;
+  if (!Number.isFinite(sizeBytes) || sizeBytes < 0) {
+    throw new Error(`R2 head for ${key} returned no usable Content-Length`);
+  }
+  return { sizeBytes, contentType: res.headers.get("content-type") };
+}
+
 /** List up to `maxKeys` object keys under a prefix (single page). */
 export async function listKeys(cfg: R2Config, prefix: string, maxKeys = 200): Promise<string[]> {
   const res = await s3Fetch(cfg, "GET", null, {

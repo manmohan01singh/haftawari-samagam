@@ -901,3 +901,107 @@ export async function invokeR2Admin(
   if (data?.error) throw new Error(data.detail ? `${data.error}: ${data.detail}` : data.error);
   return { deletedObjects: data?.deleted_objects };
 }
+
+/** Server-measured facts about an R2 object (r2-upload verify-object). */
+export interface HostedObjectVerification {
+  sizeBytes: number;
+  contentType: string | null;
+}
+
+/**
+ * Ask the r2-upload Edge Function to HEAD the object in R2 and report
+ * its SERVER-measured size/type. Client-claimed size/type (whatever
+ * the browser said at upload time) are never trusted — this is the
+ * only measurement allowed to land on the asset row before 'ready'.
+ * Error mapping mirrors invokeR2Admin: honest codes, no silent pass.
+ */
+async function invokeVerifyObject(r2ObjectKey: string): Promise<HostedObjectVerification> {
+  const supabase = requireSupabase();
+  const { data, error } = await supabase.functions.invoke<{
+    exists?: boolean;
+    size_bytes?: number;
+    content_type?: string | null;
+    error?: string;
+    detail?: string;
+  }>('r2-upload', { body: { action: 'verify-object', key: r2ObjectKey } });
+  if (error) {
+    let code: string | undefined;
+    let detail: string | undefined;
+    try {
+      const ctx = (error as { context?: Response }).context;
+      if (ctx && typeof ctx.clone === 'function') {
+        const parsed = (await ctx.clone().json()) as { error?: string; detail?: string };
+        code = parsed.error;
+        detail = parsed.detail;
+      }
+    } catch {
+      // fall through
+    }
+    if (code === 'R2_NOT_CONFIGURED') {
+      throw new Error('Hosting is not configured yet (R2_NOT_CONFIGURED) — finish the Cloudflare R2 setup before verifying an upload.');
+    }
+    if (code === 'OBJECT_NOT_FOUND') {
+      throw new Error('Verification failed: the uploaded object was not found in R2 (OBJECT_NOT_FOUND). Re-upload the original file.');
+    }
+    if (code === 'FILE_TOO_LARGE') {
+      throw new Error('Verification failed: the object in R2 is larger than the 8 GiB cap (FILE_TOO_LARGE).');
+    }
+    if (code === 'UNSUPPORTED_MEDIA_TYPE') {
+      throw new Error('Verification failed: the object in R2 is not an MP4, WebM or QuickTime video (UNSUPPORTED_MEDIA_TYPE).');
+    }
+    if (code === 'CONTENT_SIGNATURE_MISMATCH') {
+      throw new Error("Verification failed: the file's opening bytes do not match its video type (CONTENT_SIGNATURE_MISMATCH). It may be renamed or corrupt — re-upload the true original.");
+    }
+    if (code === 'CONTENT_SIGNATURE_CHECK_FAILED') {
+      throw new Error('Verification failed: the opening bytes of the object could not be read from R2 (CONTENT_SIGNATURE_CHECK_FAILED). Try again.');
+    }
+    if (code) throw new Error(detail ? `${code}: ${detail}` : code);
+    throw error;
+  }
+  if (data?.error) throw new Error(data.detail ? `${data.error}: ${data.detail}` : data.error);
+  if (!data?.exists || typeof data.size_bytes !== 'number') {
+    throw new Error('Verification failed: the upload signer returned no measurement for this object.');
+  }
+  return { sizeBytes: data.size_bytes, contentType: data.content_type ?? null };
+}
+
+/**
+ * Verify an asset's R2 object server-side and overwrite the row's
+ * size_bytes (and content_type, when R2 reports one) with the
+ * SERVER-measured values. Throws — with nothing written — when the
+ * object is missing, oversized or of a disallowed type. The admin UI
+ * runs this before an asset may be marked 'ready'.
+ */
+export async function verifyHostedAsset(assetId: string, actorId: string): Promise<HostedAsset> {
+  const supabase = requireSupabase();
+  const { data: row, error: fetchError } = await supabase
+    .from('hosted_assets')
+    .select('*')
+    .eq('id', assetId)
+    .single();
+  if (fetchError) throw fetchError;
+  const asset = row as HostedAsset;
+
+  const measured = await invokeVerifyObject(asset.r2_object_key);
+
+  const patch: Record<string, unknown> = {
+    size_bytes: measured.sizeBytes,
+    updated_at: new Date().toISOString(),
+  };
+  if (measured.contentType) patch.content_type = measured.contentType;
+  const { data, error } = await supabase
+    .from('hosted_assets')
+    .update(patch)
+    .eq('id', asset.id)
+    .select('*')
+    .single();
+  if (error) throw error;
+  const updated = data as HostedAsset;
+  await writeAuditLog(actorId, 'hosted.asset_verify', 'hosted_asset', updated.id, {
+    video_id: updated.video_id,
+    r2_object_key: updated.r2_object_key,
+    size_bytes: updated.size_bytes,
+    content_type: updated.content_type,
+  });
+  return updated;
+}
