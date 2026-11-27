@@ -116,6 +116,12 @@ export const HostedWatchPlayer = forwardRef<HostedPlayerHandle, HostedWatchPlaye
           contentFit="cover"
           cachePolicy="memory-disk"
         />
+      ) : state.kind === 'signin' ? (
+        // No poster: keep the gate clean. The brand mark is a play
+        // glyph — centred behind the message + Sign in pill it read
+        // as a second, dead play button (mobile sweep round 6
+        // verification, 28 Nov 2026).
+        <View style={styles.poster} />
       ) : (
         // No poster: the brand mark centred, like every card
         // fallback — a bare black void read as a broken page in
