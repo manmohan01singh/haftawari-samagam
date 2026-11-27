@@ -31,10 +31,26 @@ export {
   parseIso8601Duration,
   searchChannelVideos,
   searchChannelVideosFor,
+  searchChannelVideosWithFallback,
+  searchUploadsFallback,
   type ChannelIdentity,
+  type YoutubeLegOutcome,
 } from './youtubeSearch';
 export { loadSearchChannels, MAX_YOUTUBE_SEARCH_CHANNELS } from './channelRegistry';
-export { searchAll, createSearchController, queryKey, deriveCorrection, type SearchController } from './engine';
+export {
+  YouTubeApiError,
+  degradedBannerText,
+  type YouTubeErrorClass,
+} from './youtubeError';
+export {
+  searchAll,
+  searchYoutubeOnly,
+  mergeRankedResults,
+  createSearchController,
+  queryKey,
+  deriveCorrection,
+  type SearchController,
+} from './engine';
 export { getSuggestions } from './suggestions';
 export {
   listSearchHistory,

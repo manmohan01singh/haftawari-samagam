@@ -71,10 +71,26 @@ for API results.
 
 | Call | Units | When | Cache |
 |---|---|---|---|
-| search.list | **100** | Explicit search submit only — never per keystroke | AsyncStorage, 10 min per normalized query + in-flight de-dup |
+| search.list | **100** | Explicit search submit only — never per keystroke | In-memory 10 min + AsyncStorage 6h per normalized query + in-flight de-dup; failures never cached |
 | channels.list | 1 | Channel card / channel screen | AsyncStorage, 6h |
 | videos.list | 1 | Durations for one search page (Shorts filter) | Batched with the search result |
-| playlistItems.list | 1/page | Channel upload titles for suggestions | AsyncStorage, 24h |
+| playlistItems.list | 1/page | Channel upload titles for suggestions; latest-uploads fallback (2 pages) | AsyncStorage, 24h (titles) / 6h (uploads) |
+
+Failure behaviour (round-3, 2026-11-27): search.list is ALSO gated by
+a separate 'Search Queries' rate-limit metric that 429s in bursts
+(`rateLimitExceeded`) and recovers in about a minute — independent of
+the 10,000-unit pool, which the 1-unit calls keep drawing from fine.
+All channel-leg failures are classified (`youtubeError.ts`: quota /
+rateLimit / referrer / config / network / timeout / http), logged with
+their API reason, and shown in the degraded banner in human words —
+never one generic message. Transient classes get exactly one automatic
+retry (1.5s for rate-limit, 800ms otherwise). When search.list fails,
+a degraded fallback fuzzy-matches the query over the channel's latest
+~100 uploads (the engine's own scorer/threshold) and the screen labels
+those results as latest-upload matches; its coverage is partial, so
+older uploads are only reachable once search.list recovers (the
+banner's Retry re-runs only the channel leg). The typo-correction
+re-run never fires a second search.list into a leg that just failed.
 
 Worst realistic day: ~50 distinct submitted searches ≈ 5,000 units +
 ~5 units of cached calls. Suggestions cost **zero** quota: they read

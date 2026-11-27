@@ -27,7 +27,10 @@ import {
   fetchChannelTitlesFor,
   matchChannel,
   searchChannelVideosFor,
+  searchUploadsFallback,
 } from './youtubeSearch';
+import { YouTubeApiError, type YouTubeErrorClass } from './youtubeError';
+import { OFFICIAL_CHANNEL } from './config';
 import type { SearchOptions, SearchResults, VideoResult } from './types';
 
 function tierOf(result: VideoResult): number {
@@ -121,12 +124,24 @@ function mergeRanked(local: VideoResult[], youtube: VideoResult[], limit: number
   return [...byVideoId.values()].sort(compareResults).slice(0, limit);
 }
 
-async function runLegs(
-  query: string,
-  options: SearchOptions,
-): Promise<{ channel: SearchResults['channel']; videos: VideoResult[]; youtubeSkipped: boolean }> {
+/** Merge two ranked result sets (local row wins over its API twin). */
+export function mergeRankedResults(a: VideoResult[], b: VideoResult[], limit = 25): VideoResult[] {
+  return mergeRanked(a, b, limit);
+}
+
+interface LegsOutcome {
+  channel: SearchResults['channel'];
+  videos: VideoResult[];
+  youtubeSkipped: boolean;
+  youtubeError: YouTubeErrorClass | null;
+  youtubeFallback: boolean;
+}
+
+async function runLegs(query: string, options: SearchOptions): Promise<LegsOutcome> {
   const channels = await loadSearchChannels().catch(() => []);
-  const localPromise = searchLocalCatalogue(query, options.signal).catch(() => [] as VideoResult[]);
+  const localPromise = options.youtubeOnly
+    ? Promise.resolve([] as VideoResult[])
+    : searchLocalCatalogue(query, options.signal).catch(() => [] as VideoResult[]);
 
   // Channel card: the BEST-matching active channel wins the single
   // ref-3 card slot. Matching is local (zero quota); only the winner's
@@ -146,32 +161,67 @@ async function runLegs(
         .catch(() => null)
     : Promise.resolve(null);
 
-  let youtubeSkipped = false;
-  let youtubePromise: Promise<VideoResult[]>;
   if (options.localOnly) {
-    youtubeSkipped = true;
-    youtubePromise = Promise.resolve([]);
-  } else {
-    // Fan out per channel (capped for quota), merging every leg. The
-    // leg counts as skipped only when EVERY channel's search failed.
-    const targets = channels.slice(0, MAX_YOUTUBE_SEARCH_CHANNELS);
-    youtubePromise = Promise.all(
-      targets.map((identity) =>
-        searchChannelVideosFor(identity.id, query, options.signal).then(
-          (results) => ({ ok: true as const, results }),
-          (error: unknown) => {
-            if (error instanceof Error && error.name === 'AbortError') throw error;
-            return { ok: false as const, results: [] as VideoResult[] };
-          },
-        ),
-      ),
-    ).then((legs) => {
-      if (targets.length > 0 && legs.every((leg) => !leg.ok)) youtubeSkipped = true;
-      return legs.flatMap((leg) => leg.results);
-    });
+    const [local, channel] = await Promise.all([localPromise, channelPromise]);
+    return {
+      channel,
+      videos: mergeRanked(local, [], options.limit ?? 25),
+      youtubeSkipped: true,
+      youtubeError: null,
+      youtubeFallback: false,
+    };
   }
-  const [local, channel, youtube] = await Promise.all([localPromise, channelPromise, youtubePromise]);
-  return { channel, videos: mergeRanked(local, youtube, options.limit ?? 25), youtubeSkipped };
+
+  // Fan out per channel (capped for quota), merging every leg. Each
+  // leg's failure is classified (never collapsed into one generic
+  // failure); the search counts as skipped only when EVERY channel's
+  // leg failed AND the degraded fallback found nothing. Legs throw
+  // only on abort, which must propagate (a superseded search is not a
+  // failed search and must not light the degraded banner).
+  const targets = channels.slice(0, MAX_YOUTUBE_SEARCH_CHANNELS);
+  let firstError: YouTubeErrorClass | null = null;
+  let officialFailed = false;
+  const legs = await Promise.all(
+    targets.map((identity) =>
+      searchChannelVideosFor(identity.id, query, options.signal).then(
+        (results) => ({ ok: true as const, results }),
+        (error: unknown) => {
+          if (error instanceof Error && error.name === 'AbortError') throw error;
+          if (error instanceof YouTubeApiError) {
+            if (firstError === null) firstError = error.errorClass;
+            if (identity.id === OFFICIAL_CHANNEL.id) officialFailed = true;
+          }
+          return { ok: false as const, results: [] as VideoResult[] };
+        },
+      ),
+    ),
+  );
+  let youtubeVideos = legs.flatMap((leg) => leg.results);
+  let youtubeFallback = false;
+  if (officialFailed) {
+    // Degraded fallback: fuzzy-match the official channel's latest
+    // uploads (playlistItems, 1 unit/page) so real channel results can
+    // still appear when search.list is down or rate-limited.
+    try {
+      const fallbackVideos = await searchUploadsFallback(query, options.signal);
+      if (fallbackVideos.length > 0) {
+        youtubeVideos = [...youtubeVideos, ...fallbackVideos];
+        youtubeFallback = true;
+      }
+    } catch (fallbackError) {
+      if (fallbackError instanceof Error && fallbackError.name === 'AbortError') throw fallbackError;
+      console.warn('[search] Uploads fallback also failed; continuing with the archive only.');
+    }
+  }
+  const allFailed = targets.length > 0 && legs.every((leg) => !leg.ok);
+  const [local, channel] = await Promise.all([localPromise, channelPromise]);
+  return {
+    channel,
+    videos: mergeRanked(local, youtubeVideos, options.limit ?? 25),
+    youtubeSkipped: allFailed && !youtubeFallback,
+    youtubeError: firstError,
+    youtubeFallback,
+  };
 }
 
 /**
@@ -194,26 +244,83 @@ export async function searchAll(queryText: string, options: SearchOptions = {}):
   const query = queryText.trim();
   const limit = options.limit ?? 25;
   if (query === '') {
-    return { query, channel: null, videos: [], youtubeSkipped: false, didYouMean: null };
+    return {
+      query,
+      channel: null,
+      videos: [],
+      youtubeSkipped: false,
+      youtubeError: null,
+      youtubeFallback: false,
+      didYouMean: null,
+    };
   }
 
   const first = await runLegs(query, options);
-  let { channel, videos, youtubeSkipped } = first;
+  let { channel, videos, youtubeSkipped, youtubeError, youtubeFallback } = first;
 
   let didYouMean: string | null = null;
   if (!options.localOnly) {
     didYouMean = await deriveCorrection(query).catch(() => null);
     if (didYouMean && videos.length < 3) {
-      const second = await runLegs(didYouMean, options).catch(() => null);
+      // Burst discipline: when the first channel leg already failed
+      // with a classified error, do NOT fire a second search.list for
+      // the corrected query into the same dead/throttled leg — that
+      // doubles the burst that caused 429s. The correction re-run then
+      // covers the local + channel-card legs only; the screen's Retry
+      // re-runs the channel leg once things recover.
+      const legDead = youtubeError !== null && !youtubeFallback;
+      const second = await runLegs(didYouMean, legDead ? { ...options, localOnly: true } : options).catch(
+        () => null,
+      );
       if (second) {
         videos = mergeRanked(videos, second.videos, limit);
         channel = channel ?? second.channel;
-        youtubeSkipped = youtubeSkipped && second.youtubeSkipped;
+        if (!legDead) {
+          // The correction run re-attempted the channel leg: its
+          // outcome replaces the first run's failure state.
+          youtubeSkipped = second.youtubeSkipped;
+          youtubeError = second.youtubeError;
+          youtubeFallback = second.youtubeFallback;
+        }
       }
     }
   }
 
-  return { query, channel, videos, youtubeSkipped, didYouMean };
+  return { query, channel, videos, youtubeSkipped, youtubeError, youtubeFallback, didYouMean };
+}
+
+/**
+ * Re-run ONLY the channel legs (card + YouTube videos) for a query —
+ * the results screen's degraded-banner Retry. The local catalogue is
+ * not re-fetched and no second search is started; the caller merges
+ * the returned videos into the results already on screen.
+ */
+export async function searchYoutubeOnly(
+  queryText: string,
+  options: SearchOptions = {},
+): Promise<SearchResults> {
+  const query = queryText.trim();
+  if (query === '') {
+    return {
+      query,
+      channel: null,
+      videos: [],
+      youtubeSkipped: false,
+      youtubeError: null,
+      youtubeFallback: false,
+      didYouMean: null,
+    };
+  }
+  const legs = await runLegs(query, { ...options, youtubeOnly: true });
+  return {
+    query,
+    channel: legs.channel,
+    videos: legs.videos,
+    youtubeSkipped: legs.youtubeSkipped,
+    youtubeError: legs.youtubeError,
+    youtubeFallback: legs.youtubeFallback,
+    didYouMean: null,
+  };
 }
 
 // ── Debounce + cancellation for the screen ───────────────────────────
@@ -265,7 +372,15 @@ export function createSearchController(debounceMs = 300): SearchController {
       timer = null;
       aborter?.abort();
       flush((waiter) =>
-        waiter.resolve({ query: '', channel: null, videos: [], youtubeSkipped: true, didYouMean: null }),
+        waiter.resolve({
+          query: '',
+          channel: null,
+          videos: [],
+          youtubeSkipped: true,
+          youtubeError: null,
+          youtubeFallback: false,
+          didYouMean: null,
+        }),
       );
     },
   };
