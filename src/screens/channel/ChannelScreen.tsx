@@ -29,11 +29,11 @@ import {
   OFFICIAL_CHANNEL_ID,
   fetchChannelById,
   fetchChannelLiveAndUpcoming,
-  fetchChannelUploads,
   isShortVideo,
   type YouTubeChannelInfo,
   type YouTubeVideoMetadata,
 } from '../../lib/youtube';
+import { getUploadsPageCached } from '../../features/channels/channelCache';
 import { apiCardData as baseApiCardData, formatDateLine } from '../../components/video/cardData';
 import { layout, nativeApp, radii, spacing, useTheme, type ThemeColors } from '../../theme';
 import type { RootStackParamList } from '../../navigation/types';
@@ -115,7 +115,7 @@ export function ChannelScreen({ route, navigation }: Props) {
         if (!info) throw new Error('Channel not found.');
         setFetchedChannel(info);
         if (info.uploadsPlaylistId) {
-          const page = await fetchChannelUploads(info.uploadsPlaylistId);
+          const page = await getUploadsPageCached(info.uploadsPlaylistId);
           if (!active) return;
           setUploads(page.videos);
           setNextPage(page.nextPageToken);
@@ -195,7 +195,7 @@ export function ChannelScreen({ route, navigation }: Props) {
   const loadMore = useCallback(() => {
     if (!channel?.uploadsPlaylistId || !nextPage || loadingMore) return;
     setLoadingMore(true);
-    fetchChannelUploads(channel.uploadsPlaylistId, nextPage)
+    getUploadsPageCached(channel.uploadsPlaylistId, nextPage)
       .then((page) => {
         setUploads((prev) => [...prev, ...page.videos]);
         setNextPage(page.nextPageToken);

@@ -53,6 +53,18 @@ async function writeCache<T>(key: string, value: T): Promise<void> {
   }
 }
 
+/** Cache entry WITH its age — the stale-while-revalidate reads below need it. */
+async function readCacheEntry<T>(key: string): Promise<{ value: T; ageMs: number } | null> {
+  try {
+    const raw = await AsyncStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { fetchedAt: number; value: T };
+    return { value: parsed.value, ageMs: Date.now() - parsed.fetchedAt };
+  } catch {
+    return null;
+  }
+}
+
 const inflight = new Map<string, Promise<unknown>>();
 
 function dedupe<T>(key: string, run: () => Promise<T>): Promise<T> {
@@ -121,13 +133,73 @@ export async function getUploadsCached(
   channelId: string,
   uploadsPlaylistId: string,
 ): Promise<YouTubeVideoMetadata[]> {
-  const key = `${PREFIX}uploads:${channelId}`;
-  const cached = await readCache<YouTubeVideoMetadata[]>(key, UPLOADS_TTL_MS);
-  if (cached) return cached;
+  const page = await getUploadsPageCached(uploadsPlaylistId);
+  return page.videos;
+}
+
+export interface UploadsPage {
+  videos: YouTubeVideoMetadata[];
+  nextPageToken: string | null;
+}
+
+/** How long a stale uploads page may be SERVED while it refreshes. */
+export const UPLOADS_SWR_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * ANY page of a channel's uploads (page 1 = no token), cached with
+ * stale-while-revalidate — the "loads fast" fix (user, 27 Nov 2026):
+ *
+ * - Fresh (≤30 min): served from disk, zero API calls.
+ * - Stale (30 min – 6 h): served from disk INSTANTLY and refreshed
+ *   in the background (deduped), so the next open is fresh — the
+ *   screen never waits on YouTube for data it already showed once.
+ * - Older / missing: fetched live (2 units), then cached.
+ *
+ * Before this, only page 1 was cached and every deeper page — the
+ * topic-chip scans, Channel paging, Watch's Up Next — went live to
+ * the API on every single visit: slow on mobile data and the main
+ * drain on the app's daily YouTube quota. Failures are never
+ * cached; a failed background refresh simply keeps the stale page.
+ */
+export async function getUploadsPageCached(
+  uploadsPlaylistId: string,
+  pageToken?: string,
+): Promise<UploadsPage> {
+  const key = `${PREFIX}page:${uploadsPlaylistId}:${pageToken ?? 'first'}`;
+  const entry = await readCacheEntry<UploadsPage>(key);
+  if (entry && entry.ageMs <= UPLOADS_TTL_MS) return entry.value;
+  if (entry && entry.ageMs <= UPLOADS_SWR_MS) {
+    void dedupe(key, async () => {
+      const page = await fetchChannelUploads(uploadsPlaylistId, pageToken);
+      await writeCache(key, page);
+      return page;
+    }).catch(() => undefined);
+    return entry.value;
+  }
   return dedupe(key, async () => {
-    const page = await fetchChannelUploads(uploadsPlaylistId);
-    await writeCache(key, page.videos);
-    return page.videos;
+    try {
+      const page = await fetchChannelUploads(uploadsPlaylistId, pageToken);
+      await writeCache(key, page);
+      return page;
+    } catch (e) {
+      // Last-resort stale source for page 1: the pre-SWR cache
+      // entries (videos only, no continuation token) written by
+      // getUploadsCached before this function existed. Serving one
+      // during an API outage (e.g. the daily quota window) keeps
+      // the feed alive on data the device already had, instead of
+      // collapsing to the catalogue alone; the missing token just
+      // means this channel contributes its first page until a
+      // fresh fetch succeeds again.
+      if (!pageToken && uploadsPlaylistId.startsWith('UU')) {
+        const legacy = await readCacheEntry<YouTubeVideoMetadata[]>(
+          `${PREFIX}uploads:UC${uploadsPlaylistId.slice(2)}`,
+        );
+        if (legacy && legacy.ageMs <= UPLOADS_SWR_MS) {
+          return { videos: legacy.value, nextPageToken: null };
+        }
+      }
+      throw e;
+    }
   });
 }
 

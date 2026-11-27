@@ -46,12 +46,11 @@
  */
 
 import { uploadsPlaylistIdFor, type AppChannel } from '../channels/channelsService';
-import { getUploadsCached } from '../channels/channelCache';
+import { getUploadsCached, getUploadsPageCached } from '../channels/channelCache';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import { fetchPublishedVideos } from '../../lib/videos';
 import {
   OFFICIAL_CHANNEL_ID,
-  fetchChannelUploads,
   isShortVideo,
   isYouTubeConfigured,
   type YouTubeVideoMetadata,
@@ -497,7 +496,7 @@ export function createHomeFeedPager({ channels, filter }: HomeFeedPagerOptions):
           // in `seen`/buffer flow and dedupe drops any repeat.
           // Also overhead — not counted as a scan page.
           cursor.tokenPrimed = true;
-          const page = await fetchChannelUploads(cursor.uploadsPlaylistId);
+          const page = await getUploadsPageCached(cursor.uploadsPlaylistId);
           cursor.nextPageToken = page.nextPageToken;
           if (!page.nextPageToken) cursor.exhausted = true;
           continue;
@@ -506,7 +505,7 @@ export function createHomeFeedPager({ channels, filter }: HomeFeedPagerOptions):
           cursor.exhausted = true;
           break;
         }
-        const page = await fetchChannelUploads(cursor.uploadsPlaylistId, cursor.nextPageToken);
+        const page = await getUploadsPageCached(cursor.uploadsPlaylistId, cursor.nextPageToken);
         cursor.nextPageToken = page.nextPageToken;
         if (!page.nextPageToken) cursor.exhausted = true;
         absorb(cursor, page.videos);

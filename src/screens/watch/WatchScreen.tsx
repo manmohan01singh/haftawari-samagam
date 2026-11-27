@@ -38,6 +38,7 @@ import { sessionShareUrl, watchShareUrl } from '../../navigation/linking';
 import { useCurrentChatUser } from '../../features/chat/useSessionChat';
 import { joinPresence, leavePresence } from '../../features/presence/presenceService';
 import { useChannelFollow, useOfficialChannel } from '../../features/channel';
+import { getUploadsPageCached } from '../../features/channels/channelCache';
 import { AddToPlaylistSheet } from '../../features/library';
 import { formatCount } from '../../lib/format';
 import { FEED_LIST_PERF } from '../../lib/listPerf';
@@ -46,7 +47,6 @@ import {
   OFFICIAL_CHANNEL_HANDLE,
   OFFICIAL_CHANNEL_ID,
   fetchChannelById,
-  fetchChannelUploads,
   fetchVideoMetadata,
   isShortVideo,
   type YouTubeChannelInfo,
@@ -381,7 +381,7 @@ export function WatchScreen({ route, navigation }: Props) {
       let token: string | null = null;
       let started = false;
       if (items.length < 4 && officialChannel?.uploadsPlaylistId) {
-        const page = await fetchChannelUploads(officialChannel.uploadsPlaylistId).catch(() => null);
+        const page = await getUploadsPageCached(officialChannel.uploadsPlaylistId).catch(() => null);
         if (page) {
           started = true;
           // P10: KEEP the page token — "Load more" (footer below)
@@ -418,7 +418,7 @@ export function WatchScreen({ route, navigation }: Props) {
     const playlistId = officialChannel?.uploadsPlaylistId;
     if (!playlistId || upNextLoadingMore || !upNextHasMore) return;
     setUpNextLoadingMore(true);
-    fetchChannelUploads(playlistId, upNextStarted ? (upNextToken ?? undefined) : undefined)
+    getUploadsPageCached(playlistId, upNextStarted ? (upNextToken ?? undefined) : undefined)
       .then((page) => {
         const seen = new Set<string>();
         if (currentYtId) seen.add(currentYtId);
