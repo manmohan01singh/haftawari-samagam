@@ -115,9 +115,12 @@ export async function deriveCorrection(queryText: string): Promise<string | null
 function mergeRanked(local: VideoResult[], youtube: VideoResult[], limit: number): VideoResult[] {
   const byVideoId = new Map<string, VideoResult>();
   for (const result of [...local, ...youtube]) {
-    const existing = byVideoId.get(result.youtubeVideoId);
+    // Hosted rows have no YouTube id (null): they can never twin with a
+    // YouTube result, so they merge under their own row key.
+    const key = result.youtubeVideoId ?? `row:${result.videoRowId ?? result.title}`;
+    const existing = byVideoId.get(key);
     if (!existing || (existing.source === 'youtube' && result.source === 'local')) {
-      byVideoId.set(result.youtubeVideoId, result);
+      byVideoId.set(key, result);
     }
   }
   return [...byVideoId.values()].sort(compareResults).slice(0, limit);

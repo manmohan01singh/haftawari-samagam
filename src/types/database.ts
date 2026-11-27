@@ -36,9 +36,19 @@ export interface Category {
   created_at: string;
 }
 
+/** Where a video's media actually lives (migration 0005). */
+export type VideoSource = 'youtube' | 'hosted';
+
 export interface Video {
   id: string;
-  youtube_video_id: string;
+  /**
+   * YouTube id for source='youtube' rows. NULL for hosted rows
+   * (migration 0005 made the column nullable) — never invent one.
+   * Optional because rows fetched before 0005 is applied have no
+   * `source` key at runtime; treat a missing source as 'youtube'.
+   */
+  youtube_video_id: string | null;
+  source?: VideoSource;
   title: string;
   description: string | null;
   category_id: string | null;
@@ -50,6 +60,47 @@ export interface Video {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export type HostedAssetStatus = 'uploaded' | 'processing' | 'ready' | 'failed';
+
+/**
+ * The R2 media behind one hosted video (migration 0005). Object keys
+ * are storage identifiers, NEVER playback URLs — playback uses
+ * short-lived signed URLs minted by the r2-playback Edge Function.
+ */
+export interface HostedAsset {
+  id: string;
+  video_id: string;
+  r2_object_key: string;
+  hls_master_key: string | null;
+  original_filename: string | null;
+  content_type: string | null;
+  size_bytes: number | null;
+  duration_seconds: number | null;
+  status: HostedAssetStatus;
+  publish_at: string | null;
+  expires_at: string | null;
+  replacement_of: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Recorded permission from the rights holder (migration 0005).
+ * Admin-only table in the database (RLS grants members nothing);
+ * a hosted video cannot be published without one of these rows —
+ * the publish gate is a database trigger, not a UI convention.
+ */
+export interface ContentAuthorization {
+  id: string;
+  video_id: string;
+  rights_holder: string;
+  permission_note: string;
+  permission_reference: string | null;
+  permission_date: string; // date (YYYY-MM-DD)
+  recorded_by: string | null;
+  created_at: string;
 }
 
 export interface Playlist {

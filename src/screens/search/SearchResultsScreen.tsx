@@ -275,13 +275,17 @@ export function SearchResultsScreen({ route, navigation }: Props) {
               key: 'share',
               label: 'Share',
               icon: 'share',
-              onPress: () => shareVideo(item.title, item.youtubeVideoId),
+              // Hosted results have no YouTube id/link; they carry a
+              // videoRowId and open in-app, so there is nothing to share.
+              onPress: () => {
+                if (item.youtubeVideoId) shareVideo(item.title, item.youtubeVideoId);
+              },
             },
           ]}
           onPress={() =>
             item.videoRowId
               ? navigation.navigate('Watch', { videoRowId: item.videoRowId })
-              : navigation.navigate('Watch', { youtubeVideoId: item.youtubeVideoId })
+              : navigation.navigate('Watch', { youtubeVideoId: item.youtubeVideoId ?? undefined })
           }
         />
       );

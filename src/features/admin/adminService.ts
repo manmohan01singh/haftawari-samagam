@@ -290,7 +290,8 @@ export async function deleteVideo(video: Video, actorId: string): Promise<void> 
 export interface SessionVideoRef {
   id: string;
   title: string;
-  youtube_video_id: string;
+  /** NULL for hosted videos (migration 0005). */
+  youtube_video_id: string | null;
   thumbnail_url: string | null;
   duration_seconds: number | null;
 }

@@ -356,7 +356,7 @@ export function WatchScreen({ route, navigation }: Props) {
         const seen = new Set<string>();
         if (currentYtId) seen.add(currentYtId);
         for (const item of upNextItems) {
-          seen.add(item.kind === 'row' ? item.video.youtube_video_id : item.meta.youtubeVideoId);
+          seen.add(item.kind === 'row' ? (item.video.youtube_video_id ?? `row:${item.video.id}`) : item.meta.youtubeVideoId);
         }
         const fresh = page.videos.filter(
           (meta) => !seen.has(meta.youtubeVideoId) && !isShortVideo(meta),
@@ -573,7 +573,11 @@ export function WatchScreen({ route, navigation }: Props) {
           variant="upNext"
           data={data}
           onPress={() => openItem({ videoRowId: item.video.id })}
-          onShare={() => shareItem(item.video.title, item.video.youtube_video_id)}
+          onShare={() =>
+            item.video.youtube_video_id
+              ? shareItem(item.video.title, item.video.youtube_video_id)
+              : showToast('This recording plays inside the app and has no YouTube link to share')
+          }
           onChannelPress={() =>
             navigation.navigate('Channel', { channelId: officialChannel?.channelId })
           }
@@ -582,7 +586,10 @@ export function WatchScreen({ route, navigation }: Props) {
               key: 'share',
               label: 'Share',
               icon: 'share',
-              onPress: () => shareItem(item.video.title, item.video.youtube_video_id),
+              onPress: () =>
+                item.video.youtube_video_id
+                  ? shareItem(item.video.title, item.video.youtube_video_id)
+                  : showToast('This recording plays inside the app and has no YouTube link to share'),
             },
             {
               key: 'save',
