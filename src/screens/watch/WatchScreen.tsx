@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   FlatList,
   Modal,
   Pressable,
@@ -12,6 +13,7 @@ import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { CardActionSheet } from '../../components/common/CardActionSheet';
+import { useSlideDownMini } from '../../components/gesture/SlideDownMini';
 import { EmptyState } from '../../components/common/EmptyState';
 import { LinkedText } from '../../components/common/LinkedText';
 import { Toast, useToast } from '../../components/common/Toast';
@@ -127,6 +129,15 @@ export function WatchScreen({ route, navigation }: Props) {
   // line — that is YouTube's count, not the user's action.
   const [playlistSheetOpen, setPlaylistSheetOpen] = useState(false);
   const { toast, showToast } = useToast();
+  // Slide-down-to-mini-player gesture (UX Fix 2, gestures round): the
+  // drag surfaces are the player area and the sheet below it; the
+  // gesture is disabled while any modal sheet is open so their own
+  // drags/taps are never fought. Page—Watch owns the mini player's
+  // final look — this hook owns the gesture + collapse state and
+  // exposes onCollapseRequest for their logic to take over.
+  const slideDown = useSlideDownMini({
+    enabled: !chatOpen && !menuOpen && !playlistSheetOpen,
+  });
   const saved =
     resolved?.row && savedState?.rowId === resolved.row.id ? savedState.saved : false;
   const localHistoryRecordedFor = useRef<string | null>(null);
@@ -418,7 +429,10 @@ export function WatchScreen({ route, navigation }: Props) {
   // screenshot 06. Previously it lived inside ListHeaderComponent and
   // scrolled away with the sheet.
   const player = resolved ? (
-    <View style={styles.playerWrap}>
+    <View
+      style={[styles.playerWrap, slideDown.mini ? styles.playerWrapMini : styles.playerWrapFull]}
+      {...slideDown.panHandlers}
+    >
       {playerReady ? (
         <YouTubePlayer youtubeVideoId={resolved.youtubeVideoId} />
       ) : (
@@ -490,7 +504,7 @@ export function WatchScreen({ route, navigation }: Props) {
             Recorded videos get no line: their progress position is
             not ours to invent. */}
         {resolved.isLive ? <View style={styles.seamLine} /> : null}
-        <View style={styles.sheet}>
+        <View style={styles.sheet} {...slideDown.panHandlers}>
           {backRow}
           <Text style={styles.title} numberOfLines={expanded ? undefined : 2}>
             {resolved.title}
@@ -697,6 +711,7 @@ export function WatchScreen({ route, navigation }: Props) {
     showToast,
     backRow,
     sessionId,
+    slideDown.panHandlers,
   ]);
 
   if (loading) {
@@ -756,9 +771,24 @@ export function WatchScreen({ route, navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      {player}
-      <FlatList
-        data={upNextItems}
+      {/* Slide-down container: follows the finger during the
+          mini-player drag (transform from the gesture hook) and
+          becomes the bottom mini bar when collapsed. The player
+          element stays the FIRST child in both layouts, so the
+          embed never remounts and playback continues into mini
+          mode. Sheets/modals below stay OUTSIDE this container so
+          they never slide with it. */}
+      <Animated.View
+        style={[
+          styles.slideWrap,
+          slideDown.containerStyle,
+          slideDown.mini ? styles.slideWrapMini : null,
+        ]}
+      >
+        {player}
+        <FlatList
+          style={slideDown.mini ? styles.listHidden : styles.listFlex}
+          data={upNextItems}
         renderItem={renderUpNext}
         keyExtractor={keyExtractor}
         ListHeaderComponent={
@@ -772,8 +802,49 @@ export function WatchScreen({ route, navigation }: Props) {
         ListEmptyComponent={
           <Text style={styles.upNextEmpty}>No other published recordings yet.</Text>
         }
-        {...FEED_LIST_PERF}
-      />
+          {...FEED_LIST_PERF}
+        />
+        {/* Mini-player bar content (gestures round): title + expand +
+            close beside the shrunken player. Expand restores the full
+            layout; close leaves the Watch screen. This is the
+            gesture layer's built-in mini state — Page—Watch can
+            restyle it or take over via the hook's onCollapseRequest. */}
+        {slideDown.mini ? (
+          <View style={styles.miniInfo}>
+            <Pressable
+              style={styles.miniTextWrap}
+              onPress={slideDown.expand}
+              accessibilityRole="button"
+              accessibilityLabel="Expand player"
+            >
+              <Text style={styles.miniTitle} numberOfLines={1}>
+                {resolved.title}
+              </Text>
+              <Text style={styles.miniChannel} numberOfLines={1}>
+                {resolved.channelTitle}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={slideDown.expand}
+              hitSlop={8}
+              style={styles.miniButton}
+              accessibilityRole="button"
+              accessibilityLabel="Expand player"
+            >
+              <MaterialIcons name="expand-less" size={28} color={lightColors.text} />
+            </Pressable>
+            <Pressable
+              onPress={() => goBackOrTab(navigation, 'Home')}
+              hitSlop={8}
+              style={styles.miniButton}
+              accessibilityRole="button"
+              accessibilityLabel="Close player"
+            >
+              <MaterialIcons name="close" size={24} color={lightColors.text} />
+            </Pressable>
+          </View>
+        ) : null}
+      </Animated.View>
       {/* ⋮ action menu (screenshot 06 •••): only actions that really
           work here — Share (system sheet), Save + Save to playlist
           (saved_videos / playlists backends, archive rows + signed-in
@@ -852,9 +923,52 @@ export function WatchScreen({ route, navigation }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: lightColors.background },
   playerWrap: {
+    backgroundColor: lightColors.playerBackground,
+  },
+  playerWrapFull: {
     width: '100%',
     aspectRatio: layout.thumbnailAspectRatio,
-    backgroundColor: lightColors.playerBackground,
+  },
+  // Mini mode: the same player element, shrunk into the bar — 128×72
+  // (16:9) at the bar's left edge. No remount, playback continues.
+  playerWrapMini: {
+    width: 128,
+    height: 72,
+    flexShrink: 0,
+  },
+  // Slide-down gesture container (normal: fills the screen under the
+  // pinned player; mini: becomes the bottom bar itself).
+  slideWrap: { flex: 1 },
+  slideWrapMini: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 72,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: lightColors.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: lightColors.border,
+    zIndex: 40,
+    elevation: 8,
+  },
+  listFlex: { flex: 1 },
+  listHidden: { display: 'none' },
+  miniInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: spacing.sm,
+  },
+  miniTextWrap: { flex: 1, justifyContent: 'center', minHeight: 44 },
+  miniTitle: { ...typography.body, color: lightColors.text },
+  miniChannel: { ...typography.metadata, color: lightColors.textSecondary },
+  miniButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   playerThumb: { width: '100%', height: '100%', backgroundColor: lightColors.playerBackground },
   // Back control (round-3): lives in the sheet's header zone, above
