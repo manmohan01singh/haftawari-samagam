@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   FlatList,
   Modal,
+  PanResponder,
   Pressable,
   StyleSheet,
   Text,
@@ -109,6 +110,28 @@ export function WatchScreen({ route, navigation }: Props) {
   const { following, toggleFollow } = useChannelFollow(channel?.channelId ?? OFFICIAL_CHANNEL_ID);
   const [menuOpen, setMenuOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  // Mini player (round-4, user's direct ask): collapsing the watch
+  // view into a bottom mini bar WITHOUT unmounting the player — the
+  // YouTubePlayer element never leaves the tree (see the player
+  // element below), only its container's style changes, so playback
+  // continues across collapse/expand with no restart.
+  const [mini, setMini] = useState(false);
+  // Drag-down gesture on the sheet's header zone (back row + title):
+  // a clearly-vertical drag past the snap threshold collapses to
+  // mini. Taps are untouched (the responder only claims a gesture
+  // once it is unambiguously a vertical drag), and the chevron-down
+  // button in the header row is the non-gesture affordance.
+  const sheetPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_e, g) =>
+          g.dy > 10 && Math.abs(g.dy) > Math.abs(g.dx) * 1.5,
+        onPanResponderRelease: (_e, g) => {
+          if (g.dy > nativeApp.chatSheet.dragSnapThreshold || g.vy > 0.5) setMini(true);
+        },
+      }),
+    [],
+  );
   // Real sangat count for a session watch: Supabase Realtime Presence
   // on the session's room (same service SessionWatchScreen uses).
   // Only signed-in viewers can be tracked, so signed-out watches show
@@ -385,13 +408,34 @@ export function WatchScreen({ route, navigation }: Props) {
           },
         );
       };
+      // Mini mode: an Up Next tap loads the video IN PLACE and
+      // re-expands — pushing a second Watch screen would stack two
+      // mounted embeds and both would play. Expanded mode keeps the
+      // normal push.
+      const openItem = (params: { videoRowId?: string; youtubeVideoId?: string }) => {
+        if (mini) {
+          // Pass BOTH keys so the other one is cleared — setParams
+          // merges, and a stale youtubeVideoId would shadow the new
+          // videoRowId (watchKey prefers neither; resolution reads
+          // both).
+          navigation.setParams({
+            videoRowId: params.videoRowId,
+            youtubeVideoId: params.youtubeVideoId,
+          });
+          setMini(false);
+        } else if (params.videoRowId) {
+          navigation.push('Watch', { videoRowId: params.videoRowId });
+        } else if (params.youtubeVideoId) {
+          navigation.push('Watch', { youtubeVideoId: params.youtubeVideoId });
+        }
+      };
       if (item.kind === 'api') {
         const data: CardVideoData = apiCardData(item.meta, officialChannel?.avatarUrl ?? null);
         return (
           <FeedCard
             variant="upNext"
             data={data}
-            onPress={() => navigation.push('Watch', { youtubeVideoId: item.meta.youtubeVideoId })}
+            onPress={() => openItem({ youtubeVideoId: item.meta.youtubeVideoId })}
             onShare={() => shareItem(item.meta.title, item.meta.youtubeVideoId)}
             onChannelPress={() =>
               navigation.navigate('Channel', { channelId: officialChannel?.channelId })
@@ -412,7 +456,7 @@ export function WatchScreen({ route, navigation }: Props) {
         <FeedCard
           variant="upNext"
           data={data}
-          onPress={() => navigation.push('Watch', { videoRowId: item.video.id })}
+          onPress={() => openItem({ videoRowId: item.video.id })}
           onShare={() => shareItem(item.video.title, item.video.youtube_video_id)}
           onChannelPress={() =>
             navigation.navigate('Channel', { channelId: officialChannel?.channelId })
@@ -428,7 +472,7 @@ export function WatchScreen({ route, navigation }: Props) {
         />
       );
     },
-    [navigation, officialChannel, showToast],
+    [navigation, officialChannel, showToast, mini],
   );
 
   const keyExtractor = useCallback(
@@ -441,26 +485,65 @@ export function WatchScreen({ route, navigation }: Props) {
   // screenshot 06. Previously it lived inside ListHeaderComponent and
   // scrolled away with the sheet.
   const player = resolved ? (
-    <View style={styles.playerWrap}>
-      {playerReady ? (
-        <YouTubePlayer youtubeVideoId={resolved.youtubeVideoId} />
-      ) : (
+    <View style={[styles.playerWrap, mini && styles.playerWrapMini]}>
+      {/* The player box is in the SAME tree position in both modes —
+          only its style changes (full 16:9 ↔ 106px mini thumb). The
+          YouTubePlayer element therefore never unmounts/remounts on
+          collapse/expand, and playback does not restart. */}
+      <View style={[styles.playerBox, mini && styles.playerBoxMini]}>
+        {playerReady ? (
+          <YouTubePlayer youtubeVideoId={resolved.youtubeVideoId} />
+        ) : (
+          <>
+            {resolved.thumbnailUrl ? (
+              <Image
+                source={{ uri: resolved.thumbnailUrl }}
+                style={styles.playerThumb}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+              />
+            ) : (
+              <View style={styles.playerThumb} />
+            )}
+            <View style={styles.playerSpinner}>
+              <ActivityIndicator color="#FFFFFF" />
+            </View>
+          </>
+        )}
+      </View>
+      {mini ? (
         <>
-          {resolved.thumbnailUrl ? (
-            <Image
-              source={{ uri: resolved.thumbnailUrl }}
-              style={styles.playerThumb}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-            />
-          ) : (
-            <View style={styles.playerThumb} />
-          )}
-          <View style={styles.playerSpinner}>
-            <ActivityIndicator color="#FFFFFF" />
-          </View>
+          <Pressable
+            style={styles.miniTitleZone}
+            onPress={() => setMini(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Expand player"
+          >
+            <Text style={styles.miniTitle} numberOfLines={2} ellipsizeMode="tail">
+              {resolved.title}
+            </Text>
+            <Text style={styles.miniChannel} numberOfLines={1} ellipsizeMode="tail">
+              {channel?.title ?? resolved.channelTitle}
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setMini(false)}
+            hitSlop={ICON_HIT_SLOP}
+            accessibilityRole="button"
+            accessibilityLabel="Expand player"
+          >
+            <MaterialIcons name="expand-less" size={24} color={lightColors.text} />
+          </Pressable>
+          <Pressable
+            onPress={() => goBackOrTab(navigation, 'Home')}
+            hitSlop={ICON_HIT_SLOP}
+            accessibilityRole="button"
+            accessibilityLabel="Close player"
+          >
+            <MaterialIcons name="close" size={24} color={lightColors.text} />
+          </Pressable>
         </>
-      )}
+      ) : null}
       {/* Round-3 (user's phone, 27 Nov): NOTHING of ours overlays the
           player rectangle — no back arrow, no LIVE pill. The old
           back overlay sat on top of the embed's own title/channel
@@ -496,6 +579,10 @@ export function WatchScreen({ route, navigation }: Props) {
 
   const header = useMemo(() => {
     if (!resolved) return null;
+    // Mini mode: the sheet is gone (the mini bar at the bottom is the
+    // watch surface now); the list shows only the Up Next heading,
+    // rendered by the FlatList header wrapper below.
+    if (mini) return null;
     const channelName = channel?.title ?? resolved.channelTitle;
     const channelAvatar = channel?.avatarUrl ?? null;
     // Screenshot 06 metadata line: "@handle · N likes · ▷ N views ·
@@ -516,10 +603,28 @@ export function WatchScreen({ route, navigation }: Props) {
             over the player, see styles.list). */}
         {resolved.isLive ? <View style={styles.seamLine} /> : null}
         <View style={styles.sheet}>
-          {backRow}
-          <Text style={styles.title} numberOfLines={expanded ? undefined : 2}>
-            {resolved.title}
-          </Text>
+          {/* Mini-player gesture zone: drag DOWN on this header strip
+              (back row + title) collapses to the mini bar; the
+              chevron-down at the row's right is the tap affordance.
+              The responder only claims clearly-vertical drags, so
+              the back tap and the meta line's tap still work. */}
+          <View {...sheetPanResponder.panHandlers}>
+            <View style={styles.backRowLine}>
+              {backRow}
+              <Pressable
+                onPress={() => setMini(true)}
+                style={styles.backButton}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Minimise player"
+              >
+                <MaterialIcons name="expand-more" size={24} color={lightColors.text} />
+              </Pressable>
+            </View>
+            <Text style={styles.title} numberOfLines={expanded ? undefined : 2}>
+              {resolved.title}
+            </Text>
+          </View>
           <Pressable
             onPress={() => setExpanded((v) => !v)}
             hitSlop={{ top: 10, bottom: 10, left: 0, right: 0 }}
@@ -725,6 +830,8 @@ export function WatchScreen({ route, navigation }: Props) {
     backRow,
     sessionId,
     presenceCount,
+    mini,
+    sheetPanResponder,
   ]);
 
   if (loading) {
@@ -786,8 +893,8 @@ export function WatchScreen({ route, navigation }: Props) {
     <View style={styles.container}>
       {player}
       <FlatList
-        style={styles.list}
-        contentContainerStyle={styles.listContent}
+        style={[styles.list, mini && styles.listMini]}
+        contentContainerStyle={[styles.listContent, mini && styles.listContentMini]}
         data={upNextItems}
         renderItem={renderUpNext}
         keyExtractor={keyExtractor}
@@ -895,9 +1002,41 @@ const styles = StyleSheet.create({
     // widths (≤1100) are completely unaffected.
     maxWidth: 1100,
     alignSelf: 'center',
-    aspectRatio: layout.thumbnailAspectRatio,
     backgroundColor: lightColors.playerBackground,
   },
+  // The 16:9 box lives one level in (round-4) so the mini bar can
+  // restyle the WRAP into a bottom bar while the box — and the
+  // player inside it — only changes size, never remounts.
+  playerBox: { width: '100%', aspectRatio: layout.thumbnailAspectRatio },
+  playerBoxMini: { width: 106, aspectRatio: layout.thumbnailAspectRatio, borderRadius: 6, overflow: 'hidden' },
+  playerWrapMini: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    maxWidth: '100%',
+    alignSelf: 'auto',
+    height: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    gap: spacing.md,
+    backgroundColor: lightColors.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: lightColors.border,
+    shadowColor: '#000000',
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: -2 },
+    elevation: 8,
+    zIndex: 20,
+  },
+  miniTitleZone: { flex: 1, justifyContent: 'center' },
+  miniTitle: { fontSize: 13, lineHeight: 17, fontWeight: '500', color: lightColors.text },
+  miniChannel: { fontSize: 11, lineHeight: 14, color: lightColors.textSecondary, marginTop: 1 },
+  listMini: { marginTop: 0 },
+  listContentMini: { paddingBottom: 80 },
+  backRowLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   // The list itself is pulled 20px UP over the player's bottom edge
   // (round-3 device check: the sheet's old -20 margin was clipped
   // inside the scroll view, so the rounded corners never actually
