@@ -16,6 +16,14 @@ export interface CardVideoData {
   durationSeconds: number | null;
   /** The video's OWN YouTube broadcast state, from the API. Archive rows are 'none'. */
   broadcastState: 'none' | 'live' | 'upcoming';
+  /**
+   * This card IS the app's own Samagam session, playing now: the
+   * thumbnail carries the red NOW PLAYING chip (the session is a
+   * group playback of a recording, never labelled "LIVE"). Set only
+   * by HomeScreen for the derived now_playing session — never for a
+   * YouTube broadcast (those use broadcastState 'live').
+   */
+  nowPlayingSession?: boolean;
   /** @handle or channel name line. */
   channelLine: string;
   /** Real metadata line ("▷ 12K · 21 hr ago", "591 watching", a date…). */

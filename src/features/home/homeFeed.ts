@@ -8,14 +8,15 @@
  * channel's uploads playlist.
  *
  * Design contract:
- *  - Round-robin across sources (catalogue + one stream per channel):
- *    uploads playlists are newest-first, so one item per source per
- *    round interleaves RECENT videos from all channels and no single
- *    channel can dominate the feed.
- *  - Each emitted batch gets a light DETERMINISTIC shuffle (seeded
- *    PRNG; the seed changes only on refresh / filter change), so the
- *    rotation doesn't read as a rigid pattern, while items already on
- *    screen never move.
+ *  - Round-robin across sources (catalogue + one stream per channel)
+ *    GATHERS each batch: uploads playlists are newest-first, so one
+ *    item per source per round collects RECENT videos from all
+ *    channels and no single channel can dominate the gathering.
+ *  - Each emitted batch is then ordered LATEST FIRST (user order,
+ *    27 Nov 2026: "pull the latest, don't show the old ones first"):
+ *    currently-live broadcasts first, then by real published date
+ *    descending — the YouTube-home recency feel. Items already on
+ *    screen never move; the ordering applies per batch as it lands.
  *  - Dedupe by YouTube video id. A catalogue row and its upload twin
  *    are the same video: the upload is dropped and the catalogue row
  *    is what renders (Watch needs the row id for history/saves).
@@ -72,9 +73,10 @@ export function feedItemYoutubeId(item: HomeFeedItem): string | null {
 
 /**
  * The Home topic-chips row (user's explicit list, YouTube pattern).
- * 'Live' is NOT a feed filter — it keeps the destination the old
- * Home/Subs/Live segment row's Live tab had (Sessions filtered to
- * NOW PLAYING); HomeScreen routes it and never selects it.
+ * 'Live' IS a real feed filter (user order, 27 Nov 2026): it shows
+ * every channel's currently-live broadcast (the uploads scan carries
+ * the real broadcast state) — HomeScreen additionally pins the app's
+ * own NOW PLAYING session as a normal card at its top.
  */
 export const HOME_CHIPS = [
   'All',
@@ -136,21 +138,22 @@ export type HomeFeedFilter =
   /** Only these channels' uploads (the catalogue joins when the official channel is among them). */
   | { kind: 'channels'; channelIds: string[] }
   /** All channels (+ catalogue), title-keyword matched. */
-  | { kind: 'topic'; keywords: string[] };
+  | { kind: 'topic'; keywords: string[] }
+  /** Only currently-live broadcasts, from every channel's uploads. */
+  | { kind: 'live' };
 
 /**
- * Resolve a chip to a feed filter. Returns the string 'live' for the
- * Live chip (a navigation destination, not a filter). Channel chips
- * resolve against the ACTIVE channel list, so an admin-added/renamed
- * channel still matches by handle/id; a chip whose channel is not
- * active resolves to an empty channel set (an honest empty feed,
- * never a silently-wrong one).
+ * Resolve a chip to a feed filter. Channel chips resolve against
+ * the ACTIVE channel list, so an admin-added/renamed channel still
+ * matches by handle/id; a chip whose channel is not active resolves
+ * to an empty channel set (an honest empty feed, never a
+ * silently-wrong one).
  */
 export function resolveChipFilter(
   chip: string,
   channels: AppChannel[],
-): HomeFeedFilter | 'live' {
-  if (chip === 'Live') return 'live';
+): HomeFeedFilter {
+  if (chip === 'Live') return { kind: 'live' };
   if (chip === 'All') return { kind: 'all' };
   const keywords = TOPIC_KEYWORDS[chip];
   if (keywords) return { kind: 'topic', keywords };
@@ -207,28 +210,33 @@ function isFeedEligible(meta: YouTubeVideoMetadata): boolean {
   return true;
 }
 
-// ── Deterministic shuffle ────────────────────────────────────────────
+// ── Latest-first ordering ────────────────────────────────────────────
 
-/** mulberry32 — tiny seeded PRNG; same seed ⇒ same order, always. */
-function mulberry32(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
+/** Real published timestamp of a feed item (0 when unknown). */
+function feedItemTimestamp(item: HomeFeedItem): number {
+  const raw = item.kind === 'upload' ? item.meta.publishedAt : item.video.published_at;
+  if (!raw) return 0;
+  const t = Date.parse(raw);
+  return Number.isNaN(t) ? 0 : t;
 }
 
-function shuffled<T>(items: T[], seed: number): T[] {
-  const rand = mulberry32(seed);
-  const out = [...items];
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(rand() * (i + 1));
-    [out[i], out[j]] = [out[j], out[i]];
-  }
-  return out;
+/** A genuinely live YouTube broadcast (the app's own sessions are not feed items). */
+function feedItemIsLive(item: HomeFeedItem): boolean {
+  return item.kind === 'upload' && item.meta.liveBroadcastContent === 'live';
+}
+
+/**
+ * Latest first (user order, 27 Nov 2026): live broadcasts lead the
+ * batch, then newest published first. Stable for equal keys, so the
+ * round-robin gathering order survives inside a tie.
+ */
+function latestFirst(items: HomeFeedItem[]): HomeFeedItem[] {
+  return [...items].sort((a, b) => {
+    const la = feedItemIsLive(a) ? 0 : 1;
+    const lb = feedItemIsLive(b) ? 0 : 1;
+    if (la !== lb) return la - lb;
+    return feedItemTimestamp(b) - feedItemTimestamp(a);
+  });
 }
 
 // ── Pager ────────────────────────────────────────────────────────────
@@ -283,6 +291,14 @@ const MAX_ROUNDS_PER_CALL = 6;
  * keep their positions and scrolling continues the hunt.
  */
 const CALL_SCAN_CAP = 40;
+/**
+ * Live-filter scan budget per channel per call: a channel's live
+ * broadcast, when one exists, sits at the head of its uploads
+ * playlist (it is the newest item), so two pages always suffice —
+ * a channel with nothing live must not burn the deep topic-scan
+ * budget proving it on every scroll step.
+ */
+const LIVE_SCAN_PAGES = 2;
 
 interface ChannelCursor {
   channel: AppChannel;
@@ -316,13 +332,10 @@ export interface HomeFeedPager {
 export interface HomeFeedPagerOptions {
   channels: AppChannel[];
   filter: HomeFeedFilter;
-  /** Changes on refresh so a pull-to-refresh reshuffles/restarts. */
-  seed: number;
 }
 
-export function createHomeFeedPager({ channels, filter, seed }: HomeFeedPagerOptions): HomeFeedPager {
+export function createHomeFeedPager({ channels, filter }: HomeFeedPagerOptions): HomeFeedPager {
   const seen = new Set<string>();
-  let batchIndex = 0;
 
   // ── Catalogue source ──────────────────────────────────────────────
   // Included for 'all' and topic filters, and for channel filters
@@ -331,7 +344,11 @@ export function createHomeFeedPager({ channels, filter, seed }: HomeFeedPagerOpt
   // small) so an upload twin is dropped even before its row's turn
   // in the rotation — the row itself is what must open in Watch.
   const includeCatalogue =
-    filter.kind !== 'channels' || filter.channelIds.includes(OFFICIAL_CHANNEL_ID);
+    filter.kind === 'live'
+      ? // Live broadcasts are carried by the uploads scan (real
+        // broadcast state); catalogue rows are recordings.
+        false
+      : filter.kind !== 'channels' || filter.channelIds.includes(OFFICIAL_CHANNEL_ID);
   const catalogueRows: Video[] = [];
   // Ids of every (filter-matching) catalogue row, preloaded BEFORE
   // anything is emitted: an upload whose id is in here is dropped at
@@ -398,6 +415,7 @@ export function createHomeFeedPager({ channels, filter, seed }: HomeFeedPagerOpt
     for (const meta of videos) {
       if (!isFeedEligible(meta)) continue;
       if (filter.kind === 'topic' && !matchesTopic(meta.title, filter.keywords)) continue;
+      if (filter.kind === 'live' && meta.liveBroadcastContent !== 'live') continue;
       cursor.buffer.push(meta);
     }
   }
@@ -510,6 +528,9 @@ export function createHomeFeedPager({ channels, filter, seed }: HomeFeedPagerOpt
     for (const cursor of cursors) cursor.failed = false;
     const isFirstCall = nextCallCount === 0;
     currentScanBudget = isFirstCall ? FIRST_CALL_SCAN_PAGES : MAX_SCAN_PAGES_PER_CALL;
+    if (filter.kind === 'live') {
+      currentScanBudget = Math.min(currentScanBudget, LIVE_SCAN_PAGES);
+    }
     callScansUsed = 0;
     nextCallCount++;
     await ensureCatalogue();
@@ -561,10 +582,11 @@ export function createHomeFeedPager({ channels, filter, seed }: HomeFeedPagerOpt
     const catalogueDrained = catalogueEmitted >= catalogueRows.length;
     const exhausted =
       catalogueDrained && cursors.every((c) => c.exhausted && c.buffer.length === 0);
-    // Light deterministic shuffle per batch: same seed + batch index
-    // ⇒ same order (stable across re-renders); a refresh changes the
-    // seed and reshuffles from page 1.
-    return { items: shuffled(collected, seed + batchIndex++ * 7919), exhausted };
+    // Latest first per batch (live broadcasts lead, then newest
+    // published): the round-robin above only GATHERS across sources
+    // so no channel dominates; the visible order is recency, the
+    // YouTube-home feel the user asked for.
+    return { items: latestFirst(collected), exhausted };
   }
 
   return { next };

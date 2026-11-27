@@ -91,6 +91,10 @@ export const FeedCard = memo(function FeedCard({
           <MaterialIcons name="sensors" size={14} color="#FFFFFF" />
           <Text style={styles.liveText}>LIVE</Text>
         </View>
+      ) : data.nowPlayingSession ? (
+        <View style={styles.liveBadge} pointerEvents="none">
+          <Text style={styles.liveText}>NOW PLAYING</Text>
+        </View>
       ) : data.durationSeconds != null ? (
         <View style={styles.durationBadge} pointerEvents="none">
           <Text style={styles.durationText}>{formatDuration(data.durationSeconds)}</Text>

@@ -6,9 +6,7 @@ import type { CompositeScreenProps } from '@react-navigation/native';
 import { useScrollToTop } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Image } from 'expo-image';
 import { AppHeader } from '../../components/layout/AppHeader';
-import { SessionStatusBadge } from '../../features/sessions/components/SessionStatusBadge';
 import { useWebPullToRefresh } from '../../components/gesture/WebPullToRefresh';
 import { ChipsRow } from '../../components/layout/ChipsRow';
 import { Toast, useToast } from '../../components/common/Toast';
@@ -17,7 +15,7 @@ import { shareContent, shareFeedback } from '../../lib/share';
 import { EmptyState } from '../../components/common/EmptyState';
 import { FeedCard } from '../../components/video/FeedCard';
 import { SkeletonCard } from '../../components/video/SkeletonCard';
-import { apiCardData, supabaseCardData, type CardVideoData } from '../../components/video/cardData';
+import { apiCardData, listThumbnailUrl, supabaseCardData, type CardVideoData } from '../../components/video/cardData';
 import { useAuth } from '../../features/auth';
 import { useOfficialChannel } from '../../features/channel';
 import { useActiveChannels } from '../../features/channels/channelsService';
@@ -143,12 +141,12 @@ const HomeFeedCell = memo(function HomeFeedCell({
  * interleaved by the homeFeed pager: the published Supabase catalogue
  * and the uploads of every active sangat channel (Bhai Gursharan
  * Singh Ji official, Amritvela Trust Live, Amritvela Trust,
- * Sakhiyan), round-robin by recency with a light deterministic
- * shuffle per batch, deduped by YouTube id, Shorts-free, paging
+ * Sakhiyan), gathered round-robin across sources and ordered
+ * LATEST FIRST per batch (live broadcasts lead), deduped by
+ * YouTube id, Shorts-free, paging
  * endlessly via each channel's uploads playlist. The topic chips
- * under the header really filter (title keywords / channel sets);
- * the Live chip keeps the old segment row's destination (Sessions,
- * NOW PLAYING). While the first page loads, geometry-matched
+ * under the header really filter (title keywords / channel sets /
+ * live broadcasts). While the first page loads, geometry-matched
  * skeletons hold the layout (no jumps).
  */
 export function HomeScreen({ navigation }: Props) {
@@ -176,8 +174,6 @@ export function HomeScreen({ navigation }: Props) {
   // Bumped on every feed (re)start so a stale pager's late page can
   // never land on top of a newer filter/refresh.
   const generationRef = useRef(0);
-  // Refresh seed: a pull-to-refresh reshuffles and restarts paging.
-  const seedRef = useRef(1);
   // Real live state from the YouTube API (QA 49/68): a map of
   // youtube_video_id → live/upcoming metadata for the official
   // channel. Archive rows have no live flag of their own.
@@ -232,7 +228,10 @@ export function HomeScreen({ navigation }: Props) {
             ? {
                 id: playing.session.id,
                 title: playing.session.title ?? playing.video?.title ?? 'Samagam',
-                thumbnailUrl: playing.video?.thumbnail_url ?? null,
+                thumbnailUrl: listThumbnailUrl(
+                  playing.video?.youtube_video_id ?? null,
+                  playing.video?.thumbnail_url ?? null,
+                ),
               }
             : null,
         );
@@ -259,8 +258,7 @@ export function HomeScreen({ navigation }: Props) {
     const resolved = resolveChipFilter(selectedChip, channels);
     const pager = createHomeFeedPager({
       channels,
-      filter: resolved === 'live' ? { kind: 'all' } : resolved,
-      seed: seedRef.current,
+      filter: resolved,
     });
     pagerRef.current = pager;
     try {
@@ -312,7 +310,6 @@ export function HomeScreen({ navigation }: Props) {
   }, [user]);
 
   const onRefresh = useCallback(() => {
-    seedRef.current += 1;
     setRefreshing(true);
     void startFeed();
   }, [startFeed]);
@@ -346,23 +343,20 @@ export function HomeScreen({ navigation }: Props) {
       });
   }, [exhausted, loading, items.length]);
 
-  // Chip taps: 'Live' is a destination, not a filter — it keeps the
-  // exact destination the old Home/Subs/Live segment row's Live tab
-  // had (Sessions filtered to NOW PLAYING). Every other chip selects
-  // a real feed filter and restarts the pager (effect above). The
-  // loading flag flips in a timer callback, matching the codebase's
-  // no-sync-setState-in-handler-adjacent pattern for feed restarts.
+  // Chip taps: every chip — Live included — selects a real feed
+  // filter and restarts the pager (effect above). The Live filter
+  // shows every channel's currently-live broadcast (user order,
+  // 27 Nov 2026: the Live chip is a feed, not a jump to Sessions).
+  // The loading flag flips in a timer callback, matching the
+  // codebase's no-sync-setState-in-handler-adjacent pattern for
+  // feed restarts.
   const handleSelectChip = useCallback(
     (chip: string) => {
-      if (chip === 'Live') {
-        navigation.navigate('Sessions', { filter: 'live' });
-        return;
-      }
       if (chip === selectedChip) return;
       setTimeout(() => setLoading(true), 0);
       setSelectedChip(chip);
     },
-    [navigation, selectedChip],
+    [selectedChip],
   );
 
   const avatarUrl = channel?.avatarUrl ?? null;
@@ -393,6 +387,28 @@ export function HomeScreen({ navigation }: Props) {
     }
     return map;
   }, [items, avatarUrl, avatarByChannelId, liveMap]);
+
+  // The NOW PLAYING session as a NORMAL feed card (user order,
+  // 27 Nov 2026: on YouTube's home the live item is an ordinary big
+  // card like every other card — no special banner). Rendered as
+  // the FlatList header on the All and Live chips only, so it
+  // scrolls with the feed exactly like YouTube's live card.
+  const sessionCardData = useMemo<CardVideoData | null>(() => {
+    if (!liveSession) return null;
+    return {
+      key: `session-${liveSession.id}`,
+      title: liveSession.title,
+      thumbnailUrl: liveSession.thumbnailUrl,
+      durationSeconds: null,
+      broadcastState: 'none',
+      nowPlayingSession: true,
+      channelLine: channel?.title ?? 'Bhai Gursharan Singh Ji',
+      metaLine: 'Samagam Session',
+      channelAvatarUrl: avatarUrl,
+      youtubeVideoId: null,
+      channelId: channel?.channelId ?? OFFICIAL_CHANNEL_ID,
+    };
+  }, [liveSession, channel, avatarUrl]);
 
   // Mirror of savedIds for the stable toggle handler below.
   const savedIdsRef = useRef(savedIds);
@@ -566,48 +582,10 @@ export function HomeScreen({ navigation }: Props) {
             header (the YouTube pattern from the user's screenshot)
             and is the feed's ONE filter row. It replaces the old
             Home/Subs/Live segment row on this screen: Subscriptions
-            stays in the bottom tab bar, and the Live destination is
-            preserved by the Live chip itself. */}
+            stays in the bottom tab bar, and the Live chip is a real
+            feed filter (every channel's live broadcast). */}
         <ChipsRow chips={[...HOME_CHIPS]} selected={selectedChip} onSelect={handleSelectChip} />
       </View>
-
-      {/* Pinned live card (user order, 27 Nov 2026): when a Samagam
-          is really NOW PLAYING it sits at the very top of Home with
-          its thumbnail and the red badge — the YouTube-home live
-          pattern. Driven by the same derived status as the strip
-          below; when nothing is playing it is simply absent. */}
-      {liveSession ? (
-        <Pressable
-          style={({ pressed }) => [styles.liveCard, pressed && styles.pressed]}
-          onPress={() => navigation.navigate('SessionWatch', { sessionId: liveSession.id })}
-          accessibilityRole="button"
-          accessibilityLabel={`Now playing: ${liveSession.title}. Tap to join the Samagam.`}
-        >
-          {liveSession.thumbnailUrl ? (
-            <Image
-              source={{ uri: liveSession.thumbnailUrl }}
-              style={styles.liveCardThumb}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-            />
-          ) : (
-            <View style={[styles.liveCardThumb, styles.liveCardThumbEmpty]}>
-              <Image
-                source={require('../../../assets/icon.png')}
-                style={styles.liveCardThumbMark}
-                contentFit="contain"
-              />
-            </View>
-          )}
-          <View style={styles.liveCardBody}>
-            <SessionStatusBadge status="now_playing" />
-            <Text style={styles.liveCardTitle} numberOfLines={2}>
-              {liveSession.title}
-            </Text>
-            <Text style={styles.liveCardHint}>Tap to join the Samagam</Text>
-          </View>
-        </Pressable>
-      ) : null}
 
       {notConfigured ? (
         <EmptyState
@@ -642,6 +620,17 @@ export function HomeScreen({ navigation }: Props) {
             // ≥ the bar height (56) + breathing room, or the bar would
             // cover them at the end of the list.
             contentContainerStyle={[styles.feedContent, { paddingBottom: layout.bottomNavHeight + insets.bottom + 24 }]}
+            ListHeaderComponent={
+              sessionCardData && liveSession && (selectedChip === ALL_CHIP || selectedChip === 'Live') ? (
+                <FeedCard
+                  data={sessionCardData}
+                  onPress={() => navigation.navigate('SessionWatch', { sessionId: liveSession.id })}
+                  onChannelPress={() =>
+                    navigation.navigate('Channel', { channelId: channel?.channelId ?? OFFICIAL_CHANNEL_ID })
+                  }
+                />
+              ) : undefined
+            }
             onEndReached={onEndReached}
             onEndReachedThreshold={0.6}
             refreshing={refreshing}
@@ -715,26 +704,4 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   endOfFeedText: { ...typography.metadata, color: colors.textSecondary, textAlign: 'center' },
   pressed: { opacity: 0.85 },
-  liveCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.md,
-    padding: spacing.md,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  liveCardThumb: { width: 120, aspectRatio: 16 / 9, borderRadius: 8 },
-  liveCardThumbEmpty: {
-    backgroundColor: colors.surfaceVariant,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  liveCardThumbMark: { width: 40, height: 40 },
-  liveCardBody: { flex: 1, minWidth: 0, gap: spacing.xs, alignItems: 'flex-start' },
-  liveCardTitle: { ...typography.cardTitle, color: colors.text },
-  liveCardHint: { ...typography.metadata, color: colors.textSecondary },
 });
