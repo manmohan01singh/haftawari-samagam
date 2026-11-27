@@ -207,6 +207,41 @@ export interface ChannelIdentity {
   aliases: readonly string[];
 }
 
+export interface ChannelMatch {
+  /** Best raw scoreTitle score among this channel's candidates. */
+  score: number;
+  kind: ChannelResult['matchKind'];
+  /**
+   * Cross-channel comparison key for the single card slot. SOURCE
+   * WEIGHTING (Phase 13 regression fix): a match against the
+   * channel's own TITLE or HANDLE always outranks a match against
+   * another channel's ALIAS, whatever the raw scores — the rightful
+   * owner of a term wins its card. Concretely rank = score for an
+   * alias-only match, score + 2 for a title/handle match, so any
+   * qualifying identity match (≥ 0.7 → ≥ 2.7) beats any alias match
+   * (≤ 1.0), and within the same source class the raw score decides.
+   *
+   * One tie-break inside the identity class: if the channel ALSO
+   * owns the query as an exact alias (an admin deliberately seeded
+   * "this exact term names this channel"), it earns +0.05 — enough
+   * to beat the phrase-tightness bonus a shorter rival title gets.
+   * That is what separates AMRITVELA TRUST (seeded the exact alias
+   * 'amritvela') from Amritvela TV (title contains the term, but no
+   * exact claim) for the query "amritvela". An exact alias can
+   * never lift a channel INTO the identity class — BGSJ's stale
+   * 'amritvela' alias still loses to every Amritvela title match.
+   *
+   * Why this exists: BGSJ's identity carried an 'amritvela' alias
+   * (exact, 1.0) from before the real Amritvela channels existed,
+   * while AMRITVELA TRUST's own title only phrase-matches
+   * "amritvela" (~0.95) — raw-score comparison handed BGSJ the
+   * card for someone else's name. The DB channels row still carries
+   * those stale aliases until they are stripped centrally; this
+   * weighting keeps the app correct even before that lands.
+   */
+  rank: number;
+}
+
 /**
  * Decide — locally, at zero quota cost — whether the query names a
  * channel (full name, alias, handle, or acronym like "bgsj").
@@ -214,20 +249,41 @@ export interface ChannelIdentity {
 export function matchChannel(
   queryText: string,
   channel: ChannelIdentity,
-): { score: number; kind: ChannelResult['matchKind'] } | null {
-  const candidates = [channel.title, channel.handle.replace(/^@/, ''), ...channel.aliases];
-  let best: { score: number; kind: ChannelResult['matchKind'] } | null = null;
-  for (const candidate of candidates) {
-    const { score, kind } = scoreTitle(queryText, candidate);
+): ChannelMatch | null {
+  let bestIdentity: { score: number; kind: ChannelResult['matchKind'] } | null = null;
+  let bestAlias: { score: number; kind: ChannelResult['matchKind'] } | null = null;
+  let hasExactAlias = false;
+  const consider = (text: string, identity: boolean) => {
+    const { score, kind } = scoreTitle(queryText, text);
     // The channel card needs a stronger signal than a video result:
-    // a stray word like "singh" must not summon it.
-    if (score >= 0.7 && (!best || score > best.score)) best = { score, kind };
+    // a stray word must not summon it on a weak token overlap.
+    if (score < 0.7) return;
+    if (identity) {
+      if (!bestIdentity || score > bestIdentity.score) bestIdentity = { score, kind };
+    } else {
+      if (kind === 'exact') hasExactAlias = true;
+      if (!bestAlias || score > bestAlias.score) bestAlias = { score, kind };
+    }
+  };
+  consider(channel.title, true);
+  consider(channel.handle.replace(/^@/, ''), true);
+  for (const alias of channel.aliases) consider(alias, false);
+
+  // (Casts: the assignments happen inside the `consider` closure,
+  // which TS's control-flow narrowing cannot follow — it would
+  // otherwise believe both are still null here.)
+  const identity = bestIdentity as { score: number; kind: ChannelResult['matchKind'] } | null;
+  const alias = bestAlias as { score: number; kind: ChannelResult['matchKind'] } | null;
+  if (identity) {
+    const rank = 2 + identity.score + (hasExactAlias ? 0.05 : 0);
+    return { score: identity.score, kind: identity.kind, rank };
   }
-  return best;
+  if (alias) return { score: alias.score, kind: alias.kind, rank: alias.score };
+  return null;
 }
 
 /** Back-compat wrapper: match against the original official channel. */
-export function matchOfficialChannel(queryText: string): { score: number; kind: ChannelResult['matchKind'] } | null {
+export function matchOfficialChannel(queryText: string): ChannelMatch | null {
   return matchChannel(queryText, OFFICIAL_CHANNEL);
 }
 

@@ -144,12 +144,17 @@ async function runLegs(query: string, options: SearchOptions): Promise<LegsOutco
 
   // Channel card: the BEST-matching active channel wins the single
   // ref-3 card slot. Matching is local (zero quota); only the winner's
-  // card data costs a (cached) channels.list call.
-  let bestMatch: { channelId: string; score: number; kind: NonNullable<SearchResults['channel']>['matchKind'] } | null = null;
+  // card data costs a (cached) channels.list call. Comparison is by
+  // matchChannel's source-weighted RANK, not the raw score: a
+  // channel's own title/handle match always beats another channel's
+  // alias match (Phase 13: "amritvela" must show an Amritvela
+  // channel's card, not BGSJ's, whose identity carried the term as
+  // an alias).
+  let bestMatch: { channelId: string; score: number; rank: number; kind: NonNullable<SearchResults['channel']>['matchKind'] } | null = null;
   for (const identity of channels) {
     const match = matchChannel(query, identity);
-    if (match && (!bestMatch || match.score > bestMatch.score)) {
-      bestMatch = { channelId: identity.id, score: match.score, kind: match.kind };
+    if (match && (!bestMatch || match.rank > bestMatch.rank)) {
+      bestMatch = { channelId: identity.id, score: match.score, rank: match.rank, kind: match.kind };
     }
   }
   const channelPromise = bestMatch

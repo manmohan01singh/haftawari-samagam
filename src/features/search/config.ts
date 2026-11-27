@@ -25,14 +25,16 @@ export const OFFICIAL_CHANNEL = {
     'bhai sahib',
     'ludhiana wale',
     'bhai gursharan singh ji ludhiana wale',
-    // The channel's own daily programme terms: the Amritvela (early-
-    // morning Simran Sadhna) samagams are this channel's core content
-    // and the app's own vocabulary, so a search for the programme
-    // names the channel — its card + Latest videos belong on the
-    // results (round-3 fix: "Amritvela" returned no channel card).
-    'amritvela',
-    'amrit vela',
-    'amritvela samagam',
+    // REMOVED (Phase 13 regression fix): 'amritvela', 'amrit vela',
+    // 'amritvela samagam'. These were added in the round-3 fix when
+    // BGSJ was the ONLY channel and "Amritvela" returned no card.
+    // The real Amritvela channels (Amritvela Trust Live / Amritvela
+    // Trust) are in the registry now, and this channel's alias-exact
+    // match (score 1.0) was beating their own title matches for the
+    // single card slot — searching "amritvela" showed the BGSJ card.
+    // The rightful owners win the term now (see matchChannel's
+    // source weighting, which also covers the stale aliases still
+    // sitting in the DB channels row until they are stripped).
   ],
 } as const;
 
