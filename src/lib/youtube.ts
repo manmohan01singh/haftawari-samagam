@@ -460,5 +460,14 @@ export async function fetchChannelLiveAndUpcoming(
 export function isShortVideo(meta: YouTubeVideoMetadata): boolean {
   if (meta.title.toLowerCase().includes('#shorts')) return true;
   if (meta.description.toLowerCase().includes('#shorts')) return true;
-  return meta.durationSeconds !== null && meta.durationSeconds <= 60;
+  // A live/upcoming broadcast is never a Short: its duration parses
+  // from 'P0D' to 0, which the bare <= 60 check misclassified and the
+  // feeds silently dropped the sangat channels' 24/7 live streams
+  // (Phase 13 follow-up, found by the chips audit over 1,610 titles).
+  if (meta.liveBroadcastContent !== 'none') return false;
+  return (
+    meta.durationSeconds !== null &&
+    meta.durationSeconds > 0 &&
+    meta.durationSeconds <= 60
+  );
 }
