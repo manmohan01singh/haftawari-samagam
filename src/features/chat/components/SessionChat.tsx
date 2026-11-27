@@ -30,6 +30,7 @@ import {
   type ThemeColors,
 } from '../../../theme';
 import { useSessionChat, type ChatUser } from '../useSessionChat';
+import { formatCount } from '../../../lib/format';
 import { ICON_HIT_SLOP, SMALL_ICON_HIT_SLOP } from '../../../lib/touch';
 import type { ChatMessageWithAuthor } from '../types';
 import { ChatMessageRow } from './ChatMessageRow';
@@ -70,8 +71,13 @@ const AnimatedKeyboardAvoidingView = Animated.createAnimatedComponent(KeyboardAv
  * real data only:
  *
  * - Sheet chrome: drag handle (90×5, measured), "Live chat" header
- *   (≈24px bold) with a functional close button, and a sub-line with
- *   the REAL participant count when it is knowable.
+ *   (18px semibold — the size YouTube's own live-chat header uses)
+ *   with a functional close button, and a sub-line with the REAL
+ *   participant count when it is knowable. The community-guideline
+ *   line sits as a slim caption under the header (where YouTube
+ *   puts its welcome-to-chat text), and the composer is YouTube's
+ *   bottom row: the member's own avatar beside the "Chat…" pill —
+ *   no separate identity strip.
  * - Messages arrive via Supabase Realtime and history paginates on
  *   scroll-up; rows are memoised on an inverted FlatList.
  * - The crown (top-fans) and sliders (chat-settings) icons of the
@@ -357,45 +363,39 @@ export function SessionChat({
         {chat.participantCount !== null ? (
           <View style={styles.countWrap}>
             <MaterialIcons name="person" size={16} color={colors.textSecondary} />
-            <Text style={styles.subLabel}>{chat.participantCount}</Text>
+            <Text style={styles.subLabel}>{formatCount(chat.participantCount)}</Text>
           </View>
         ) : null}
       </View>
       </View>
 
+      {canChat ? (
+        <View style={styles.noticeBar}>
+          <Text style={styles.noticeText} numberOfLines={2}>
+            Welcome to the Samagam chat. Please keep messages respectful — moderators may
+            remove messages.
+          </Text>
+        </View>
+      ) : null}
+
       <View style={styles.listArea}>{body}</View>
 
       {canChat ? (
         <>
-          <View style={styles.noticeBox}>
-            <Text style={styles.noticeText}>
-              Chat is open to sangat who have joined this session. Please keep messages
-              respectful — moderators may remove messages.
-            </Text>
-          </View>
-          <View style={styles.identityRow}>
-            {chat.user ? (
-              <ChatAvatar
-                userId={chat.user.id}
-                displayName={identityName}
-                avatarUrl={chat.user.avatarUrl ?? null}
-                size={24}
-              />
-            ) : null}
-            {identityName ? (
-              <Text style={styles.identityText}>Chat publicly as {identityName}</Text>
-            ) : (
-              <Text style={styles.identityText}>
-                Chat publicly — no display name is set on your profile.
-              </Text>
-            )}
-          </View>
           {chat.sendError ? (
             <Text style={styles.errorText} accessibilityRole="alert">
               {chat.sendError} Your draft is kept below — tap Send to retry.
             </Text>
           ) : null}
           <View style={styles.inputRow}>
+            {chat.user ? (
+              <ChatAvatar
+                userId={chat.user.id}
+                displayName={identityName}
+                avatarUrl={chat.user.avatarUrl ?? null}
+                size={32}
+              />
+            ) : null}
             <View style={styles.inputPill}>
               <TextInput
                 ref={inputRef}
@@ -469,9 +469,11 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingTop: spacing.sm,
   },
   title: {
-    fontSize: 24,
-    lineHeight: 30,
-    fontWeight: '700',
+    // YouTube's live-chat header size (their sheet title is a
+    // compact semibold, not a page headline).
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '600',
     color: colors.text,
   },
   subRow: {
@@ -548,29 +550,18 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     ...typography.chip,
     color: colors.subscribeText,
   },
-  noticeBox: {
+  noticeBar: {
     marginHorizontal: spacing.lg,
     marginTop: spacing.sm,
     backgroundColor: colors.surfaceVariant,
     borderRadius: nativeApp.chatSheet.noticeRadius,
-    padding: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
   noticeText: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: colors.text,
-  },
-  identityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.sm,
-  },
-  identityText: {
-    ...typography.metadata,
+    fontSize: 12,
+    lineHeight: 17,
     color: colors.textSecondary,
-    flex: 1,
   },
   errorText: {
     ...typography.metadata,
@@ -579,11 +570,15 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     marginTop: spacing.sm,
   },
   inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
     paddingBottom: spacing.md,
   },
   inputPill: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surfaceVariant,

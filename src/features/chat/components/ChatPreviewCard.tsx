@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { nativeApp, radii, spacing, typography, useTheme, type ThemeColors } from '../../../theme';
 import { useCurrentChatUser, type ChatUser } from '../useSessionChat';
+import { formatCount } from '../../../lib/format';
 import { ChatAvatar } from './ChatAvatar';
 
 export interface ChatPreviewCardProps {
@@ -77,7 +78,7 @@ export function ChatPreviewCard({
           {participantCount !== undefined ? (
             <View style={styles.countWrap}>
               <MaterialIcons name="person" size={16} color={colors.textSecondary} />
-              <Text style={styles.countText}>{participantCount}</Text>
+              <Text style={styles.countText}>{formatCount(participantCount)}</Text>
             </View>
           ) : null}
           <MaterialIcons name="chevron-right" size={20} color={colors.textSecondary} />

@@ -64,7 +64,8 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   name: {
     fontSize: 14,
     lineHeight: 20,
-    fontWeight: '700',
+    // YouTube renders chat author names semibold grey, not bold.
+    fontWeight: '600',
     color: colors.textSecondary,
   },
   gap: {
