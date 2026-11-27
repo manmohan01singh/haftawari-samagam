@@ -7,6 +7,25 @@
     <title>%WEB_TITLE%</title>
     <meta name="theme-color" content="#FFFFFF" />
     <meta name="description" content="Haftawari and Amritvela kirtan samagams, scheduled and shared." />
+    <!-- SPA fallback restore (pairs with public/404.html): GitHub
+         Pages serves 404.html for deep app URLs; that page redirects
+         here with the path encoded as ?/path. Restore the real URL
+         before the bundle boots so React Navigation linking opens
+         the intended screen. Standard spa-github-pages snippet. -->
+    <script type="text/javascript">
+      (function (l) {
+        if (l.search[1] === '/') {
+          var decoded = l.search
+            .slice(1)
+            .split('&')
+            .map(function (s) {
+              return s.replace(/~and~/g, '&');
+            })
+            .join('?');
+          window.history.replaceState(null, null, l.pathname.slice(0, -1) + decoded + l.hash);
+        }
+      })(window.location);
+    </script>
     <!-- PWA manifest (public/manifest.webmanifest) + install icons.
          Relative hrefs: the web build is served under a base path
          (experiments.baseUrl, e.g. GitHub Pages /haftawari-samagam/),
