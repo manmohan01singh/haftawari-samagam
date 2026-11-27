@@ -240,6 +240,17 @@ const MAX_CATALOGUE_PAGES = 10;
  * the chip looked empty (Phase 13 fix).
  */
 const MAX_SCAN_PAGES_PER_CALL = 10;
+/**
+ * First-call scan budget (speed fix #2, verified live 27 Nov 2026):
+ * a batch must not wait for every channel's DEEP scan before it can
+ * render — the first next() call scans shallowly (3 pages/channel)
+ * so catalogue matches + early topic matches paint fast, and later
+ * calls (scroll) continue the same cursors deeper. Before this, a
+ * topic chip's first batch was gated on the slowest channel scanning
+ * up to 10 pages in series, and the chip sat on skeletons for tens
+ * of seconds looking exactly like an empty tab.
+ */
+const FIRST_CALL_SCAN_PAGES = 3;
 
 interface ChannelCursor {
   channel: AppChannel;
@@ -368,11 +379,14 @@ export function createHomeFeedPager({ channels, filter, seed }: HomeFeedPagerOpt
    * pages; the scan position persists on the cursor, so the next
    * onEndReached simply continues deeper into the uploads.
    */
+  /** Scan budget for the next() call currently running (see FIRST_CALL_SCAN_PAGES). */
+  let currentScanBudget = MAX_SCAN_PAGES_PER_CALL;
+
   async function fillBuffer(cursor: ChannelCursor): Promise<boolean> {
     if (cursor.buffer.length > 0) return true;
     if (cursor.exhausted || cursor.failed) return false;
     let scans = 0;
-    while (cursor.buffer.length === 0 && !cursor.exhausted && scans < MAX_SCAN_PAGES_PER_CALL) {
+    while (cursor.buffer.length === 0 && !cursor.exhausted && scans < currentScanBudget) {
       try {
         if (!cursor.primed) {
           // First page via the shared 30-min cache (2 units saved on
@@ -436,11 +450,15 @@ export function createHomeFeedPager({ channels, filter, seed }: HomeFeedPagerOpt
     }
   }
 
+  let nextCallCount = 0;
+
   async function next(count: number): Promise<{ items: HomeFeedItem[]; exhausted: boolean }> {
     // A channel that failed during the previous call gets a fresh
     // chance on every new call (scroll / refresh); within one call
     // it is tried once, so a dead key cannot spin the round-robin.
     for (const cursor of cursors) cursor.failed = false;
+    currentScanBudget = nextCallCount === 0 ? FIRST_CALL_SCAN_PAGES : MAX_SCAN_PAGES_PER_CALL;
+    nextCallCount++;
     await ensureCatalogue();
     const collected: HomeFeedItem[] = [];
     // Round-robin: one item per source per round, catalogue first in
