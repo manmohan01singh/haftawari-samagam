@@ -79,6 +79,16 @@ export function RootNavigator() {
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       <Stack.Screen name="SignIn" component={SignInScreen} />
       <Stack.Screen name="SignUp" component={SignUpScreen} />
+      {/* SetNewPassword is ALSO registered here, not only in the
+          recovery-gate navigator above: the linking config maps the
+          /set-new-password path to this screen, and a deep entry can
+          only resolve while the screen exists in the MOUNTED
+          navigator. Without this line a guest opening the path fell
+          back to Home even though the path was registered — the
+          screen renders its reset-link-only note for guests with no
+          recovery session, and the recovery flow itself still uses
+          the gate navigator (which mounts instead of this stack). */}
+      <Stack.Screen name="SetNewPassword" component={SetNewPasswordScreen} />
       {/* Admin routes are registered for EVERYONE: each admin screen
           renders its own AdminGate ("Sign-in required" for guests,
           "Not authorized" for members) and Row Level Security is the
