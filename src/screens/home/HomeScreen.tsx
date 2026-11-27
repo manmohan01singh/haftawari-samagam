@@ -630,15 +630,21 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   // Screenshot 01: cards are white containers on a light-grey page
   // ground — the grey shows in the gaps between cards and around the
   // sessions row. White-on-white made the feed read as one
-  // unbroken sheet with no card separation.
-  container: { flex: 1, backgroundColor: '#F8F8F8' },
+  // unbroken sheet with no card separation. Phase 13: the ground is
+  // the pageGround token — #F8F8F8 in light (unchanged), flat
+  // #0F0F0F in dark. It was hard-coded #F8F8F8 through the Phase 12
+  // migration, which left dark mode with a light-grey page behind
+  // dark cards (the user's "dark mode bahut kharab" report).
+  container: { flex: 1, backgroundColor: colors.pageGround },
   // Web pull-to-refresh wrapper: fills the feed area under the
   // header block; the indicator anchors to it.
   ptrWrap: { flex: 1 },
   // Translucent now: AppHeader carries the blur material; the chips
   // row below it sits on the same near-white translucent tone so the
   // whole top block reads as one glass bar (no solid white slab).
-  headerBlock: { backgroundColor: 'rgba(255,255,255,0.88)' },
+  // Phase 13: theme-aware via the headerBlockBackground token — the
+  // hard-coded white rendered as a white band in dark mode.
+  headerBlock: { backgroundColor: colors.headerBlockBackground },
   sessionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
