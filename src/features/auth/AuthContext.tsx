@@ -125,11 +125,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loadProfile = useCallback(async (userId: string) => {
     if (!supabase) return;
-    const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
-    // Ignore stale responses if the signed-in user changed meanwhile.
-    if (profileForUser.current === userId) {
-      setProfile((data as Profile | null) ?? null);
+    // Retry on failure: this fetch previously read only `data` and
+    // ignored `error`, so one transient failure (network blip, cold
+    // backend) silently set profile=null — and with it isAdmin=false:
+    // the Library "Admin dashboard" entry vanished and the Admin
+    // route was never registered, with nothing ever retrying. Now a
+    // failed fetch retries with backoff, and a failure NEVER clobbers
+    // an already-loaded profile with null.
+    const delaysMs = [0, 600, 1800];
+    for (let attempt = 0; attempt < delaysMs.length; attempt += 1) {
+      if (delaysMs[attempt] > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delaysMs[attempt]));
+      }
+      // Abandon retries if the signed-in user changed meanwhile.
+      if (profileForUser.current !== userId) return;
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+      if (error) continue;
+      if (profileForUser.current === userId) {
+        setProfile((data as Profile | null) ?? null);
+      }
+      return;
     }
+    // All attempts failed: keep whatever profile is already loaded
+    // (possibly null on a first-ever sign-in). The next auth event or
+    // an explicit refreshProfile() call re-runs this fetch.
   }, []);
 
   useEffect(() => {

@@ -46,11 +46,18 @@ export function deriveStatus(args: {
   if (storedStatus === 'cancelled' || storedStatus === 'completed') return storedStatus;
   const startMs = Date.parse(scheduledStartAt);
   if (nowMs < startMs) return 'upcoming';
-  const endMs = scheduledEndAt
-    ? Date.parse(scheduledEndAt)
-    : durationSeconds != null
-      ? startMs + durationSeconds * 1000
-      : null;
+  // Effective end: the scheduled window end AND the recording's own end
+  // both bound the session. A recording shorter than its scheduled
+  // window is FINISHED at its own end (the synced offset clamps there —
+  // deriveOffsetSeconds), so the session honestly flips to COMPLETED
+  // then instead of claiming NOW PLAYING over a player stuck at the
+  // end of the video until the window closes.
+  const windowEndMs = scheduledEndAt ? Date.parse(scheduledEndAt) : null;
+  const recordingEndMs = durationSeconds != null ? startMs + durationSeconds * 1000 : null;
+  const endMs =
+    windowEndMs != null && recordingEndMs != null
+      ? Math.min(windowEndMs, recordingEndMs)
+      : (windowEndMs ?? recordingEndMs);
   if (endMs != null && nowMs >= endMs) return 'completed';
   return 'now_playing';
 }

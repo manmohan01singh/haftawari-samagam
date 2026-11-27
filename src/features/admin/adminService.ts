@@ -285,6 +285,7 @@ export interface SessionVideoRef {
   title: string;
   youtube_video_id: string;
   thumbnail_url: string | null;
+  duration_seconds: number | null;
 }
 
 export interface SessionWithVideo extends SamagamSession {
@@ -295,7 +296,7 @@ export async function listSessionsWithVideo(): Promise<SessionWithVideo[]> {
   const supabase = requireSupabase();
   const { data, error } = await supabase
     .from('sessions')
-    .select('*, videos ( id, title, youtube_video_id, thumbnail_url )')
+    .select('*, videos ( id, title, youtube_video_id, thumbnail_url, duration_seconds )')
     .order('scheduled_start_at', { ascending: false });
   if (error) throw error;
   return ((data ?? []) as (SamagamSession & { videos: SessionVideoRef | null })[]).map(

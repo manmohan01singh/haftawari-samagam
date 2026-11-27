@@ -126,14 +126,24 @@ export async function getSessionWithVideo(
  * REAL roster count: rows in session_participants currently marked
  * 'joined'. This is a database count of actual join records — never a
  * stored, editable counter on the session row.
+ *
+ * Staleness guard: a row only counts while it is ALIVE — the watch
+ * screen heartbeats `last_seen_at` every 60s for joined viewers and
+ * deregisters on unmount / web pagehide, so a row untouched for over
+ * 5 minutes belongs to a client that vanished without leaving (tab
+ * crash, killed app) and must not inflate the count forever.
  */
+const JOINED_ALIVE_WINDOW_MS = 5 * 60 * 1000;
+
 export async function getJoinedParticipantCount(sessionId: string): Promise<number> {
   const supabase = requireSupabase();
+  const aliveSince = new Date(Date.now() - JOINED_ALIVE_WINDOW_MS).toISOString();
   const { count, error } = await supabase
     .from('session_participants')
     .select('*', { count: 'exact', head: true })
     .eq('session_id', sessionId)
-    .eq('state', 'joined');
+    .eq('state', 'joined')
+    .gte('last_seen_at', aliveSince);
   if (error) throw error;
   return count ?? 0;
 }

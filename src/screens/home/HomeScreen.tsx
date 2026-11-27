@@ -31,6 +31,11 @@ import {
   setVideoSaved,
 } from '../../lib/videos';
 import { FEED_LIST_PERF } from '../../lib/listPerf';
+import {
+  listSessionsWithVideos,
+} from '../../features/sessions/sessionService';
+import { deriveStatus } from '../../features/sessions/stateMachine';
+import { serverClock } from '../../features/sessions/serverClock';
 import { lightColors, spacing, typography } from '../../theme';
 import type { Category, Video } from '../../types/database';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
@@ -160,6 +165,54 @@ export function HomeScreen({ navigation }: Props) {
       .catch(() => undefined);
     return () => {
       active = false;
+    };
+  }, []);
+
+  // NOW PLAYING Samagam session, if one is really running right now:
+  // derived from the real sessions table + server clock (the same
+  // state machine the Sessions screens use), re-checked every 60s.
+  // Drives only the Sessions entry row below (its subtitle + where it
+  // leads) — no fabricated indicator: when nothing is playing, the
+  // row keeps its plain "watch together" form and leads to the list.
+  const [liveSession, setLiveSession] = useState<{ id: string; title: string } | null>(null);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    let active = true;
+    const check = async () => {
+      try {
+        await serverClock.sync();
+        const rows = await listSessionsWithVideos();
+        if (!active) return;
+        const nowMs = serverClock.nowMs();
+        const playing = rows.find(
+          (row) =>
+            deriveStatus({
+              storedStatus: row.session.status,
+              scheduledStartAt: row.session.scheduled_start_at,
+              scheduledEndAt: row.session.scheduled_end_at,
+              durationSeconds: row.video?.duration_seconds ?? null,
+              nowMs,
+            }) === 'now_playing',
+        );
+        setLiveSession(
+          playing
+            ? {
+                id: playing.session.id,
+                title: playing.session.title ?? playing.video?.title ?? 'Samagam',
+              }
+            : null,
+        );
+      } catch {
+        // Sessions presence on Home is an entry-point nicety; a failed
+        // check must never break the feed — the row just stays plain.
+      }
+    };
+    void check();
+    const timer = setInterval(() => void check(), 60_000);
+    return () => {
+      active = false;
+      clearInterval(timer);
     };
   }, []);
 
@@ -337,14 +390,22 @@ export function HomeScreen({ navigation }: Props) {
           screen. Styled as a plain reference row, not a banner. */}
       <Pressable
         style={({ pressed }) => [styles.sessionsRow, pressed && styles.sessionsRowPressed]}
-        onPress={() => navigation.navigate('Sessions')}
+        onPress={() =>
+          liveSession
+            ? navigation.navigate('SessionWatch', { sessionId: liveSession.id })
+            : navigation.navigate('Sessions')
+        }
         accessibilityRole="button"
-        accessibilityLabel="Samagam Sessions"
+        accessibilityLabel={liveSession ? `Now playing: ${liveSession.title}` : 'Samagam Sessions'}
       >
         <MaterialIcons name="groups" size={24} color={lightColors.text} />
         <View style={styles.sessionsLines}>
           <Text style={styles.sessionsTitle}>Samagam Sessions</Text>
-          <Text style={styles.sessionsSub}>Watch together at the scheduled time</Text>
+          <Text style={styles.sessionsSub} numberOfLines={1}>
+            {liveSession
+              ? `NOW PLAYING · ${liveSession.title}`
+              : 'Watch together at the scheduled time'}
+          </Text>
         </View>
         <MaterialIcons name="chevron-right" size={24} color={lightColors.textSecondary} />
       </Pressable>
@@ -355,7 +416,7 @@ export function HomeScreen({ navigation }: Props) {
       />
     </View>
     ),
-    [categories, selectedCategory, navigation],
+    [categories, selectedCategory, navigation, liveSession],
   );
 
   const renderItem = useCallback(
@@ -423,11 +484,13 @@ export function HomeScreen({ navigation }: Props) {
           onSelect={(key) => {
             if (key === 'subs') navigation.navigate('Subscriptions');
             // "Live" is the reference tab row's live entry; in this
-            // app the live surface is Samagam Sessions (NOW PLAYING) —
+            // app the live surface is Samagam Sessions filtered to
+            // NOW PLAYING (the filter value 'live' is mapped to the
+            // real status vocabulary by the Sessions screen) —
             // a real destination, not a dead tab. "Music"/"More" from
             // the screenshot have no section in this app and are not
             // shown as dead tabs.
-            if (key === 'live') navigation.navigate('Sessions');
+            if (key === 'live') navigation.navigate('Sessions', { filter: 'live' });
           }}
         />
       </View>
