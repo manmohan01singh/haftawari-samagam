@@ -15,6 +15,7 @@ export type MainTabParamList = {
 export type AdminStackParamList = {
   AdminOverview: undefined;
   AdminVideos: undefined;
+  AdminChannels: undefined;
   AdminSessions: undefined;
   AdminCategories: undefined;
   AdminMembers: undefined;

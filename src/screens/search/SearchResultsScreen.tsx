@@ -25,11 +25,8 @@ import {
   type VideoResult,
 } from '../../features/search';
 import { formatCount } from '../../lib/format';
-import {
-  OFFICIAL_CHANNEL_HANDLE,
-  fetchChannelUploads,
-  type YouTubeVideoMetadata,
-} from '../../lib/youtube';
+import { OFFICIAL_CHANNEL_HANDLE, type YouTubeVideoMetadata } from '../../lib/youtube';
+import { getUploadsCached, uploadsPlaylistIdFor } from '../../features/channels';
 import { lightColors, nativeApp, radii, spacing, typography } from '../../theme';
 import { goBackOrTab } from '../../navigation/safeBack';
 import type { RootStackParamList } from '../../navigation/types';
@@ -47,12 +44,12 @@ function searchResultCardData(v: VideoResult, channelAvatarUrl: string | null): 
     thumbnailUrl: listThumbnailUrl(v.youtubeVideoId, v.thumbnailUrl),
     durationSeconds: v.liveBroadcastContent === 'live' ? null : v.durationSeconds,
     broadcastState: v.liveBroadcastContent,
-    channelLine: OFFICIAL_CHANNEL_HANDLE,
+    channelLine: v.channelTitle ?? OFFICIAL_CHANNEL_HANDLE,
     metaLine:
       v.liveBroadcastContent === 'live' ? 'Live now' : formatDateLine(v.publishedAt),
     channelAvatarUrl,
     youtubeVideoId: v.youtubeVideoId,
-    channelId: OFFICIAL_CHANNEL_ID,
+    channelId: v.channelId ?? OFFICIAL_CHANNEL_ID,
   };
 }
 
@@ -179,18 +176,22 @@ export function SearchResultsScreen({ route, navigation }: Props) {
   const youtubeSkipped = data?.youtubeSkipped ?? false;
   const didYouMean = data?.didYouMean ?? null;
 
+  // "Latest videos" under the channel card belongs to the MATCHED
+  // channel (any active panel channel since migration 0003), not
+  // always the official one.
+  const matchedChannelId = channelResult?.channelId ?? null;
   useEffect(() => {
-    if (!channelMatches || !channel?.uploadsPlaylistId) return;
+    if (!channelMatches || !matchedChannelId) return;
     let active = true;
-    fetchChannelUploads(channel.uploadsPlaylistId)
-      .then((page) => {
-        if (active) setLatest(page.videos.slice(0, 10));
+    getUploadsCached(matchedChannelId, uploadsPlaylistIdFor(matchedChannelId))
+      .then((videos) => {
+        if (active) setLatest(videos.slice(0, 10));
       })
       .catch(() => undefined);
     return () => {
       active = false;
     };
-  }, [channelMatches, channel]);
+  }, [channelMatches, matchedChannelId]);
 
   const allItems = useMemo<VideoResult[]>(() => data?.videos ?? [], [data]);
   const counts = useMemo(
@@ -223,7 +224,11 @@ export function SearchResultsScreen({ route, navigation }: Props) {
 
   const renderItem = useCallback(
     ({ item }: { item: VideoResult }) => {
-      const cardData = searchResultCardData(item, channel?.avatarUrl ?? null);
+      const avatar =
+        item.channelId && item.channelId === channelResult?.channelId
+          ? channelResult.avatarUrl
+          : (channel?.avatarUrl ?? null);
+      const cardData = searchResultCardData(item, avatar);
       return (
         <ShelfCard
           data={cardData}
@@ -244,7 +249,7 @@ export function SearchResultsScreen({ route, navigation }: Props) {
         />
       );
     },
-    [channel, navigation, shareVideo],
+    [channel, channelResult, navigation, shareVideo],
   );
 
   const keyExtractor = useCallback(
@@ -255,7 +260,7 @@ export function SearchResultsScreen({ route, navigation }: Props) {
   const filterChips: { key: ResultFilter; label: string; count: number }[] = [
     { key: 'all', label: 'All', count: counts.all },
     { key: 'local', label: 'In this app', count: counts.local },
-    { key: 'youtube', label: 'On the channel', count: counts.youtube },
+    { key: 'youtube', label: 'On channels', count: counts.youtube },
     { key: 'live', label: 'Live', count: counts.live },
   ];
 
@@ -273,7 +278,7 @@ export function SearchResultsScreen({ route, navigation }: Props) {
         </Pressable>
       ) : null}
       {remotePending ? (
-        <Text style={styles.pendingNote}>Searching the official channel…</Text>
+        <Text style={styles.pendingNote}>Searching the channels…</Text>
       ) : youtubeSkipped ? (
         <Text style={styles.skippedNote}>
           Showing the published archive only — channel results are unavailable right now.
@@ -355,7 +360,7 @@ export function SearchResultsScreen({ route, navigation }: Props) {
                 contentContainerStyle={styles.carouselContent}
                 {...H_LIST_PERF}
                 renderItem={({ item }) => {
-                  const cardData: CardVideoData = apiCardData(item, channel?.avatarUrl ?? null);
+                  const cardData: CardVideoData = apiCardData(item, channelResult?.avatarUrl ?? channel?.avatarUrl ?? null);
                   return (
                     <View style={{ width: carouselCardWidth }}>
                       <ShelfCard

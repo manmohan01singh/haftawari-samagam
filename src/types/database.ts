@@ -104,6 +104,27 @@ export interface SavedVideo {
   saved_at: string;
 }
 
+/**
+ * A YouTube channel the admin has chosen for the app
+ * (supabase/migrations/0003_channels.sql). Title/avatar are an API
+ * snapshot taken when the channel was added/refreshed; live state is
+ * NEVER stored here — it always comes from the YouTube API at read time.
+ */
+export interface ChannelRecord {
+  id: string;
+  youtube_channel_id: string; // UC… id
+  handle: string | null; // e.g. '@amritvelatrust'
+  title: string;
+  avatar_url: string | null;
+  /** Extra typed name forms for search matching only; never displayed. */
+  aliases: string[];
+  is_active: boolean;
+  sort_order: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface AuditLog {
   id: string;
   actor_id: string | null;

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { FlatList, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Image } from 'expo-image';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { CompositeScreenProps } from '@react-navigation/native';
@@ -14,13 +14,15 @@ import { GridCard } from '../../components/video/GridCard';
 import { SkeletonCard } from '../../components/video/SkeletonCard';
 import { apiCardData, formatDateLine } from '../../components/video/cardData';
 import { useAuth } from '../../features/auth';
-import { useOfficialChannel } from '../../features/channel';
 import {
-  fetchChannelLiveAndUpcoming,
-  fetchChannelUploads,
-  isShortVideo,
-  type YouTubeVideoMetadata,
-} from '../../lib/youtube';
+  getChannelInfoCached,
+  getLiveCached,
+  getUploadsCached,
+  uploadsPlaylistIdFor,
+  useActiveChannels,
+  type AppChannel,
+} from '../../features/channels';
+import { isShortVideo, type YouTubeVideoMetadata } from '../../lib/youtube';
 import { FEED_LIST_PERF } from '../../lib/listPerf';
 import { lightColors, nativeApp, radii, spacing } from '../../theme';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
@@ -40,36 +42,34 @@ const FILTERS: { key: UploadFilter; label: string }[] = [
 ];
 
 /**
- * Subscriptions (reference §2 + QA fixes 72–76): channel avatar rail,
- * a "Most relevant" heading, and the channel's uploads as ONE
- * consistent, responsive grid.
+ * Subscriptions — MULTI-CHANNEL since the channels panel (migration
+ * 0003): the avatar rail and the feed read from the admin-chosen
+ * `channels` table (all ACTIVE channels, in admin order), not from a
+ * hard-coded single channel. With exactly one active channel this is
+ * precisely the old single-channel screen.
  *
- * QA fixes in this rewrite:
- *  - Shorts are filtered OUT of the uploads with the same heuristic
- *    search uses (isShortVideo) — never showcased (user ban).
- *  - Working filter chips (All / Videos / Live) and a working sort
- *    (Latest / Oldest) — previously neither existed.
- *  - Every item is the same compact GridCard; card data falls back
- *    to the channel title / publish date so no card renders blank
- *    lines. Items with no title at all (deleted/private uploads) are
- *    dropped rather than shown as ghosts.
- *  - The rail has exactly one entry because this app follows exactly
- *    one channel — real data, honestly shown. (Round 1 gave the rail
- *    name two lines; the round-2 reference shows one truncated line,
- *    so it is one line now — screenshot wins.)
- * Round 2: mobile is a 2-column compact grid per ref-2 (the ref's
- * horizontal 'Most relevant' carousel and its Shorts shelf are NOT
- * reproduced — the tasking specifies the grid, and Shorts are banned).
+ *  - Rail: one avatar per active channel (ref-2 pattern), with a red
+ *    live dot ONLY when YouTube itself reports that channel as live
+ *    right now (cached live check, 5 min). Tapping an avatar filters
+ *    the feed to that channel; tapping the selected avatar again opens
+ *    its Channel page. "All" merges every channel's uploads.
+ *  - Feed: each channel's uploads (Shorts filtered OUT — user ban),
+ *    de-duplicated and date-ordered; the Live filter shows only what
+ *    the API reports as live/upcoming.
+ *  - Quota: uploads cached 30 min per channel, live checks cached
+ *    5 min and run sequentially (staggered) — see docs/CHANNELS.md.
  * There is NO Shorts shelf (user decision).
  */
 export function SubscriptionsScreen({ navigation }: Props) {
   const { user, profile } = useAuth();
   const listRef = useRef<FlatList<YouTubeVideoMetadata>>(null);
   useScrollToTop(listRef);
-  const channel = useOfficialChannel();
+  const { channels, loading: channelsLoading } = useActiveChannels();
   const { width } = useWindowDimensions();
-  const [uploads, setUploads] = useState<YouTubeVideoMetadata[]>([]);
-  const [isLiveNow, setIsLiveNow] = useState(false);
+  const [selected, setSelected] = useState<string | 'all'>('all');
+  const [uploadsByChannel, setUploadsByChannel] = useState<Map<string, YouTubeVideoMetadata[]>>(new Map());
+  const [liveByChannel, setLiveByChannel] = useState<Map<string, YouTubeVideoMetadata[]>>(new Map());
+  const [infoAvatars, setInfoAvatars] = useState<Map<string, string | null>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<UploadFilter>('all');
@@ -87,21 +87,28 @@ export function SubscriptionsScreen({ navigation }: Props) {
     [showToast],
   );
 
+  const channelIdsKey = channels.map((c) => c.youtubeChannelId).join(',');
+
+  // Uploads for every active channel (cached per channel).
   useEffect(() => {
-    if (!channel?.uploadsPlaylistId || !channel.channelId) return;
+    if (channels.length === 0) return;
     let active = true;
     (async () => {
       try {
-        const [page, live] = await Promise.all([
-          fetchChannelUploads(channel.uploadsPlaylistId!),
-          fetchChannelLiveAndUpcoming(channel.channelId).catch(() => []),
-        ]);
+        const entries = await Promise.all(
+          channels.map(async (c) => {
+            const videos = await getUploadsCached(
+              c.youtubeChannelId,
+              uploadsPlaylistIdFor(c.youtubeChannelId),
+            ).catch(() => [] as YouTubeVideoMetadata[]);
+            return [c.youtubeChannelId, videos] as const;
+          }),
+        );
         if (!active) return;
-        setUploads(page.videos);
-        setIsLiveNow(live.some((v) => v.liveBroadcastContent === 'live'));
+        setUploadsByChannel(new Map(entries));
         setError(null);
       } catch (e) {
-        if (active) setError(e instanceof Error ? e.message : 'Could not load the channel.');
+        if (active) setError(e instanceof Error ? e.message : 'Could not load subscriptions.');
       } finally {
         if (active) setLoading(false);
       }
@@ -109,36 +116,97 @@ export function SubscriptionsScreen({ navigation }: Props) {
     return () => {
       active = false;
     };
-  }, [channel, reloadKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channelIdsKey, reloadKey]);
+
+  // Live checks — sequential (staggered) so N channels never burst
+  // N×200 units at once; each result is cached 5 min.
+  useEffect(() => {
+    if (channels.length === 0) return;
+    let active = true;
+    (async () => {
+      for (const c of channels) {
+        if (!active) return;
+        const items = await getLiveCached(c.youtubeChannelId);
+        if (!active) return;
+        setLiveByChannel((prev) => new Map(prev).set(c.youtubeChannelId, items));
+      }
+    })();
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channelIdsKey, reloadKey]);
+
+  // Fill avatars the table snapshot lacks (e.g. the fallback channel)
+  // from cached channel metadata (1 unit, 6h cache).
+  useEffect(() => {
+    let active = true;
+    for (const c of channels) {
+      if (c.avatarUrl) continue;
+      void getChannelInfoCached(c.youtubeChannelId).then((info) => {
+        if (active && info) {
+          setInfoAvatars((prev) => new Map(prev).set(c.youtubeChannelId, info.avatarUrl));
+        }
+      });
+    }
+    return () => {
+      active = false;
+    };
+  }, [channels]);
+
+  const avatarFor = useCallback(
+    (channel: AppChannel): string | null => channel.avatarUrl ?? infoAvatars.get(channel.youtubeChannelId) ?? null,
+    [infoAvatars],
+  );
+
+  const channelById = useMemo(
+    () => new Map(channels.map((c) => [c.youtubeChannelId, c])),
+    [channels],
+  );
+
+  const scopeChannels = useMemo(
+    () => (selected === 'all' ? channels : channels.filter((c) => c.youtubeChannelId === selected)),
+    [channels, selected],
+  );
 
   const visible = useMemo(() => {
-    const clean = uploads.filter((v) => v.title.trim().length > 0 && !isShortVideo(v));
+    const byVideoId = new Map<string, YouTubeVideoMetadata>();
+    for (const c of scopeChannels) {
+      for (const v of uploadsByChannel.get(c.youtubeChannelId) ?? []) {
+        if (!byVideoId.has(v.youtubeVideoId)) byVideoId.set(v.youtubeVideoId, v);
+      }
+      if (filter === 'live') {
+        for (const v of liveByChannel.get(c.youtubeChannelId) ?? []) {
+          if (!byVideoId.has(v.youtubeVideoId)) byVideoId.set(v.youtubeVideoId, v);
+        }
+      }
+    }
+    const clean = [...byVideoId.values()].filter(
+      (v) => v.title.trim().length > 0 && !isShortVideo(v),
+    );
     const filtered =
       filter === 'all'
         ? clean
         : filter === 'videos'
           ? clean.filter((v) => v.liveBroadcastContent === 'none')
           : clean.filter((v) => v.liveBroadcastContent !== 'none');
-    const sorted = [...filtered].sort((a, b) =>
+    return [...filtered].sort((a, b) =>
       sort === 'latest'
         ? b.publishedAt.localeCompare(a.publishedAt)
         : a.publishedAt.localeCompare(b.publishedAt),
     );
-    return sorted;
-  }, [uploads, filter, sort]);
+  }, [scopeChannels, uploadsByChannel, liveByChannel, filter, sort]);
 
-  // Round-2 headline fix: the reference Subscriptions layout is a
-  // 2-COLUMN grid of compact cards ON MOBILE (cur-4 showed a single
-  // column of full-width shelf cards). Wider surfaces get more
-  // columns of the same compact card.
   const columns = width >= 1024 ? 4 : width >= 640 ? 3 : 2;
 
   const renderItem = useCallback(
     ({ item }: { item: YouTubeVideoMetadata }) => {
-      const base = apiCardData(item, channel?.avatarUrl ?? null);
+      const owner = channelById.get(item.channelId);
+      const base = apiCardData(item, owner ? avatarFor(owner) : null);
       const data = {
         ...base,
-        channelLine: base.channelLine || (channel?.title ?? ''),
+        channelLine: base.channelLine || item.channelTitle || owner?.title || '',
         metaLine: base.metaLine || formatDateLine(item.publishedAt),
       };
       return (
@@ -156,61 +224,87 @@ export function SubscriptionsScreen({ navigation }: Props) {
         />
       );
     },
-    [channel, navigation, shareVideo],
+    [channelById, avatarFor, navigation, shareVideo],
   );
 
   const keyExtractor = useCallback((item: YouTubeVideoMetadata) => item.youtubeVideoId, []);
   const initial = profile?.display_name?.charAt(0)?.toUpperCase() ?? user?.email?.charAt(0)?.toUpperCase() ?? null;
+  const selectedChannel = selected === 'all' ? null : (channelById.get(selected) ?? null);
+  const isLoading = channelsLoading || loading;
 
   const header = (
     <View>
-      {/* Avatar rail — the one channel this app follows. */}
-      <View style={styles.rail}>
-        <Pressable
-          style={styles.railItem}
-          onPress={() => navigation.navigate('Channel', { channelId: channel?.channelId })}
-          accessibilityRole="button"
-          accessibilityLabel={channel?.title ?? 'Official channel'}
-        >
-          <View style={styles.railAvatarWrap}>
-            {channel?.avatarUrl ? (
-              <Image source={{ uri: channel.avatarUrl }} style={styles.railAvatar} contentFit="cover" cachePolicy="memory-disk" />
-            ) : (
-              <View style={[styles.railAvatar, styles.avatarFallback]}>
-                <Text style={styles.avatarInitial}>{channel?.title.charAt(0) ?? 'B'}</Text>
+      {/* Avatar rail — every active channel from the panel. */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
+        {channels.map((c) => {
+          const isLiveNow = (liveByChannel.get(c.youtubeChannelId) ?? []).some(
+            (v) => v.liveBroadcastContent === 'live',
+          );
+          const isSelected = selected === c.youtubeChannelId;
+          const avatar = avatarFor(c);
+          return (
+            <Pressable
+              key={c.youtubeChannelId}
+              style={styles.railItem}
+              onPress={() => {
+                if (isSelected) {
+                  navigation.navigate('Channel', { channelId: c.youtubeChannelId });
+                } else {
+                  setSelected(c.youtubeChannelId);
+                }
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={isSelected ? `${c.title} — open channel page` : `Show uploads from ${c.title}`}
+              accessibilityState={{ selected: isSelected }}
+            >
+              <View style={[styles.railAvatarWrap, isSelected && styles.railAvatarSelected]}>
+                {avatar ? (
+                  <Image source={{ uri: avatar }} style={styles.railAvatar} contentFit="cover" cachePolicy="memory-disk" />
+                ) : (
+                  <View style={[styles.railAvatar, styles.avatarFallback]}>
+                    <Text style={styles.avatarInitial}>{c.title.charAt(0)}</Text>
+                  </View>
+                )}
+                {isLiveNow ? <View style={styles.liveDot} /> : null}
               </View>
-            )}
-            {isLiveNow ? <View style={styles.liveDot} /> : null}
-          </View>
-          <Text style={styles.railName} numberOfLines={1}>
-            {channel?.title ?? ''}
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => navigation.navigate('Channel', { channelId: channel?.channelId })}
-          accessibilityRole="button"
-          style={styles.railAll}
-        >
-          <Text style={styles.railAllText}>All</Text>
-        </Pressable>
-      </View>
+              <Text style={styles.railName} numberOfLines={1}>
+                {c.title}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
 
-      <Text style={styles.heading}>Most relevant</Text>
+      <View style={styles.headingRow}>
+        <Text style={styles.heading}>
+          {selectedChannel ? selectedChannel.title : 'Most relevant'}
+        </Text>
+        {channels.length > 1 && selected !== 'all' ? (
+          <Pressable
+            onPress={() => setSelected('all')}
+            accessibilityRole="button"
+            accessibilityLabel="Show all channels"
+            style={styles.railAll}
+          >
+            <Text style={styles.railAllText}>All</Text>
+          </Pressable>
+        ) : null}
+      </View>
 
       {/* Filter chips + sort (QA 76): real, working controls. */}
       <View style={styles.controlsRow}>
         <View style={styles.chipsRow}>
           {FILTERS.map((f) => {
-            const active = filter === f.key;
+            const activeChip = filter === f.key;
             return (
               <Pressable
                 key={f.key}
-                style={[styles.chip, active && styles.chipActive]}
+                style={[styles.chip, activeChip && styles.chipActive]}
                 onPress={() => setFilter(f.key)}
                 accessibilityRole="button"
-                accessibilityState={{ selected: active }}
+                accessibilityState={{ selected: activeChip }}
               >
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>{f.label}</Text>
+                <Text style={[styles.chipText, activeChip && styles.chipTextActive]}>{f.label}</Text>
               </Pressable>
             );
           })}
@@ -235,9 +329,8 @@ export function SubscriptionsScreen({ navigation }: Props) {
         onAccountPress={() => navigation.navigate('MainTabs', { screen: 'Library' })}
         avatarInitial={initial}
       />
-      {/* QA44: SecondaryTabs removed — it duplicated the bottom nav. */}
 
-      {loading ? (
+      {isLoading ? (
         <View style={[styles.listPad, styles.skeletonRow]}>
           <View style={styles.skeletonCell}>
             <SkeletonCard variant="shelf" />
@@ -246,18 +339,22 @@ export function SubscriptionsScreen({ navigation }: Props) {
             <SkeletonCard variant="shelf" />
           </View>
         </View>
-      ) : error || !channel ? (
+      ) : error ? (
         <EmptyState
           title="Could not load subscriptions"
-          message={error ?? 'The official channel could not be loaded.'}
+          message={error}
           actionLabel="Try again"
           onAction={() => {
             setLoading(true);
             setReloadKey((k) => k + 1);
           }}
         />
+      ) : channels.length === 0 ? (
+        <EmptyState
+          title="No channels in the app"
+          message="The admin has not activated any channel yet. Channels added in the admin panel will appear here."
+        />
       ) : (
-
         <FlatList
           ref={listRef}
           key={`cols-${columns}`}
@@ -271,19 +368,14 @@ export function SubscriptionsScreen({ navigation }: Props) {
           ListEmptyComponent={
             <EmptyState
               title={
-                uploads.length === 0
-                  ? 'No uploads yet'
-                  : filter === 'live'
-                    ? 'No live or upcoming broadcasts'
-                    : 'Nothing here'
+                filter === 'live'
+                  ? 'No live or upcoming broadcasts'
+                  : 'Nothing here'
               }
               message={
-                uploads.length === 0
-                  ? "The channel's uploads will appear here."
-                  : filter === 'live'
-                    ? 'This channel is not live right now and has no upcoming broadcasts on YouTube.'
-                    : 'No uploads match this filter.'
-
+                filter === 'live'
+                  ? 'None of these channels is live right now or has an upcoming broadcast on YouTube.'
+                  : 'No uploads match this filter.'
               }
             />
           }
@@ -305,7 +397,8 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
   },
   railItem: { width: 76, alignItems: 'center' },
-  railAvatarWrap: { position: 'relative' },
+  railAvatarWrap: { position: 'relative', borderRadius: nativeApp.avatarRail.avatarSize / 2 + 3, padding: 3 },
+  railAvatarSelected: { borderWidth: 2, borderColor: lightColors.text, padding: 1 },
   railAvatar: {
     width: nativeApp.avatarRail.avatarSize,
     height: nativeApp.avatarRail.avatarSize,
@@ -336,14 +429,21 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     width: '100%',
   },
-  railAll: { marginLeft: 'auto', paddingTop: 22 },
+  railAll: { paddingVertical: 4 },
   railAllText: { fontSize: 15, fontWeight: '600', color: '#065FD4' },
+  headingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.xl,
+    marginBottom: spacing.md,
+    gap: spacing.md,
+  },
   heading: {
+    flex: 1,
     fontSize: 20,
     fontWeight: '600',
     color: lightColors.text,
-    marginTop: spacing.xl,
-    marginBottom: spacing.md,
   },
   controlsRow: {
     flexDirection: 'row',

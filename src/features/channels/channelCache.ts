@@ -1,0 +1,108 @@
+/**
+ * Quota-saving caches for per-channel YouTube data (see
+ * docs/CHANNELS.md for the full strategy and unit budget).
+ *
+ * Everything is AsyncStorage-backed with a TTL, mirroring the search
+ * stream's cache helpers:
+ *   - channel metadata (channels.list, 1 unit)      — 6 hours
+ *   - first uploads page (playlistItems 1 + videos 1) — 30 minutes
+ *   - live/upcoming check (search.list, 100 units ×2) — 5 minutes,
+ *     and callers additionally stagger checks so opening
+ *     Subscriptions never fires every channel's check at once.
+ *
+ * Live state is only ever what the API reported at fetch time; the
+ * short TTL keeps that honest (a stale "live" can survive at most
+ * 5 minutes, and the badge always means "YouTube reported this
+ * broadcast as live", never a session label).
+ */
+
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+import {
+  fetchChannelById,
+  fetchChannelLiveAndUpcoming,
+  fetchChannelUploads,
+  type YouTubeChannelInfo,
+  type YouTubeVideoMetadata,
+} from '../../lib/youtube';
+
+const PREFIX = '@haftawari/channels:v1:';
+export const CHANNEL_INFO_TTL_MS = 6 * 60 * 60 * 1000;
+export const UPLOADS_TTL_MS = 30 * 60 * 1000;
+export const LIVE_TTL_MS = 5 * 60 * 1000;
+
+async function readCache<T>(key: string, ttlMs: number): Promise<T | null> {
+  try {
+    const raw = await AsyncStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { fetchedAt: number; value: T };
+    if (Date.now() - parsed.fetchedAt > ttlMs) return null;
+    return parsed.value;
+  } catch {
+    return null;
+  }
+}
+
+async function writeCache<T>(key: string, value: T): Promise<void> {
+  try {
+    await AsyncStorage.setItem(key, JSON.stringify({ fetchedAt: Date.now(), value }));
+  } catch {
+    // Best-effort: a full/blocked store must not fail the screen.
+  }
+}
+
+const inflight = new Map<string, Promise<unknown>>();
+
+function dedupe<T>(key: string, run: () => Promise<T>): Promise<T> {
+  const existing = inflight.get(key);
+  if (existing) return existing as Promise<T>;
+  const promise = run().finally(() => inflight.delete(key));
+  inflight.set(key, promise);
+  return promise;
+}
+
+/** Channel metadata, cached 6h (channels.list = 1 unit). */
+export async function getChannelInfoCached(channelId: string): Promise<YouTubeChannelInfo | null> {
+  const key = `${PREFIX}info:${channelId}`;
+  const cached = await readCache<YouTubeChannelInfo>(key, CHANNEL_INFO_TTL_MS);
+  if (cached) return cached;
+  return dedupe(key, async () => {
+    const info = await fetchChannelById(channelId).catch(() => null);
+    if (info) await writeCache(key, info);
+    return info;
+  });
+}
+
+/** First page of a channel's uploads, cached 30 min (2 units). */
+export async function getUploadsCached(
+  channelId: string,
+  uploadsPlaylistId: string,
+): Promise<YouTubeVideoMetadata[]> {
+  const key = `${PREFIX}uploads:${channelId}`;
+  const cached = await readCache<YouTubeVideoMetadata[]>(key, UPLOADS_TTL_MS);
+  if (cached) return cached;
+  return dedupe(key, async () => {
+    const page = await fetchChannelUploads(uploadsPlaylistId);
+    await writeCache(key, page.videos);
+    return page.videos;
+  });
+}
+
+/**
+ * A channel's live-now + upcoming broadcasts AS REPORTED BY YOUTUBE
+ * (search.list eventType, 100 units each), cached 5 min. This is the
+ * most expensive call in the app — never call it per keystroke or in a
+ * tight loop; Subscriptions staggers it across channels.
+ */
+export async function getLiveCached(channelId: string): Promise<YouTubeVideoMetadata[]> {
+  const key = `${PREFIX}live:${channelId}`;
+  const cached = await readCache<YouTubeVideoMetadata[]>(key, LIVE_TTL_MS);
+  if (cached) return cached;
+  return dedupe(key, async () => {
+    const items = await fetchChannelLiveAndUpcoming(channelId).catch(
+      () => [] as YouTubeVideoMetadata[],
+    );
+    await writeCache(key, items);
+    return items;
+  });
+}
