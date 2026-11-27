@@ -12,6 +12,18 @@ export interface BottomNavItem {
   label: string;
   /** MaterialIcons glyph name for icon slots. */
   icon?: string;
+  /**
+   * Optional glyph shown instead of `icon` while the slot is active
+   * (filled/outline state pair). NOTE: MaterialIcons' glyphMap has NO
+   * 'home-outline' and NO 'subscriptions-outline' (verified against
+   * @expo/vector-icons glyphmaps, Phase 9) — the pairs this app's
+   * slots would need do not exist in this icon family, so no caller
+   * currently passes activeIcon; the active cue stays colour (full
+   * text colour vs textSecondary) + the avatar slot's ring. The prop
+   * exists so a future pair can be wired without another API change.
+   * Do NOT switch icon libraries for this.
+   */
+  activeIcon?: string;
   /** 'create' renders the circled-+ glyph in reference proportions (the slot opens the official channel in this app — destination unchanged, glyph matched to ref in round 2); 'avatar' renders the profile slot. */
   kind?: 'icon' | 'create' | 'avatar';
   avatarUrl?: string | null;
@@ -64,7 +76,7 @@ export const BottomNav = memo(function BottomNav({ items, activeKey, onPress, ov
         return (
           <Pressable
             key={item.key}
-            style={styles.item}
+            style={({ pressed }) => [styles.item, pressed && styles.itemPressed]}
             onPress={() => onPress(item.key)}
             accessibilityRole="button"
             accessibilityLabel={item.label}
@@ -117,7 +129,7 @@ export const BottomNav = memo(function BottomNav({ items, activeKey, onPress, ov
               // black glyph, inactive = dimmed glyph, both 24dp,
               // no background shape — exactly the ref-1 bottom bar.
               <MaterialIcons
-                name={(item.icon ?? 'home') as keyof typeof MaterialIcons.glyphMap}
+                name={((active && item.activeIcon) || item.icon || 'home') as keyof typeof MaterialIcons.glyphMap}
                 size={24}
                 color={active ? lightColors.text : lightColors.textSecondary}
               />
@@ -178,6 +190,9 @@ const styles = StyleSheet.create({
   },
   row: { flex: 1, flexDirection: 'row' },
   item: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  // Pressed feedback (Phase 9): the bar previously gave NO visual
+  // response to a tap. Opacity dip, matching StackHeader's back.
+  itemPressed: { opacity: 0.6 },
   createCircle: {
     width: 28,
     height: 28,
@@ -189,7 +204,8 @@ const styles = StyleSheet.create({
   },
   avatar: { width: 28, height: 28, borderRadius: 14 },
   // Active-state cue for the avatar slot (QA 50): a 2px ring in the
-  // primary text colour; icon slots cue via the pill behind the icon.
+  // primary text colour; icon slots cue by glyph colour only (full
+  // text colour active vs textSecondary inactive — NO pill, per ref).
   avatarActive: { borderWidth: 2, borderColor: lightColors.text },
   avatarFallback: {
     backgroundColor: lightColors.surfaceVariant,

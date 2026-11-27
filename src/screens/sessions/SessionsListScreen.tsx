@@ -9,8 +9,8 @@ import {
   Text,
   View,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
 import { goBackOrTab } from '../../navigation/safeBack';
+import { StackHeader } from '../../components/layout/StackHeader';
 import { StackTabBar } from '../../components/layout/StackTabBar';
 import { EmptyState } from '../../components/common/EmptyState';
 import { SessionCard } from '../../features/sessions/components/SessionCard';
@@ -203,18 +203,7 @@ export function SessionsListScreen({ navigation, route }: Props) {
   // out, and the error state told them to "pull down to retry" on a
   // non-scrollable surface with no retry control — a dead end.
   const topBar = (
-    <View style={styles.topBar}>
-      <Pressable
-        onPress={() => goBackOrTab(navigation, 'Home')}
-        hitSlop={10}
-        accessibilityLabel="Back"
-        accessibilityRole="button"
-      >
-        <MaterialIcons name="arrow-back" size={24} color={lightColors.text} />
-      </Pressable>
-      <Text style={styles.topBarTitle}>Samagam Sessions</Text>
-      <View style={styles.topBarSpacer} />
-    </View>
+    <StackHeader title="Samagam Sessions" onBack={() => goBackOrTab(navigation, 'Home')} />
   );
 
   if (!isSupabaseConfigured) {
@@ -318,16 +307,6 @@ export function SessionsListScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: lightColors.background },
-  topBar: {
-    height: 52,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    backgroundColor: lightColors.background,
-  },
-  topBarTitle: { fontSize: 17, fontWeight: '600', color: lightColors.text },
-  topBarSpacer: { width: 24 },
   list: { flex: 1, backgroundColor: lightColors.background },
   content: { paddingTop: spacing.lg, paddingBottom: spacing.xxl },
   emptyContainer: { flexGrow: 1 },

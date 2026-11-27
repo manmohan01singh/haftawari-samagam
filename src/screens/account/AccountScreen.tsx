@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { goBackOrTab } from '../../navigation/safeBack';
+import { StackHeader } from '../../components/layout/StackHeader';
 import { StackTabBar } from '../../components/layout/StackTabBar';
 import { UserAvatar } from '../../components/common/UserAvatar';
 import { useAuth } from '../../features/auth';
@@ -39,13 +40,7 @@ export function AccountScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.topBar}>
-        <Pressable onPress={() => goBackOrTab(navigation, 'Library')} hitSlop={10} accessibilityLabel="Back">
-          <MaterialIcons name="arrow-back" size={24} color={lightColors.text} />
-        </Pressable>
-        <Text style={styles.topBarTitle}>Account</Text>
-        <View style={{ width: 24 }} />
-      </View>
+      <StackHeader title="Account" onBack={() => goBackOrTab(navigation, 'Library')} />
       <ScrollView contentContainerStyle={styles.content}>
         {loading ? (
           <Text style={styles.meta}>Loading…</Text>
@@ -133,14 +128,6 @@ export function AccountScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: lightColors.background },
-  topBar: {
-    height: 52,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-  },
-  topBarTitle: { fontSize: 17, fontWeight: '600', color: lightColors.text },
   content: { padding: spacing.lg },
   profileBlock: { alignItems: 'center', paddingVertical: spacing.lg },
   avatarWrap: { marginBottom: spacing.md },

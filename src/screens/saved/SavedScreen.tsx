@@ -1,6 +1,5 @@
 import React, { useCallback, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { isSupabaseConfigured } from '../../lib/supabase';
@@ -14,6 +13,7 @@ import type { LibraryRootStackParamList } from '../../features/library/screenTyp
 import { ScreenMessage } from '../../features/library/components/ScreenMessage';
 import { SkeletonCard } from '../../components/video/SkeletonCard';
 import { goBackOrTab } from '../../navigation/safeBack';
+import { StackHeader } from '../../components/layout/StackHeader';
 import { StackTabBar } from '../../components/layout/StackTabBar';
 import { SwipeableRow } from '../../features/library/components/SwipeableRow';
 import { VideoListRow } from '../../features/library/components/VideoListRow';
@@ -75,13 +75,7 @@ export function SavedScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.topBar}>
-        <Pressable onPress={() => goBackOrTab(navigation, 'Library')} hitSlop={10} accessibilityLabel="Back" accessibilityRole="button">
-          <MaterialIcons name="arrow-back" size={24} color={lightColors.text} />
-        </Pressable>
-        <Text style={styles.topBarTitle}>Saved</Text>
-        <View style={styles.topBarSpacer} />
-      </View>
+      <StackHeader title="Saved" onBack={() => goBackOrTab(navigation, 'Library')} />
 
       {!isSupabaseConfigured ? (
         <ScreenMessage
@@ -139,15 +133,6 @@ export function SavedScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: lightColors.background },
-  topBar: {
-    height: 52,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-  },
-  topBarTitle: { fontSize: 17, fontWeight: '600', color: lightColors.text },
-  topBarSpacer: { width: 24 },
   listPad: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, flexGrow: 1 },
   errorLine: { color: lightColors.accent, fontSize: 13, paddingBottom: spacing.sm },
 });
