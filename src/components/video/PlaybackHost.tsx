@@ -51,6 +51,7 @@ export function PlaybackHost({
   const playing = usePlaybackStore((s) => s.playing);
   const slotRect = usePlaybackStore((s) => s.slotRect);
   const routeName = usePlaybackStore((s) => s.routeName);
+  const watchKind = usePlaybackStore((s) => s.watchKind);
   const setPlaying = usePlaybackStore((s) => s.setPlaying);
   const expand = usePlaybackStore((s) => s.expand);
   const close = usePlaybackStore((s) => s.close);
@@ -67,9 +68,14 @@ export function PlaybackHost({
 
   const isWatchRoute = routeName === 'Watch';
   const fullVisible =
-    mode === 'full' && isWatchRoute && slotRect != null && slotRect.key === item.key;
+    mode === 'full' &&
+    isWatchRoute &&
+    watchKind === 'plain' &&
+    slotRect != null &&
+    slotRect.key === item.key;
   const barHidden =
-    routeName != null && (BAR_HIDDEN_ROUTES.has(routeName) || routeName.startsWith('Admin'));
+    (routeName != null && (BAR_HIDDEN_ROUTES.has(routeName) || routeName.startsWith('Admin'))) ||
+    (isWatchRoute && watchKind === 'session');
   const showBar = mode === 'mini' && !barHidden;
   const bottomOffset = layout.bottomNavHeight + Math.max(insets.bottom, 12) + 8;
 

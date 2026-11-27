@@ -271,6 +271,18 @@ export function WatchScreen({ route, navigation }: Props) {
     return () => clearTimeout(t);
   }, [persistent, isFocused, buildItem]);
 
+  // A SESSION watch pushed over a plain watch: this screen has its
+  // own in-screen player at the same position, so park the
+  // persistent one (minimize + flag the focused Watch as a session
+  // watch) — otherwise the host would draw the previous video over
+  // this screen's player and float its mini bar over the session.
+  useEffect(() => {
+    if (!sessionId || !isFocused) return;
+    const st = usePlaybackStore.getState();
+    st.setWatchKind('session');
+    st.minimize();
+  }, [sessionId, isFocused]);
+
   // Leaving a plain watch (back, tab switch, deep link) minimizes
   // the persistent player instead of killing it. The bar's X is the
   // only full stop.

@@ -53,6 +53,15 @@ interface PlaybackState {
   playing: boolean;
   slotRect: SlotRect | null;
   routeName: string | null;
+  /**
+   * Which flavour of Watch screen is focused: 'plain' (the
+   * persistent player's own screen) or 'session' (a session watch,
+   * which has its own in-screen player). A session Watch sits at
+   * the same screen position as a plain one, so without this flag
+   * the host could draw the persistent player over the session's
+   * own player when a session watch is pushed over a plain watch.
+   */
+  watchKind: 'plain' | 'session';
   open: (item: PlaybackItem) => void;
   minimize: () => void;
   expand: () => void;
@@ -60,6 +69,7 @@ interface PlaybackState {
   setPlaying: (playing: boolean) => void;
   setSlotRect: (rect: SlotRect | null) => void;
   setRouteName: (name: string | null) => void;
+  setWatchKind: (kind: 'plain' | 'session') => void;
 }
 
 export const usePlaybackStore = create<PlaybackState>((set) => ({
@@ -68,12 +78,14 @@ export const usePlaybackStore = create<PlaybackState>((set) => ({
   playing: false,
   slotRect: null,
   routeName: null,
+  watchKind: 'plain',
   open: (item) =>
     set((s) => {
       const same = s.item?.key === item.key && s.mode !== 'closed';
       return {
         item,
         mode: 'full',
+        watchKind: 'plain' as const,
         // A genuinely new item starts from the players' own
         // behaviour (hosted autoplays; the YouTube embed waits for
         // its own tap / API state) — `playing` is corrected by the
@@ -88,4 +100,5 @@ export const usePlaybackStore = create<PlaybackState>((set) => ({
   setPlaying: (playing) => set({ playing }),
   setSlotRect: (slotRect) => set({ slotRect }),
   setRouteName: (routeName) => set({ routeName }),
+  setWatchKind: (watchKind) => set({ watchKind }),
 }));
