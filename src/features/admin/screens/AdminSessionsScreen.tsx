@@ -170,6 +170,11 @@ function SessionsContent({ ctx }: { ctx: AdminContext }) {
   }, [sessions, nowMs]);
 
   const onCreate = async () => {
+    // Same-frame double-tap guard: the button disables on `creating`,
+    // but the disabled prop only applies after a re-render, so two
+    // taps in one frame could both reach createSession (that is how
+    // the twin 27 Nov 5:15 pm sessions were made, 4 s apart).
+    if (creating) return;
     setFormError(null);
     setNotice(null);
     if (!videoId) {

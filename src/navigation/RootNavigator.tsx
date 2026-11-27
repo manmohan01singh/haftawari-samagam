@@ -19,7 +19,7 @@ import type { RootStackParamList } from './types';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export function RootNavigator() {
-  const { isAdmin, passwordRecovery, loading, user } = useAuth();
+  const { passwordRecovery, loading, user } = useAuth();
 
   // "Back to sign in" landing (P10 leftover fix): SetNewPassword's
   // escape signs the recovery session out and clears the gate. This
@@ -79,10 +79,13 @@ export function RootNavigator() {
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       <Stack.Screen name="SignIn" component={SignInScreen} />
       <Stack.Screen name="SignUp" component={SignUpScreen} />
-      {/* Admin routes are only REGISTERED for admin-role users
-          (profiles.role via AuthContext). Hiding routes is a UX guard;
-          Row Level Security is the real enforcement. */}
-      {isAdmin ? <Stack.Screen name="Admin" component={AdminStack} /> : null}
+      {/* Admin routes are registered for EVERYONE: each admin screen
+          renders its own AdminGate ("Sign-in required" for guests,
+          "Not authorized" for members) and Row Level Security is the
+          real enforcement. Registering them only for admins made a
+          guest opening /admin silently bounce to Home with no
+          explanation and no way to reach the gate. */}
+      <Stack.Screen name="Admin" component={AdminStack} />
     </Stack.Navigator>
   );
 }
