@@ -2,7 +2,7 @@ import React, { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { layout, lightColors, nativeApp, spacing } from '../../theme';
+import { layout, lightColors, nativeApp, radii, spacing, typography } from '../../theme';
 import { formatDuration } from './VideoCard';
 import { ICON_HIT_SLOP } from '../../lib/touch';
 import type { CardVideoData } from './cardData';
@@ -16,14 +16,16 @@ interface FeedCardProps {
   onToggleSave?: () => void;
   onShare?: () => void;
   /**
-   * `feed` (default) = Home card container per screenshot 01: full-bleed
-   * thumbnail, white body with rounded bottom corners on the grey page,
-   * title full-width ABOVE the avatar row, and the engagement row
+   * `feed` (default) = Home card per screenshot 01: full-bleed
+   * thumbnail, FLAT white body (Phase 9 W2 / audit D4 — no shadow, no
+   * rounded corners; cards separated by 16px of page ground), title
+   * full-width ABOVE the avatar row, and the engagement row
    * right-aligned on the avatar row. QA issue 48 guardrail: only REAL
-   * actions are wired — bookmark (saved_videos), share (system sheet)
-   * and ••• (opens the recording, where save/playlist/share live).
-   * Like/comment have no backend in this app and are NOT rendered as
-   * dead icons; they are flagged in the QA report instead.
+   * actions are rendered — Save shows only with a real saved_videos
+   * handler, Share only with a real share handler, ••• only with real
+   * menu actions (Phase 9 W2 / audit §7: no fallback to opening the
+   * recording). Like/comment have no backend in this app and are NOT
+   * rendered as dead icons; they are flagged in the QA report instead.
    * `upNext` = compact horizontal row (QA issue 57): small 16:9 thumb
    * at left, title + channel/meta at right, ⋮ at the far right.
    */
@@ -40,12 +42,11 @@ interface FeedCardProps {
  * Home-feed card, geometry from the native-app reference
  * (docs/reference/REFERENCE_UI.md §1, screenshot 01).
  *
- * Engagement row: all four reference icons are always rendered (the
- * screenshot is the source of truth for this row). Bookmark uses the
- * real saved_videos handler when one is supplied; comment and ••• fall
- * back to real destinations (open the recording / system share sheet);
- * the thumb is a local pressed-state toggle only — no count is ever
- * shown or invented.
+ * Engagement row: only actions with a real handler are rendered
+ * (Phase 9 W2). Bookmark uses the real saved_videos handler, Share the
+ * real share handler, ••• a real CardActionSheet menu — an action with
+ * no handler is omitted, never wired to open the recording. No count
+ * is ever shown or invented.
  */
 export const FeedCard = memo(function FeedCard({
   data,
@@ -123,7 +124,7 @@ export const FeedCard = memo(function FeedCard({
             <View style={[styles.upNextThumb, styles.thumbnailEmpty]} />
           )}
           {isLive ? (
-            <View style={styles.upNextBadge}>
+            <View style={[styles.upNextBadge, styles.upNextLiveBadge]}>
               <Text style={styles.liveText}>LIVE</Text>
             </View>
           ) : data.durationSeconds != null ? (
@@ -142,15 +143,16 @@ export const FeedCard = memo(function FeedCard({
             </Text>
           ) : null}
         </View>
-        <Pressable
-          onPress={hasMenu ? () => setMenuOpen(true) : (onShare ?? onPress)}
-          hitSlop={8}
-          accessibilityLabel="More actions"
-          accessibilityRole="button"
-          style={styles.moreButton}
-        >
-          <MaterialIcons name="more-vert" size={20} color={lightColors.text} />
-        </Pressable>
+        {hasMenu ? (
+          <Pressable
+            onPress={() => setMenuOpen(true)}
+            accessibilityLabel="More actions"
+            accessibilityRole="button"
+            style={styles.moreButton}
+          >
+            <MaterialIcons name="more-vert" size={20} color={lightColors.text} />
+          </Pressable>
+        ) : null}
       </Pressable>
       {hasMenu ? (
         <CardActionSheet visible={menuOpen} onClose={() => setMenuOpen(false)} actions={menuActions} />
@@ -190,27 +192,32 @@ export const FeedCard = memo(function FeedCard({
               </Text>
             ) : null}
           </View>
-          {/* Engagement row (QA 48/69): right-aligned, inside the card
-              body, 24px icons with even spacing, no counts — and only
-              real actions: Save (bookmark), Share, ••• (more). */}
+          {/* Engagement row (QA 48/69, Phase 9 W2): right-aligned,
+              inside the card body, 24px icons with even spacing, no
+              counts — and only real actions: each icon renders ONLY
+              when its handler exists (audit §7 fallback fix). */}
           <View style={styles.engagement}>
-            <Pressable
-              onPress={onToggleSave ?? onPress}
-              hitSlop={ICON_HIT_SLOP}
-              accessibilityLabel={saved ? 'Remove from saved' : 'Save'}
-              accessibilityState={{ selected: !!saved }}
-              accessibilityRole="button"
-            >
-              <MaterialIcons name={saved ? 'bookmark' : 'bookmark-border'} size={24} color={lightColors.text} />
-            </Pressable>
-            <Pressable
-              onPress={onShare ?? onPress}
-              hitSlop={ICON_HIT_SLOP}
-              accessibilityLabel="Share"
-              accessibilityRole="button"
-            >
-              <MaterialIcons name="share" size={22} color={lightColors.text} />
-            </Pressable>
+            {onToggleSave ? (
+              <Pressable
+                onPress={onToggleSave}
+                hitSlop={ICON_HIT_SLOP}
+                accessibilityLabel={saved ? 'Remove from saved' : 'Save'}
+                accessibilityState={{ selected: !!saved }}
+                accessibilityRole="button"
+              >
+                <MaterialIcons name={saved ? 'bookmark' : 'bookmark-border'} size={24} color={lightColors.text} />
+              </Pressable>
+            ) : null}
+            {onShare ? (
+              <Pressable
+                onPress={onShare}
+                hitSlop={ICON_HIT_SLOP}
+                accessibilityLabel="Share"
+                accessibilityRole="button"
+              >
+                <MaterialIcons name="share" size={24} color={lightColors.text} />
+              </Pressable>
+            ) : null}
             {hasMenu ? (
               <Pressable
                 onPress={() => setMenuOpen(true)}
@@ -220,16 +227,7 @@ export const FeedCard = memo(function FeedCard({
               >
                 <MaterialIcons name="more-horiz" size={24} color={lightColors.text} />
               </Pressable>
-            ) : (
-              <Pressable
-                onPress={onPress}
-                hitSlop={ICON_HIT_SLOP}
-                accessibilityLabel="More actions"
-                accessibilityRole="button"
-              >
-                <MaterialIcons name="more-horiz" size={24} color={lightColors.text} />
-              </Pressable>
-            )}
+            ) : null}
           </View>
         </View>
       </View>
@@ -242,29 +240,18 @@ export const FeedCard = memo(function FeedCard({
 });
 
 const styles = StyleSheet.create({
-  // Card container (screenshot 01): the white body carries rounded
-  // bottom corners and the cards sit on the page's light-grey ground,
-  // separated by ~20px of that ground — not white-on-white.
-  // QA issue 53: card rhythm is ~12px of page ground between cards
-  // (the grey ground itself is the divider).
-  // Round-2 pixel pass: the card reads as a CONTAINER — subtle
-  // shadow lifting it off the grey page ground (cur-1 cards looked
-  // flat), thumbnail with 16dp rounded TOP corners, body with 20dp
-  // rounded bottom corners (below).
+  // Phase 9 W2 (audit D4): the reference home card is FLAT — full-bleed
+  // thumbnail with no corner radius, flat white body, no shadow; cards
+  // are separated by 16px of page ground. (The round-2 floating-card
+  // treatment — shadow, 16dp top / 20dp bottom radii, 12px gap — was
+  // measured against the reference and rejected by the forensic audit.)
   card: {
-    marginBottom: 12,
-    shadowColor: '#000000',
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    marginBottom: spacing.lg,
   },
   thumbnailWrap: { position: 'relative' },
   thumbnail: {
     width: '100%',
     aspectRatio: layout.thumbnailAspectRatio,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
     // Light placeholder while the image is in flight (QA issue 7) —
     // this was playerBackground (pure black), so every slow thumbnail
     // read as a black rectangle. Matches the skeleton colour.
@@ -279,9 +266,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 3,
     backgroundColor: lightColors.accent,
-    // Round-2 measurement (ref-1): the LIVE pill is ~24dp tall,
-    // radius ~8, white broadcast glyph + 13dp bold "LIVE".
-    borderRadius: 8,
+    // Phase 9 W2 (audit D13): LIVE badge radius is radii.liveBadge (6)
+    // everywhere; the round-2 ~8 estimate is superseded by the audit.
+    borderRadius: radii.liveBadge,
     paddingHorizontal: 7,
     paddingVertical: 4,
   },
@@ -291,21 +278,22 @@ const styles = StyleSheet.create({
     right: nativeApp.feedCard.badgeInset,
     bottom: nativeApp.feedCard.badgeInset,
     backgroundColor: 'rgba(0,0,0,0.8)',
-    borderRadius: nativeApp.feedCard.liveBadgeRadius,
+    // Phase 9 W2 (audit D13): duration badge radius is radii.badge (4)
+    // everywhere — this previously (mis)used the LIVE badge token.
+    borderRadius: radii.badge,
     paddingHorizontal: 6,
     paddingVertical: 3,
   },
   durationText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600' },
   body: {
     backgroundColor: lightColors.surface,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
     paddingHorizontal: nativeApp.feedCard.bodyPadding,
     paddingTop: spacing.md,
     paddingBottom: spacing.md,
   },
   // QA issue 52: reference card titles are ~15-16px, two lines max.
-  title: { fontSize: 16, lineHeight: 22, fontWeight: '600', color: lightColors.text },
+  // Phase 9 W2: values come from the typography.cardTitle token.
+  title: { ...typography.cardTitle, color: lightColors.text },
   row: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: spacing.md },
   avatar: { width: 40, height: 40, borderRadius: 20 },
   avatarFallback: {
@@ -315,8 +303,10 @@ const styles = StyleSheet.create({
   },
   avatarInitial: { fontSize: 16, fontWeight: '600', color: lightColors.textSecondary },
   lines: { flex: 1, minWidth: 0 },
-  handle: { fontSize: 14, color: lightColors.textSecondary },
-  meta: { fontSize: 14, color: lightColors.textSecondary, marginTop: 1 },
+  handle: { ...typography.channelName, color: lightColors.textSecondary },
+  // Phase 9 W2 (audit D6): feed meta uses typography.metadataLg (13px,
+  // reference ≈13–14); the 12px metadata token stays for compact rows.
+  meta: { ...typography.metadataLg, color: lightColors.textSecondary, marginTop: 1 },
   engagement: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -347,11 +337,15 @@ const styles = StyleSheet.create({
     right: 4,
     bottom: 4,
     backgroundColor: 'rgba(0,0,0,0.8)',
-    borderRadius: 4,
+    borderRadius: radii.badge,
     paddingHorizontal: 4,
     paddingVertical: 2,
   },
+  // LIVE keeps the unified radii.liveBadge (6) even in the compact row.
+  upNextLiveBadge: { borderRadius: radii.liveBadge },
   upNextTitle: { fontSize: 15, lineHeight: 20, fontWeight: '600', color: lightColors.text },
   upNextMeta: { fontSize: 13, lineHeight: 18, color: lightColors.textSecondary, marginTop: 3 },
-  moreButton: { marginTop: 1 },
+  // Phase 9 W2 (audit D15): the kebab's own box is ≥44×44 — the old
+  // 20px glyph + hitSlop 8 gave a ≈36px target, below the minimum.
+  moreButton: { marginTop: 1, minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
 });

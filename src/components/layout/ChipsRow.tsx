@@ -1,6 +1,6 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
-import { lightColors, spacing, typography } from '../../theme';
+import { lightColors, radii, spacing, typography } from '../../theme';
 
 interface ChipsRowProps {
   /** Category labels come from the `categories` table — never hard-coded content. */
@@ -47,8 +47,8 @@ const styles = StyleSheet.create({
   chip: {
     backgroundColor: lightColors.surfaceVariant,
     // YouTube category chips are ~8px radius, 32px tall — not the
-    // 12px card radius used for thumbnails.
-    borderRadius: 8,
+    // 12px card radius used for thumbnails. Phase 9 W2: radii.chipRadius.
+    borderRadius: radii.chipRadius,
     paddingHorizontal: spacing.md,
     paddingVertical: 6,
   },

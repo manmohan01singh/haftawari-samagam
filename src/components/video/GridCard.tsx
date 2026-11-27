@@ -59,7 +59,6 @@ export const GridCard = memo(function GridCard({ data, onPress, menuActions }: G
           {menuActions && menuActions.length > 0 ? (
             <Pressable
               onPress={() => setMenuOpen(true)}
-              hitSlop={8}
               accessibilityRole="button"
               accessibilityLabel="Video options"
               style={styles.moreButton}
@@ -92,7 +91,8 @@ const styles = StyleSheet.create({
     width: '100%',
     aspectRatio: layout.thumbnailAspectRatio,
     borderRadius: radii.card,
-    backgroundColor: lightColors.playerBackground,
+    // Phase 9 W2 (audit D14): surfaceVariant placeholder, as FeedCard.
+    backgroundColor: lightColors.surfaceVariant,
   },
   thumbnailEmpty: { backgroundColor: lightColors.surfaceVariant },
   liveBadge: {
@@ -103,7 +103,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 3,
     backgroundColor: lightColors.accent,
-    borderRadius: 6,
+    borderRadius: radii.liveBadge,
     paddingHorizontal: 5,
     paddingVertical: 2,
   },
@@ -113,14 +113,16 @@ const styles = StyleSheet.create({
     right: spacing.sm,
     bottom: spacing.sm,
     backgroundColor: 'rgba(0,0,0,0.8)',
-    borderRadius: 6,
+    borderRadius: radii.badge,
     paddingHorizontal: 5,
     paddingVertical: 2,
   },
   durationText: { color: '#FFFFFF', fontSize: 11, fontWeight: '600' },
   titleRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: spacing.sm },
   title: { flex: 1, fontSize: 14, lineHeight: 19, fontWeight: '600', color: lightColors.text },
-  moreButton: { marginLeft: 2, marginTop: 1 },
+  // Phase 9 W2 (audit D15): ≥44×44 hit box — the old 18px glyph +
+  // hitSlop 8 gave ≈34px, the smallest target in the app.
+  moreButton: { marginLeft: 2, marginTop: 1, minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   channel: { fontSize: 12, color: lightColors.textSecondary, marginTop: 2 },
   meta: { fontSize: 12, color: lightColors.textSecondary, marginTop: 1 },
 });
