@@ -459,6 +459,15 @@ export function createHomeFeedPager({ channels, filter }: HomeFeedPagerOptions):
     while (
       cursor.buffer.length === 0 &&
       !cursor.exhausted &&
+      // The failed flag MUST be part of the loop condition: the
+      // catch below sets it, but the page-fetch branch increments
+      // `scans` only AFTER a successful fetch — a channel whose
+      // fetch throws every time (bad token, dead playlist) never
+      // increments anything, so without this check the loop spun
+      // forever and the feed's next() never resolved (verified
+      // live, 27 Nov 2026: the Live chip's footer spinner never
+      // stopped — one failing channel hung the whole batch).
+      !cursor.failed &&
       scans < currentScanBudget &&
       callScansUsed < CALL_SCAN_CAP
     ) {
