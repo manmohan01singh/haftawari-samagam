@@ -22,6 +22,7 @@ import {
   fetchChannelById,
   fetchChannelLiveAndUpcoming,
   fetchChannelUploads,
+  fetchChannelsByIds,
   type YouTubeChannelInfo,
   type YouTubeVideoMetadata,
 } from '../../lib/youtube';
@@ -71,6 +72,47 @@ export async function getChannelInfoCached(channelId: string): Promise<YouTubeCh
     if (info) await writeCache(key, info);
     return info;
   });
+}
+
+/**
+ * Avatar (DP) urls for a batch of channels, cached 6h per channel
+ * (same TTL as channel info). ONE channels.list call covers every
+ * uncached id (1 unit per 50 ids) — this is how the built-in
+ * registry channels, which carry no stored avatar, get their real
+ * YouTube DP at the source (channelsService feeds the result into
+ * fetchActiveChannels, so every surface — Subscriptions rail, Home
+ * cards, channel lists — shows the DP without per-screen lookups).
+ * A channel the API does not return, or a failed call, maps to null
+ * and the caller's letter/initial fallback applies; failures are
+ * NOT cached, so the next fetch retries.
+ */
+export async function getChannelAvatarsCached(
+  channelIds: string[],
+): Promise<Map<string, string | null>> {
+  const out = new Map<string, string | null>();
+  const missing: string[] = [];
+  for (const id of channelIds) {
+    if (!id) continue;
+    const cached = await readCache<string | null>(`${PREFIX}avatar:${id}`, CHANNEL_INFO_TTL_MS);
+    if (cached !== null) out.set(id, cached);
+    else missing.push(id);
+  }
+  if (missing.length > 0) {
+    try {
+      const infos = await fetchChannelsByIds(missing);
+      const byId = new Map(infos.map((i) => [i.channelId, i.avatarUrl]));
+      for (const id of missing) {
+        const avatarUrl = byId.get(id) ?? null;
+        out.set(id, avatarUrl);
+        if (avatarUrl) {
+          await writeCache<string | null>(`${PREFIX}avatar:${id}`, avatarUrl);
+        }
+      }
+    } catch {
+      for (const id of missing) out.set(id, null);
+    }
+  }
+  return out;
 }
 
 /** First page of a channel's uploads, cached 30 min (2 units). */
