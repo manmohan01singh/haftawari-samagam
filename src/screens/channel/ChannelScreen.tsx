@@ -41,6 +41,12 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Channel'>;
 
 type ChannelTab = 'videos' | 'live';
 
+/** Module-level cache for the search-based live lookup (100 quota
+ *  units per call): one call per channel per 10 minutes is enough for
+ *  a Live tab, and it stops every screen mount from re-burning quota. */
+const LIVE_CACHE_TTL_MS = 10 * 60 * 1000;
+const liveSearchCache = new Map<string, { at: number; items: YouTubeVideoMetadata[] }>();
+
 /**
  * Channel screen — all data live from the YouTube Data API: banner,
  * avatar, name, handle, subscriber/video counts, description, and the
@@ -111,23 +117,66 @@ export function ChannelScreen({ route, navigation }: Props) {
     };
   }, [channelId, isOfficial, official]);
 
+  // Live discovery (round-3 senior fix, found live 27 Nov): the old
+  // code swallowed the search call's failure and then stated "not
+  // live right now" — while the channel WAS live (a 24/7 stream).
+  // search.list costs 100 quota units and the project's daily search
+  // quota was exhausted (HTTP 429 verified), so the failure was
+  // routine, not rare. Rules now:
+  //  1. Uploads metadata is the zero-cost first source: videos.list
+  //     already resolved every uploads item's liveBroadcastContent,
+  //     so a live/upcoming item in the uploads pages shows with NO
+  //     extra call (merged into the Live tab below).
+  //  2. The search leg runs once per channel per 10 minutes (module
+  //     cache) — it is the only way to find long-running streams that
+  //     sit deep in the uploads playlist.
+  //  3. A failed search leg is an ERROR state with Retry, never a
+  //     false "not live" claim.
+  const [liveError, setLiveError] = useState(false);
+  const [liveNonce, setLiveNonce] = useState(0);
   useEffect(() => {
     if (tab !== 'live' || liveLoaded) return;
     let active = true;
-    fetchChannelLiveAndUpcoming(channelId)
-      .then((items) => {
+    const cached = liveSearchCache.get(channelId);
+    if (cached && Date.now() - cached.at < LIVE_CACHE_TTL_MS) {
+      // Resolve through a promise so state updates land in a
+      // callback, not synchronously in the effect body.
+      void Promise.resolve(cached.items).then((items) => {
         if (active) {
           setLiveItems(items);
           setLiveLoaded(true);
         }
+      });
+      return () => {
+        active = false;
+      };
+    }
+    fetchChannelLiveAndUpcoming(channelId)
+      .then((items) => {
+        liveSearchCache.set(channelId, { at: Date.now(), items });
+        if (active) {
+          setLiveItems(items);
+          setLiveError(false);
+          setLiveLoaded(true);
+        }
       })
       .catch(() => {
-        if (active) setLiveLoaded(true);
+        if (active) {
+          setLiveError(true);
+          setLiveLoaded(true);
+        }
       });
     return () => {
       active = false;
     };
-  }, [tab, liveLoaded, channelId]);
+  }, [tab, liveLoaded, channelId, liveNonce]);
+
+  const retryLive = useCallback(() => {
+    liveSearchCache.delete(channelId);
+    setLiveError(false);
+    setLiveLoaded(false);
+    setLiveNonce((n) => n + 1);
+  }, [channelId]);
 
   const loadMore = useCallback(() => {
     if (!channel?.uploadsPlaylistId || !nextPage || loadingMore) return;
@@ -171,6 +220,21 @@ export function ChannelScreen({ route, navigation }: Props) {
 
   const keyExtractor = useCallback((item: YouTubeVideoMetadata) => item.youtubeVideoId, []);
 
+  // Merged live/upcoming: uploads-derived items (zero extra quota —
+  // their metadata already carries liveBroadcastContent) UNION the
+  // search leg's items, search winning per-id (fresher viewer counts).
+  const mergedLive = (() => {
+    const byId = new Map<string, YouTubeVideoMetadata>();
+    for (const v of uploads) {
+      if (v.liveBroadcastContent === 'live' || v.liveBroadcastContent === 'upcoming') {
+        byId.set(v.youtubeVideoId, v);
+      }
+    }
+    for (const v of liveItems) byId.set(v.youtubeVideoId, v);
+    return [...byId.values()];
+  })();
+  const liveNow = mergedLive.find((v) => v.liveBroadcastContent === 'live') ?? null;
+
   const header = channel ? (
     <View>
       <View style={styles.topBar}>
@@ -196,13 +260,37 @@ export function ChannelScreen({ route, navigation }: Props) {
         />
       ) : null}
       <View style={styles.identity}>
-        {channel.avatarUrl ? (
-          <Image source={{ uri: channel.avatarUrl }} style={styles.avatar} contentFit="cover" cachePolicy="memory-disk" />
-        ) : (
-          <View style={[styles.avatar, styles.avatarFallback]}>
-            <Text style={styles.avatarInitial}>{channel.title.charAt(0)}</Text>
+        {/* Real-YouTube parity (Part B, 27 Nov): when the channel is
+            genuinely live, its avatar carries a red ring + a LIVE pill
+            overlapping the bottom edge, and tapping it opens the live
+            video. Driven ONLY by API-reported live items (liveNow) —
+            no ring is ever shown on a guess. */}
+        <Pressable
+          onPress={liveNow ? () => navigation.navigate('Watch', { youtubeVideoId: liveNow.youtubeVideoId }) : undefined}
+          disabled={!liveNow}
+          accessibilityRole={liveNow ? 'button' : undefined}
+          accessibilityLabel={liveNow ? `Watch live: ${liveNow.title}` : undefined}
+        >
+          <View style={styles.avatarWrap}>
+            {channel.avatarUrl ? (
+              <Image
+                source={{ uri: channel.avatarUrl }}
+                style={[styles.avatar, liveNow && styles.avatarLiveRing]}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+              />
+            ) : (
+              <View style={[styles.avatar, styles.avatarFallback, liveNow && styles.avatarLiveRing]}>
+                <Text style={styles.avatarInitial}>{channel.title.charAt(0)}</Text>
+              </View>
+            )}
+            {liveNow ? (
+              <View style={styles.avatarLivePill} pointerEvents="none">
+                <Text style={styles.avatarLiveText}>LIVE</Text>
+              </View>
+            ) : null}
           </View>
-        )}
+        </Pressable>
         <View style={styles.identityLines}>
           <View style={styles.nameRow}>
             <Text style={styles.name}>{channel.title}</Text>
@@ -357,7 +445,7 @@ export function ChannelScreen({ route, navigation }: Props) {
 
   // Uploads grid: Shorts filtered OUT with the search stream's
   // heuristic (user ban), ghost items (no title) dropped.
-  const data = (tab === 'videos' ? uploads : liveItems).filter(
+  const data = (tab === 'videos' ? uploads : mergedLive).filter(
     (v) => v.title.trim().length > 0 && (tab !== 'videos' || !isShortVideo(v)),
   );
 
@@ -390,6 +478,15 @@ export function ChannelScreen({ route, navigation }: Props) {
               <SkeletonCard variant="shelf" />
               <SkeletonCard variant="shelf" />
             </View>
+          ) : tab === 'live' && liveError ? (
+            // The live check FAILED (e.g. API quota) — say so and
+            // offer Retry; never dress a failure up as "not live".
+            <EmptyState
+              title="Couldn't check live status"
+              message="The live check failed, so this channel may still be live. Try again in a moment."
+              actionLabel="Try again"
+              onAction={retryLive}
+            />
           ) : tab === 'live' ? (
             <EmptyState
               title="No live or upcoming broadcasts"
@@ -509,6 +606,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  avatarWrap: { position: 'relative' },
+  avatarLiveRing: { borderWidth: 2, borderColor: '#FF0000' },
+  avatarLivePill: {
+    position: 'absolute',
+    bottom: -6,
+    alignSelf: 'center',
+    backgroundColor: '#FF0000',
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  avatarLiveText: { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
   avatarInitial: { fontSize: 30, fontWeight: '600', color: lightColors.textSecondary },
   name: {
     fontSize: nativeApp.searchChannel.nameFontSize, // 20
