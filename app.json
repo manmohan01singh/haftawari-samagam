@@ -51,6 +51,12 @@
     ],
     "experiments": {
       "baseUrl": "/haftawari-samagam"
+    },
+    "owner": "anti002gravity",
+    "extra": {
+      "eas": {
+        "projectId": "209bd251-d8c1-4197-a180-c41dc79bb6e7"
+      }
     }
   }
 }
