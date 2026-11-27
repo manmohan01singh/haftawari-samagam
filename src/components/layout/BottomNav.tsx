@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { layout, lightColors } from '../../theme';
+import { BarBlurBackground } from './BarBlurBackground';
 
 export interface BottomNavItem {
   key: string;
@@ -21,6 +22,17 @@ interface BottomNavProps {
   items: BottomNavItem[];
   activeKey: string;
   onPress: (key: string) => void;
+  /**
+   * Overlay mode (used by MainTabs): the bar is positioned absolutely
+   * over the screen content so content scrolls UNDER it and the blur
+   * material (BarBlurBackground) has something to blur — in-flow, a
+   * backdrop blur samples only the bar's own background and the
+   * effect is invisible. Callers in overlay mode must give their
+   * scroll content bottom padding ≥ the bar height. Non-overlay
+   * callers (StackTabBar, Search) keep the in-flow layout with the
+   * same translucent blur-tinted material.
+   */
+  overlay?: boolean;
 }
 
 /**
@@ -31,14 +43,22 @@ interface BottomNavProps {
  * a faint top hairline; the bar applies the bottom safe-area inset
  * itself (see below).
  */
-export const BottomNav = memo(function BottomNav({ items, activeKey, onPress }: BottomNavProps) {
+export const BottomNav = memo(function BottomNav({ items, activeKey, onPress, overlay }: BottomNavProps) {
   // The bar must clear the device gesture/home area itself — the old
   // comment claimed "the caller applies safe-area padding", but no
   // caller did, so on gesture-nav Android the slots sat under the
   // system gesture pill and taps near the bottom felt swallowed.
   const insets = useSafeAreaInsets();
   return (
-    <View style={[styles.bar, { height: layout.bottomNavHeight + insets.bottom, paddingBottom: insets.bottom }]}>
+    <View
+      style={[
+        styles.bar,
+        { height: layout.bottomNavHeight + insets.bottom },
+        overlay && styles.barOverlay,
+      ]}
+    >
+      <BarBlurBackground />
+      <View style={[styles.row, { paddingBottom: insets.bottom }]}>
       {items.map((item) => {
         const active = item.key === activeKey;
         return (
@@ -96,6 +116,7 @@ export const BottomNav = memo(function BottomNav({ items, activeKey, onPress }: 
           </Pressable>
         );
       })}
+      </View>
     </View>
   );
 });
@@ -103,11 +124,22 @@ export const BottomNav = memo(function BottomNav({ items, activeKey, onPress }: 
 const styles = StyleSheet.create({
   bar: {
     height: layout.bottomNavHeight,
-    flexDirection: 'row',
-    backgroundColor: lightColors.surface,
+    // No solid background: BarBlurBackground (translucent white +
+    // backdrop blur) is the bar's material now (user request,
+    // 27 Nov 2026). Geometry from round 2 is unchanged.
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: lightColors.border,
+    overflow: 'hidden',
   },
+  barOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 10,
+    elevation: 10,
+  },
+  row: { flex: 1, flexDirection: 'row' },
   item: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   createCircle: {
     width: 28,

@@ -31,7 +31,7 @@ import {
   setVideoSaved,
 } from '../../lib/videos';
 import { FEED_LIST_PERF } from '../../lib/listPerf';
-import { lightColors, spacing, typography } from '../../theme';
+import { layout, lightColors, spacing, typography } from '../../theme';
 import type { Category, Video } from '../../types/database';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
 
@@ -459,6 +459,11 @@ export function HomeScreen({ navigation }: Props) {
           data={visibleVideos}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
+          // The bottom bar is an OVERLAY now (blur material): the
+          // feed scrolls under it, so the last cards need clearance
+          // ≥ the bar height (56) + breathing room, or the bar would
+          // cover them at the end of the list.
+          contentContainerStyle={styles.feedContent}
           onEndReached={onEndReached}
           onEndReachedThreshold={0.6}
           refreshing={refreshing}
@@ -496,7 +501,10 @@ const styles = StyleSheet.create({
   // chips/sessions rows. White-on-white made the feed read as one
   // unbroken sheet with no card separation.
   container: { flex: 1, backgroundColor: '#F8F8F8' },
-  headerBlock: { backgroundColor: lightColors.surface },
+  // Translucent now: AppHeader carries the blur material; the tab
+  // row below it sits on the same near-white translucent tone so the
+  // whole top block reads as one glass bar (no solid white slab).
+  headerBlock: { backgroundColor: 'rgba(255,255,255,0.88)' },
   sessionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -508,6 +516,7 @@ const styles = StyleSheet.create({
   sessionsLines: { flex: 1 },
   sessionsTitle: { ...typography.channelName, fontWeight: '600', color: lightColors.text },
   sessionsSub: { ...typography.metadata, color: lightColors.textSecondary, marginTop: 1 },
+  feedContent: { paddingBottom: layout.bottomNavHeight + 24 },
   footerSpinner: { paddingVertical: spacing.lg },
   endOfFeed: {
     flexDirection: 'row',

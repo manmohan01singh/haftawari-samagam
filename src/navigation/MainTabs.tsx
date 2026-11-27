@@ -42,6 +42,7 @@ export function MainTabs() {
       ];
       return (
         <BottomNav
+          overlay
           items={items}
           activeKey={activeRoute.name}
           onPress={(key) => {

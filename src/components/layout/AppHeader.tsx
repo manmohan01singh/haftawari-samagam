@@ -5,6 +5,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { branding } from '../../config/branding';
 import { layout, lightColors, spacing } from '../../theme';
 import { ICON_HIT_SLOP } from '../../lib/touch';
+import { BarBlurBackground } from './BarBlurBackground';
 
 interface AppHeaderProps {
   onSearchPress: () => void;
@@ -36,6 +37,7 @@ export const AppHeader = memo(function AppHeader({
 }: AppHeaderProps) {
   return (
     <View style={styles.bar}>
+      <BarBlurBackground />
       <View style={styles.brand}>
         <View style={styles.playMark}>
           <MaterialIcons name="play-arrow" size={16} color="#FFFFFF" />
@@ -78,7 +80,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
-    backgroundColor: lightColors.surface,
+    // Translucent blur material (BarBlurBackground), same as the
+    // bottom bar — no solid fill (user request, 27 Nov 2026).
+    overflow: 'hidden',
   },
   brand: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexShrink: 1 },
   playMark: {
