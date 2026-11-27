@@ -18,8 +18,10 @@ interface AppHeaderProps {
 
 /**
  * Mobile top bar, geometry from the native-app reference (§1):
- * 56px, white, no bottom border; red play mark + app wordmark at the
- * left; actions at the right at 24px with ~22px spacing. The wordmark
+ * 56px, white, no bottom border; the app's OWN brand mark (jot
+ * emblem tile, Phase 9 / audit D1 — the previous red play-rect was
+ * a YouTube lookalike and is gone) + app wordmark at the left;
+ * actions at the right at 24px with ~22px spacing. The wordmark
  * uses branding.shortName — the full app name overflowed/squeezed the
  * action icons on mobile-width web (branding.ts reserves shortName
  * for exactly this compact header).
@@ -39,9 +41,12 @@ export const AppHeader = memo(function AppHeader({
     <View style={styles.bar}>
       <BarBlurBackground />
       <View style={styles.brand}>
-        <View style={styles.playMark}>
-          <MaterialIcons name="play-arrow" size={16} color="#FFFFFF" />
-        </View>
+        <Image
+          source={require('../../../assets/icon.png')}
+          style={styles.brandMark}
+          contentFit="cover"
+          accessibilityLabel={branding.appName}
+        />
         <Text style={styles.wordmark} numberOfLines={1}>
           {branding.shortName}
         </Text>
@@ -118,17 +123,15 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   brand: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexShrink: 1 },
-  playMark: {
+  brandMark: {
     width: 30,
-    height: 21,
-    borderRadius: 6,
-    backgroundColor: lightColors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
+    height: 30,
+    borderRadius: 8,
   },
   // Round-2 measurement (ref-1): wordmark ~20dp, tight tracking,
-  // sitting ~8dp from the play mark; right-side icons 24dp.
-  wordmark: { fontSize: 20, fontWeight: '700', color: lightColors.text, letterSpacing: -0.5 },
+  // sitting ~8dp from the brand mark; right-side icons 24dp.
+  // letterSpacing -0.3 matches the web splash shell (public/index.html).
+  wordmark: { fontSize: 20, fontWeight: '700', color: lightColors.text, letterSpacing: -0.3 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 22 },
   avatar: { width: 28, height: 28, borderRadius: 14 },
   avatarFallback: {

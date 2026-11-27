@@ -23,6 +23,13 @@ export const branding = {
    * progress indicator. Matches the audited reference value #FF0000.
    */
   accentRed: '#FF0000',
+  /**
+   * Brand colours of the app's own jot emblem (Phase 9, forensic
+   * audit D1): deep maroon tile + gold flame. Deliberately NOT
+   * YouTube red — the header mark and adaptive icon use these.
+   */
+  brandMaroon: '#640B19',
+  brandGold: '#E8A33D',
   /** PWA / splash background. */
   backgroundColor: '#FFFFFF',
 } as const;
