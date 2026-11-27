@@ -23,6 +23,7 @@ import {
   fetchChannelLiveAndUpcoming,
   fetchChannelUploads,
   fetchChannelsByIds,
+  searchChannelVideoPage,
   type YouTubeChannelInfo,
   type YouTubeVideoMetadata,
 } from '../../lib/youtube';
@@ -127,6 +128,34 @@ export async function getUploadsCached(
     const page = await fetchChannelUploads(uploadsPlaylistId);
     await writeCache(key, page.videos);
     return page.videos;
+  });
+}
+
+/** Topic-search first pages (Home chips) — 60 min: topics move slowly. */
+export const TOPIC_TTL_MS = 60 * 60 * 1000;
+
+export interface TopicSearchPage {
+  videos: YouTubeVideoMetadata[];
+  nextPageToken: string | null;
+}
+
+/**
+ * First page of a within-channel topic search, cached 60 minutes
+ * (search.list has its own small daily bucket — repeat chip taps
+ * within the hour must be free). Deeper pages fetch directly via
+ * searchChannelVideoPage; only page 1 is cached, mirroring uploads.
+ */
+export async function getTopicSearchPageCached(
+  channelId: string,
+  query: string,
+): Promise<TopicSearchPage> {
+  const key = `${PREFIX}topic:${channelId}:${query.toLowerCase()}`;
+  const cached = await readCache<TopicSearchPage>(key, TOPIC_TTL_MS);
+  if (cached) return cached;
+  return dedupe(key, async () => {
+    const page = await searchChannelVideoPage(channelId, query);
+    await writeCache(key, page);
+    return page;
   });
 }
 

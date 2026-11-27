@@ -34,6 +34,14 @@
  *    (1 unit). The FIRST page of each channel goes through the shared
  *    30-minute AsyncStorage cache (getUploadsCached, also used by
  *    Subscriptions/Channel); deeper pages fetch directly.
+ *  - Topic chips deliberately use this scan, NOT search.list: the
+ *    search bucket is only 100 queries/day SHARED across every user
+ *    of the shipped API key (measured 27 Nov 2026 — a test harness
+ *    exhausted it in an afternoon: HTTP 429 'Search Queries per
+ *    day'), while the scan draws on the 10,000-unit general bucket.
+ *    The scan's cost is bounded by CALL_SCAN_CAP + the first-call
+ *    round-1 return, and recent uploads genuinely carry the topics
+ *    (Simran Sadhna / Chaliya uploads are weekly).
  */
 
 import { uploadsPlaylistIdFor, type AppChannel } from '../channels/channelsService';
@@ -241,16 +249,17 @@ const MAX_CATALOGUE_PAGES = 10;
  */
 const MAX_SCAN_PAGES_PER_CALL = 10;
 /**
- * First-call scan budget (speed fix #2, verified live 27 Nov 2026):
+ * First-call scan budget (speed fixes #2/#4, measured 27 Nov 2026):
  * a batch must not wait for every channel's DEEP scan before it can
- * render — the first next() call scans shallowly (3 pages/channel)
- * so catalogue matches + early topic matches paint fast, and later
- * calls (scroll) continue the same cursors deeper. Before this, a
- * topic chip's first batch was gated on the slowest channel scanning
- * up to 10 pages in series, and the chip sat on skeletons for tens
- * of seconds looking exactly like an empty tab.
+ * render — the first next() call reads ONE page per channel (the
+ * shared cached page 1, the same one Home/Subscriptions already
+ * fetched) so catalogue matches + page-1 topic matches paint in a
+ * couple of seconds, and later calls (scroll) continue the same
+ * cursors deeper at the full budget. At 3 pages the first batch
+ * still took ~16 s on a slow network for a sparse topic — the
+ * slowest channel's sequential page chain gates the whole round.
  */
-const FIRST_CALL_SCAN_PAGES = 3;
+const FIRST_CALL_SCAN_PAGES = 1;
 /**
  * Early-return batch floor (speed fix #3, verified live 27 Nov
  * 2026): next() previously hunted until the batch held the full
@@ -265,6 +274,15 @@ const FIRST_CALL_SCAN_PAGES = 3;
 const MIN_BATCH_BEFORE_RETURN = 8;
 /** Round cap per call once anything is collected (same fix). */
 const MAX_ROUNDS_PER_CALL = 6;
+/**
+ * Per-call TOTAL page cap across all channels (same fix, measured
+ * round 2): without it, a sparse topic's later rounds re-scanned
+ * every channel's full budget again and again — one Sakhi batch
+ * burned 282 API calls / ~107 s in simulation. 40 pages bounds any
+ * single next() to a few seconds of parallel fetching; the cursors
+ * keep their positions and scrolling continues the hunt.
+ */
+const CALL_SCAN_CAP = 40;
 
 interface ChannelCursor {
   channel: AppChannel;
@@ -395,12 +413,19 @@ export function createHomeFeedPager({ channels, filter, seed }: HomeFeedPagerOpt
    */
   /** Scan budget for the next() call currently running (see FIRST_CALL_SCAN_PAGES). */
   let currentScanBudget = MAX_SCAN_PAGES_PER_CALL;
+  /** Pages fetched by the next() call currently running, all channels summed. */
+  let callScansUsed = 0;
 
   async function fillBuffer(cursor: ChannelCursor): Promise<boolean> {
     if (cursor.buffer.length > 0) return true;
     if (cursor.exhausted || cursor.failed) return false;
     let scans = 0;
-    while (cursor.buffer.length === 0 && !cursor.exhausted && scans < currentScanBudget) {
+    while (
+      cursor.buffer.length === 0 &&
+      !cursor.exhausted &&
+      scans < currentScanBudget &&
+      callScansUsed < CALL_SCAN_CAP
+    ) {
       try {
         if (!cursor.primed) {
           // First page via the shared 30-min cache (2 units saved on
@@ -413,6 +438,7 @@ export function createHomeFeedPager({ channels, filter, seed }: HomeFeedPagerOpt
           );
           absorb(cursor, videos);
           scans++;
+          callScansUsed++;
           // A short first page means the uploads playlist has no
           // second page; a full one needs token priming below.
           if (videos.length < 25) cursor.exhausted = true;
@@ -439,6 +465,7 @@ export function createHomeFeedPager({ channels, filter, seed }: HomeFeedPagerOpt
         if (!page.nextPageToken) cursor.exhausted = true;
         absorb(cursor, page.videos);
         scans++;
+        callScansUsed++;
       } catch {
         // Transient failure (quota blip / network): pause THIS
         // channel for the rest of this next() call only. It is NOT
@@ -452,13 +479,23 @@ export function createHomeFeedPager({ channels, filter, seed }: HomeFeedPagerOpt
   }
 
   async function takeChannel(cursor: ChannelCursor): Promise<HomeFeedItem | null> {
+    // Dedupe-drop guard: a take that keeps shifting items it must
+    // drop (catalogue twins, cross-channel duplicates — common for
+    // topic search results) must not loop through a channel's whole
+    // buffer in one call; after a few drops it yields the round and
+    // the next call continues from the same buffer.
+    let drops = 0;
     while (true) {
       const ready = await fillBuffer(cursor);
       if (!ready) return null;
       const meta = cursor.buffer.shift()!;
       // Dedupe by YouTube id: a catalogue twin (the row renders
       // instead) or an item already emitted from another source.
-      if (seen.has(meta.youtubeVideoId) || catalogueIds.has(meta.youtubeVideoId)) continue;
+      if (seen.has(meta.youtubeVideoId) || catalogueIds.has(meta.youtubeVideoId)) {
+        drops++;
+        if (drops >= 6) return null;
+        continue;
+      }
       seen.add(meta.youtubeVideoId);
       return { kind: 'upload', key: `yt-${meta.youtubeVideoId}`, meta, channel: cursor.channel };
     }
@@ -471,7 +508,9 @@ export function createHomeFeedPager({ channels, filter, seed }: HomeFeedPagerOpt
     // chance on every new call (scroll / refresh); within one call
     // it is tried once, so a dead key cannot spin the round-robin.
     for (const cursor of cursors) cursor.failed = false;
-    currentScanBudget = nextCallCount === 0 ? FIRST_CALL_SCAN_PAGES : MAX_SCAN_PAGES_PER_CALL;
+    const isFirstCall = nextCallCount === 0;
+    currentScanBudget = isFirstCall ? FIRST_CALL_SCAN_PAGES : MAX_SCAN_PAGES_PER_CALL;
+    callScansUsed = 0;
     nextCallCount++;
     await ensureCatalogue();
     const collected: HomeFeedItem[] = [];
@@ -511,6 +550,12 @@ export function createHomeFeedPager({ channels, filter, seed }: HomeFeedPagerOpt
       // empty-handed call keeps hunting until a genuinely dead
       // round, so a chip never reports empty over a slow scan.
       if (collected.length >= MIN_BATCH_BEFORE_RETURN) break;
+      // FIRST call paints after ONE round with whatever it holds
+      // (measured round 2: waiting for 8 items let sparse topics
+      // burn 100-280 calls across extra rounds before first paint;
+      // one round is ~2-4 s of parallel fetching, and scrolling
+      // continues the hunt immediately).
+      if (isFirstCall && collected.length > 0) break;
       if (collected.length > 0 && rounds >= MAX_ROUNDS_PER_CALL) break;
     }
     const catalogueDrained = catalogueEmitted >= catalogueRows.length;

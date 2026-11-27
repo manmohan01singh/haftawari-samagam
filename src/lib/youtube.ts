@@ -417,6 +417,43 @@ async function searchVideoIds(params: string, fetchImpl: typeof fetch): Promise<
   return (data.items ?? []).map((i) => i.id.videoId).filter((v): v is string => Boolean(v));
 }
 
+export interface ChannelSearchPage {
+  videos: YouTubeVideoMetadata[];
+  nextPageToken: string | null;
+}
+
+interface SearchPageResponse {
+  items?: { id: { videoId?: string } }[];
+  nextPageToken?: string;
+}
+
+/**
+ * One page of search WITHIN one channel, with the continuation
+ * token (searchChannelVideos below hides it). Powers the Home
+ * topic chips: YouTube's own index finds a topic across the
+ * channel's whole history in ONE search call, where scanning the
+ * uploads playlist page-by-page needed ~57 pages / 114 calls /
+ * ~24 s for a sparse topic like Simran (measured headlessly,
+ * 27 Nov 2026). search.list draws on its own 100/day bucket
+ * (post-June-2026 quota rules) — callers cache page 1 and page
+ * deliberately, never per keystroke.
+ */
+export async function searchChannelVideoPage(
+  channelId: string,
+  query: string,
+  pageToken?: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<ChannelSearchPage> {
+  const tokenPart = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '';
+  const data = await apiGet<SearchPageResponse>(
+    `search?part=snippet&type=video&maxResults=25&channelId=${encodeURIComponent(channelId)}&q=${encodeURIComponent(query)}&order=relevance${tokenPart}`,
+    fetchImpl,
+  );
+  const ids = (data.items ?? []).map((i) => i.id.videoId).filter((v): v is string => Boolean(v));
+  const videos = await fetchVideosMetadata(ids, fetchImpl);
+  return { videos, nextPageToken: data.nextPageToken ?? null };
+}
+
 /** Search WITHIN one channel (the official channel), API relevance order. */
 export async function searchChannelVideos(
   channelId: string,
