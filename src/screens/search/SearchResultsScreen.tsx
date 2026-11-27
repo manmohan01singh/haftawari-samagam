@@ -20,7 +20,10 @@ import { shareContent, shareFeedback } from '../../lib/share';
 import { OFFICIAL_CHANNEL_ID } from '../../lib/youtube';
 import {
   createSearchController,
+  degradedBannerText,
+  mergeRankedResults,
   searchAll,
+  searchYoutubeOnly,
   type SearchResults,
   type VideoResult,
 } from '../../features/search';
@@ -164,6 +167,38 @@ export function SearchResultsScreen({ route, navigation }: Props) {
     setAttempt((n) => n + 1);
   }, []);
 
+  const [legRetrying, setLegRetrying] = useState(false);
+  /**
+   * Degraded-banner Retry: re-runs ONLY the failed channel leg
+   * (search.list + card) and merges what it finds into the results
+   * already on screen. The local catalogue is not re-searched and the
+   * screen does not reset. On success the banner clears; on a fresh
+   * failure the banner's wording updates to the new classified cause.
+   */
+  const retryLeg = useCallback(() => {
+    if (legRetrying) return;
+    setLegRetrying(true);
+    searchYoutubeOnly(query)
+      .then((leg) => {
+        setResult((prev) => {
+          if (!prev || prev.query !== query || !prev.data) return prev;
+          return {
+            ...prev,
+            data: {
+              ...prev.data,
+              channel: prev.data.channel ?? leg.channel,
+              videos: mergeRankedResults(prev.data.videos, leg.videos),
+              youtubeSkipped: leg.youtubeSkipped,
+              youtubeError: leg.youtubeError,
+              youtubeFallback: leg.youtubeFallback,
+            },
+          };
+        });
+      })
+      .catch(() => undefined) // a failed retry keeps the banner; its class was logged by the leg
+      .finally(() => setLegRetrying(false));
+  }, [legRetrying, query]);
+
   useEffect(() => {
     const controller = controllerRef.current;
     return () => controller?.cancel();
@@ -274,10 +309,29 @@ export function SearchResultsScreen({ route, navigation }: Props) {
       ) : null}
       {remotePending ? (
         <Text style={styles.pendingNote}>Searching the official channel…</Text>
-      ) : youtubeSkipped ? (
-        <Text style={styles.skippedNote}>
-          Showing the published archive only — channel results are unavailable right now.
+      ) : data?.youtubeFallback ? (
+        <Text style={styles.pendingNote}>
+          Channel search is unavailable — showing matches from the channel&apos;s latest uploads.
         </Text>
+      ) : youtubeSkipped ? (
+        <View style={styles.skippedRow}>
+          <Text style={[styles.skippedNote, styles.skippedText]}>
+            {degradedBannerText(data?.youtubeError ?? null)}
+          </Text>
+          <Pressable
+            style={styles.retryChip}
+            onPress={retryLeg}
+            disabled={legRetrying}
+            accessibilityRole="button"
+            accessibilityLabel="Retry channel search"
+          >
+            {legRetrying ? (
+              <ActivityIndicator size="small" color={lightColors.text} />
+            ) : (
+              <Text style={styles.retryChipText}>Retry</Text>
+            )}
+          </Pressable>
+        </View>
       ) : null}
       {channelResult ? (
         /* Ref-3: the whole channel block — identity row, both pills,
@@ -484,8 +538,22 @@ export function SearchResultsScreen({ route, navigation }: Props) {
                   <MaterialIcons name="search-off" size={40} color={lightColors.textSecondary} />
                   <EmptyState
                     title="No results found"
-                    message={`Nothing in the archive or the official channel matches "${query}". Check the spelling, try fewer words, or search for part of the shabad title.`}
+                    message={
+                      youtubeSkipped
+                        ? `Nothing in the published archive matches "${query}", and channel results could not be loaded — see the note above. Tap Retry to try the channel again.`
+                        : `Nothing in the archive or the official channel matches "${query}". Check the spelling, try fewer words, or search for part of the shabad title.`
+                    }
                   />
+                  {youtubeSkipped ? (
+                    <Pressable
+                      style={styles.actionPill}
+                      onPress={retryLeg}
+                      disabled={legRetrying}
+                      accessibilityRole="button"
+                    >
+                      <Text style={styles.actionPillText}>{legRetrying ? 'Retrying…' : 'Retry'}</Text>
+                    </Pressable>
+                  ) : null}
                   <Pressable
                     style={styles.actionPill}
                     onPress={() => navigation.navigate('Search')}
@@ -564,6 +632,17 @@ const styles = StyleSheet.create({
   didYouMeanStrong: { color: lightColors.text, fontWeight: '600', textDecorationLine: 'underline' },
   pendingNote: { ...typography.metadata, color: lightColors.textSecondary, marginTop: spacing.sm },
   skippedNote: { ...typography.metadata, color: lightColors.textSecondary, marginTop: spacing.sm },
+  skippedRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm },
+  skippedText: { flex: 1, marginTop: 0 },
+  retryChip: {
+    backgroundColor: lightColors.surfaceVariant,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 6,
+    minWidth: 72,
+    alignItems: 'center',
+  },
+  retryChipText: { ...typography.chip, color: lightColors.text },
   tintBlock: {
     backgroundColor: lightColors.searchTint,
     // Bleed to the screen edges: cancel the list's horizontal padding.

@@ -4,6 +4,7 @@
  */
 
 import type { MatchKind } from './fuzzy';
+import type { YouTubeErrorClass } from './youtubeError';
 
 /** The official channel as a search result card (reference screenshot 03). */
 export interface ChannelResult {
@@ -50,6 +51,20 @@ export interface SearchResults {
    */
   youtubeSkipped: boolean;
   /**
+   * Classified cause of the channel leg's failure (quota / rateLimit /
+   * referrer / config / network / timeout / http), or null when the leg
+   * succeeded. The degraded banner's wording comes from this — a banner
+   * may only appear when this is set by a real failure.
+   */
+  youtubeError: YouTubeErrorClass | null;
+  /**
+   * True when the YouTube results came from the degraded fallback
+   * (fuzzy match over the channel's latest uploads) because search.list
+   * failed. The screen must label them as latest-upload matches —
+   * coverage is partial by construction.
+   */
+  youtubeFallback: boolean;
+  /**
    * Real correction derived from known titles (local catalogue +
    * cached channel titles + channel aliases) when the typed query
    * fuzzy-matches a known word — e.g. "haftawri" → "haftawari".
@@ -64,6 +79,12 @@ export interface SearchOptions {
   limit?: number;
   /** Skip the 100-unit YouTube search leg (e.g. for suggestion typing). */
   localOnly?: boolean;
+  /**
+   * Run ONLY the channel legs (card + YouTube videos), skipping the
+   * local catalogue — used by the results screen's banner Retry, which
+   * must re-run the failed leg and not the whole search.
+   */
+  youtubeOnly?: boolean;
 }
 
 export interface Suggestion {

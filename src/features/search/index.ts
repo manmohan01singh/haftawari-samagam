@@ -27,8 +27,24 @@ export {
   matchOfficialChannel,
   parseIso8601Duration,
   searchChannelVideos,
+  searchChannelVideosWithFallback,
+  searchUploadsFallback,
+  type YoutubeLegOutcome,
 } from './youtubeSearch';
-export { searchAll, createSearchController, queryKey, deriveCorrection, type SearchController } from './engine';
+export {
+  YouTubeApiError,
+  degradedBannerText,
+  type YouTubeErrorClass,
+} from './youtubeError';
+export {
+  searchAll,
+  searchYoutubeOnly,
+  mergeRankedResults,
+  createSearchController,
+  queryKey,
+  deriveCorrection,
+  type SearchController,
+} from './engine';
 export { getSuggestions } from './suggestions';
 export {
   listSearchHistory,

@@ -25,6 +25,14 @@ export const OFFICIAL_CHANNEL = {
     'bhai sahib',
     'ludhiana wale',
     'bhai gursharan singh ji ludhiana wale',
+    // The channel's own daily programme terms: the Amritvela (early-
+    // morning Simran Sadhna) samagams are this channel's core content
+    // and the app's own vocabulary, so a search for the programme
+    // names the channel — its card + Latest videos belong on the
+    // results (round-3 fix: "Amritvela" returned no channel card).
+    'amritvela',
+    'amrit vela',
+    'amritvela samagam',
   ],
 } as const;
 
