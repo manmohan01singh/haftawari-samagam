@@ -1,5 +1,5 @@
 import 'react-native-gesture-handler';
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   DarkTheme,
   DefaultTheme,
@@ -102,15 +102,27 @@ function ThemedNavigation() {
     };
   }, [colors, isDark]);
 
+  // The persistent player host needs the current route name, and
+  // onStateChange does NOT fire for the initial state — on a fresh
+  // deep link (or a refresh) straight onto a Watch page, routeName
+  // stayed null forever, so the host parked the player off-screen
+  // and the Watch slot spun forever (mobile sweep round 6
+  // verification, 28 Nov 2026: fresh /watch deep link showed a
+  // permanent spinner while the gate UI sat parked in the DOM).
+  // onReady covers the initial route; onStateChange covers every
+  // navigation after it.
+  const syncRouteName = useCallback(() => {
+    const name = navigationRef.current?.getCurrentRoute()?.name ?? null;
+    usePlaybackStore.getState().setRouteName(name);
+  }, []);
+
   return (
     <NavigationContainer
       ref={navigationRef}
       linking={appLinking}
       theme={navigationTheme}
-      onStateChange={() => {
-        const name = navigationRef.current?.getCurrentRoute()?.name ?? null;
-        usePlaybackStore.getState().setRouteName(name);
-      }}
+      onReady={syncRouteName}
+      onStateChange={syncRouteName}
     >
       <AppErrorBoundary>
         <RootNavigator />
