@@ -254,10 +254,13 @@ const styles = StyleSheet.create({
   card: {
     marginBottom: 12,
     shadowColor: '#000000',
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    // On-device QA (27 Nov): 0.08/6 read as completely flat on web —
+    // strengthened to the lightest shadow that still separates the
+    // card from the page ground at phone width.
+    shadowOpacity: 0.14,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
   },
   thumbnailWrap: { position: 'relative' },
   thumbnail: {

@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { BlurView } from 'expo-blur';
 
 /**
@@ -14,34 +14,38 @@ import { BlurView } from 'expo-blur';
  * - Android: `experimentalBlurMethod="dimezisBlurView"` gives a real
  *   RenderEffect blur; without it Android would show only the tint.
  *
- * Performance: the blur is STATIC (fixed intensity, no animation,
- * no scroll-linked updates), which is the cheap configuration —
- * the GPU cost is one backdrop pass per bar. Intensity 72 / light
- * tint matches the reference bars' milky-white translucency while
- * keeping 24dp icons at full contrast (icons render ABOVE this
- * layer, never inside it).
+ * LAYERING LESSON (found by on-device QA, 27 Nov 2026): a backdrop
+ * blur samples EVERYTHING painted beneath the blur element. The
+ * first version put a rgba(255,255,255,0.82) "fallback" layer UNDER
+ * the BlurView — the blur then sampled that near-opaque white layer
+ * instead of the scrolling content, and the bar rendered as a
+ * perfectly uniform solid white on the owner's phone even with a
+ * bright poster scrolling directly behind it. There must be NO
+ * backing layer under the blur: the translucency lives in the
+ * BlurView's own tint + background (0.68 white), which on web sits
+ * in the SAME element as the backdrop-filter, so content colour
+ * genuinely washes through. Where backdrop-filter is unsupported,
+ * the bar degrades to that 0.68 translucent white with unblurred
+ * content showing through — still glassy, never a solid slab and
+ * never fully transparent.
  *
- * Fallback: under the BlurView sits a translucent white layer
- * (rgba 255,255,255,0.82). Where backdrop blur is unavailable
- * (older webviews without backdrop-filter, Android blur disabled),
- * the bar degrades to that near-solid translucent white — never to
- * transparent, so bar content stays legible.
+ * Performance: the blur is STATIC (fixed intensity, no animation,
+ * no scroll-linked updates) — one backdrop pass per bar. Intensity
+ * 80 keeps the wash-through clearly visible while 24dp icons above
+ * the layer stay at full contrast.
  */
 export const BarBlurBackground = memo(function BarBlurBackground() {
   return (
-    <>
-      <View style={[StyleSheet.absoluteFill, styles.fallback]} pointerEvents="none" />
-      <BlurView
-        intensity={72}
-        tint="light"
-        experimentalBlurMethod="dimezisBlurView"
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
-    </>
+    <BlurView
+      intensity={80}
+      tint="light"
+      experimentalBlurMethod="dimezisBlurView"
+      style={[StyleSheet.absoluteFill, styles.tint]}
+      pointerEvents="none"
+    />
   );
 });
 
 const styles = StyleSheet.create({
-  fallback: { backgroundColor: 'rgba(255,255,255,0.82)' },
+  tint: { backgroundColor: 'rgba(255,255,255,0.68)' },
 });
