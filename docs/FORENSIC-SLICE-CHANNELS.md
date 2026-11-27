@@ -141,3 +141,44 @@ themselves during a browser takeover. Findings:
   of 7 rail avatars visible at once; an automated drag did not scroll
   the rail to reveal the rest (may be an automation limitation —
   needs a real finger-scroll confirmation on device).
+
+## Addendum 2 — 2026-11-27 10:14–10:17 IST: PANEL VERIFIED END-TO-END (CLOSED)
+
+Prerequisites landed: "Mamm" promoted to admin (central SQL, verified),
+migration 0003 + 0004 applied (central; independently re-verified here:
+REST GET /channels → HTTP 200). The user signed in themselves in the
+browser; session verified as Mamm (admin). Live build: Phase 11/12
+bundle. Results:
+
+- D1 Panel renders: **PASS** — Admin dashboard entry visible on the
+  You tab for Mamm; Overview → Channels entry present; counts before
+  adds: Channels active 1 / total 1. Panel sections all present, no
+  stuck spinner, no error banner. List = BGSJ seed, chip Active.
+- D2/D5 Add flow: **PASS** — AMRITVELA TRUST LIVE Look up preview exact
+  ("10.5 lakh subscribers • 9.2K videos", UC id correct) → Add →
+  'Added "AMRITVELA TRUST LIVE" — it is now live in Subscriptions and
+  Search.' → count 2. AMRITVELA TRUST preview exact ("5.52 lakh •
+  5.3K videos") → Add → same success pattern → count 3; Suggested
+  section correctly disappeared once both were added.
+- D6 Activate/Deactivate: **PASS** — Deactivate → '"AMRITVELA TRUST"
+  hidden from the app.', chip Active→Inactive, button flips; Activate
+  → '"AMRITVELA TRUST" is now shown in the app.', restored. Final REST
+  state (verified from here): 3 rows, sort 0/1/2, all is_active=true.
+- Subscriptions after adds: rail shows 7 avatars including both new
+  Amritvela channels (rail is follow/registry-driven; BGSJ official
+  still not a rail avatar although its videos fill the feed — open
+  observation from Addendum 1 stands).
+- Search after adds: "bgsj" card **PASS**. "amritvela" card **FAIL** —
+  no Amritvela channel card; the BGSJ card wins the slot (BGSJ's
+  identity carries the 'amritvela' alias from the search-fix branch,
+  and the run was in degraded/rate-limited mode). Expected fix: exact
+  title/handle matches must outrank alias matches, and/or drop the
+  'amritvela' alias from BGSJ now that the real Amritvela channels
+  exist in the table. Handed to the search owner as a Phase 13 item.
+- A4 re-check: with the table present the panel never shows the
+  missing-table path; the graceful message remains in the code for
+  any future missing-table state.
+
+Section D is now fully exercised. Remaining open items in this slice:
+the "amritvela" search-card ranking FAIL above, B6 (Shorts heuristic),
+and the rail/BGSJ observation.
