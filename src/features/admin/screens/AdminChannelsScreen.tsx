@@ -56,7 +56,18 @@ function ChannelsContent({ ctx }: { ctx: AdminContext }) {
     try {
       setChannels(await listAllChannels());
     } catch (err) {
-      setError(friendlyError(err));
+      const raw = err instanceof Error ? err.message : String(err ?? '');
+      const code = (err as { code?: string } | null)?.code;
+      // The one error this screen can hit before anything else works:
+      // the table does not exist until migration 0003 is applied.
+      setError(
+        code === 'PGRST205' || raw.includes('PGRST205') || raw.toLowerCase().includes('channels')
+          ? 'The channels table does not exist yet — migration 0003_channels.sql still needs to be applied in the Supabase SQL Editor. Until then the app keeps showing the original single channel.'
+          : friendlyError(err),
+      );
+      // Do not spin forever under the error banner: fall through to
+      // the empty state, whose message explains the same thing.
+      setChannels((prev) => prev ?? []);
     }
   }, []);
 

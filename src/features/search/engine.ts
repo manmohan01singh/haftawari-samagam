@@ -181,21 +181,25 @@ async function runLegs(query: string, options: SearchOptions): Promise<LegsOutco
   const targets = channels.slice(0, MAX_YOUTUBE_SEARCH_CHANNELS);
   let firstError: YouTubeErrorClass | null = null;
   let officialFailed = false;
-  const legs = await Promise.all(
-    targets.map((identity) =>
-      searchChannelVideosFor(identity.id, query, options.signal).then(
-        (results) => ({ ok: true as const, results }),
-        (error: unknown) => {
-          if (error instanceof Error && error.name === 'AbortError') throw error;
-          if (error instanceof YouTubeApiError) {
-            if (firstError === null) firstError = error.errorClass;
-            if (identity.id === OFFICIAL_CHANNEL.id) officialFailed = true;
-          }
-          return { ok: false as const, results: [] as VideoResult[] };
-        },
-      ),
-    ),
-  );
+  // SEQUENTIAL, not Promise.all: Google throttles this project's
+  // search.list in bursts (separate "Search Queries" rate metric,
+  // diagnosed 2026-11-27), so firing every channel's search in the
+  // same instant risks losing all of them; spaced calls succeed.
+  // (This fix was lost once in a union merge — keep it.)
+  const legs: { ok: boolean; results: VideoResult[] }[] = [];
+  for (const identity of targets) {
+    try {
+      const results = await searchChannelVideosFor(identity.id, query, options.signal);
+      legs.push({ ok: true, results });
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') throw error;
+      if (error instanceof YouTubeApiError) {
+        if (firstError === null) firstError = error.errorClass;
+        if (identity.id === OFFICIAL_CHANNEL.id) officialFailed = true;
+      }
+      legs.push({ ok: false, results: [] });
+    }
+  }
   let youtubeVideos = legs.flatMap((leg) => leg.results);
   let youtubeFallback = false;
   if (officialFailed) {
