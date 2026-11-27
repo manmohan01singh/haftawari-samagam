@@ -9,7 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { goBackOrTab } from '../../navigation/safeBack';
 import { StackTabBar } from '../../components/layout/StackTabBar';
 import { EmptyState } from '../../components/common/EmptyState';

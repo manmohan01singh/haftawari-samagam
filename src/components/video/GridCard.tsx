@@ -1,7 +1,7 @@
 import React, { memo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { layout, lightColors, radii, spacing } from '../../theme';
 import { CardActionSheet, type CardMenuAction } from '../common/CardActionSheet';
 import { formatDuration } from './VideoCard';

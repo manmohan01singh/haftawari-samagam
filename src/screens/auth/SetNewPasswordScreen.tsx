@@ -10,7 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { branding } from '../../config/branding';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { useAuth } from '../../features/auth/AuthContext';

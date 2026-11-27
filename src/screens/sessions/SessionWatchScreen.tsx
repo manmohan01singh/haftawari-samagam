@@ -178,13 +178,19 @@ export function SessionWatchScreen({ route, navigation }: Props) {
   }, [sessionId, refreshJoinedCount]);
 
   // ── Presence: REAL count of signed-in viewers in this session room ──
+  // Deps are the stable userId/displayName, NOT the user object
+  // (perf3): AuthContext rebuilds that object on profile sync/retry,
+  // and depending on it tore down + re-created the realtime channel
+  // (websocket churn + count flicker) on every rebuild.
+  const presenceUserId = user?.userId;
+  const presenceDisplayName = user?.displayName;
   useEffect(() => {
-    if (!user) return;
+    if (!presenceUserId) return;
     const channel = joinPresence(
       sessionId,
       {
-        userId: user.userId,
-        displayName: user.displayName,
+        userId: presenceUserId,
+        displayName: presenceDisplayName ?? '',
         onlineAt: new Date().toISOString(),
       },
       (snapshot) => setPresenceCount(snapshot.participantCount),
@@ -194,7 +200,7 @@ export function SessionWatchScreen({ route, navigation }: Props) {
       presenceChannelRef.current = null;
       void leavePresence(channel);
     };
-  }, [sessionId, user]);
+  }, [sessionId, presenceUserId, presenceDisplayName]);
 
   // ── Keep my participant row fresh while joined ──────────────────────
   useEffect(() => {
