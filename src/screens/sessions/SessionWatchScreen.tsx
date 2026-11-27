@@ -499,6 +499,15 @@ export function SessionWatchScreen({ route, navigation }: Props) {
     hostedPlayback && video && hostedPlayback.videoId === video.id ? hostedPlayback : null;
   const hostedUrl = hostedForThisVideo?.kind === 'ready' ? hostedForThisVideo.url : null;
   const hostedError = hostedForThisVideo?.kind === 'error' ? hostedForThisVideo.message : null;
+  // Player actions only work when a player is actually mounted: hosted
+  // recordings mint a member-only signed URL, so for a signed-out guest
+  // there is no player to seek/play — "Watch again" / "Sync" would
+  // silently do nothing (hostedRef is null). YouTube embeds play for
+  // everyone, so the gate is the embed's video id there. (Sweep round 4:
+  // a guest saw "Watch again from the start" above the "Sign in to
+  // watch" note; the note below already carries the sign-in message,
+  // so the dead button is hidden instead of retargeted.)
+  const canControlPlayer = isHosted ? hostedUrl != null : video?.youtube_video_id != null;
 
   return (
     <View style={styles.root}>
@@ -703,7 +712,7 @@ export function SessionWatchScreen({ route, navigation }: Props) {
           </View>
         </Pressable>
 
-        {isPlaying ? (
+        {isPlaying && canControlPlayer ? (
           <Pressable
             onPress={seekToSessionPosition}
             style={({ pressed }) => [styles.syncButton, pressed && styles.pressed]}
@@ -713,7 +722,7 @@ export function SessionWatchScreen({ route, navigation }: Props) {
           </Pressable>
         ) : null}
 
-        {isCompleted ? (
+        {isCompleted && canControlPlayer ? (
           <Pressable
             onPress={() => {
               activeSeekTo(0);

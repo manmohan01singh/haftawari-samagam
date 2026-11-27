@@ -39,6 +39,17 @@ type Props = NativeStackScreenProps<RootStackParamList, 'SearchResults'>;
 
 type ResultFilter = 'all' | 'local' | 'youtube' | 'live';
 
+/**
+ * Bound for the "Searching the channels…" note (sweep round 4): stage 2
+ * fans out over up to 9 SEQUENTIAL channel legs + per-channel fallbacks
+ * + a correction pass, each leg carrying its own 10s timeout and a
+ * retry — a stalled leg can leave the note on screen for minutes while
+ * stage-1 results are already shown. After this long the note clears
+ * (stage-1 results stay; stage 2 still merges in when it lands, and
+ * its banner then shows from real stage-2 data).
+ */
+const REMOTE_PENDING_CAP_MS = 15_000;
+
 /** Map an engine VideoResult onto the shared card display shape. */
 function searchResultCardData(v: VideoResult, channelAvatarUrl: string | null): CardVideoData {
   return {
@@ -88,6 +99,10 @@ export function SearchResultsScreen({ route, navigation }: Props) {
   } | null>(null);
   const [latest, setLatest] = useState<YouTubeVideoMetadata[]>([]);
   const [attempt, setAttempt] = useState(0);
+  // Whether the stage-2 pending note has hit its time bound for this
+  // query (see REMOTE_PENDING_CAP_MS). Reset by the search effect on
+  // every new query/retry; stage 2 landing clears remotePending itself.
+  const [remoteCapped, setRemoteCapped] = useState(false);
   // Filter + refine draft are keyed by query: when the query changes
   // they read as reset, without a setState-in-effect sync.
   const [filterState, setFilterState] = useState<{ q: string; f: ResultFilter }>({
@@ -122,6 +137,7 @@ export function SearchResultsScreen({ route, navigation }: Props) {
     const controller = controllerRef.current;
     if (!controller) return;
     let active = true;
+    setRemoteCapped(false);
 
     // Stage 1 — local/fuzzy results first, fast and quota-free.
     searchAll(query, { localOnly: true })
@@ -156,8 +172,18 @@ export function SearchResultsScreen({ route, navigation }: Props) {
           );
         }
       });
+
+    // Time bound on the pending note (REMOTE_PENDING_CAP_MS): if stage 2
+    // is still running, the note clears and the header falls silent —
+    // stage-1 results stay, and stage 2 still merges in when it lands.
+    // (Without this, a stalled leg left "Searching the channels…"
+    // under already-loaded results indefinitely — sweep round 4.)
+    const capTimer = setTimeout(() => {
+      if (active) setRemoteCapped(true);
+    }, REMOTE_PENDING_CAP_MS);
     return () => {
       active = false;
+      clearTimeout(capTimer);
     };
   }, [query, attempt]);
 
@@ -318,13 +344,13 @@ export function SearchResultsScreen({ route, navigation }: Props) {
           </Text>
         </Pressable>
       ) : null}
-      {remotePending ? (
+      {remotePending && !remoteCapped ? (
         <Text style={styles.pendingNote}>Searching the channels…</Text>
-      ) : data?.youtubeFallback ? (
+      ) : !remotePending && data?.youtubeFallback ? (
         <Text style={styles.pendingNote}>
           Channel search is unavailable — showing matches from the channels&apos; latest uploads.
         </Text>
-      ) : youtubeSkipped ? (
+      ) : !remotePending && youtubeSkipped ? (
         <View style={styles.skippedRow}>
           <Text style={[styles.skippedNote, styles.skippedText]}>
             {degradedBannerText(data?.youtubeError ?? null)}
