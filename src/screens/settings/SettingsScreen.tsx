@@ -194,6 +194,19 @@ export function SettingsScreen({ navigation }: Props) {
           </View>
         )}
 
+        {user ? (
+          <Pressable
+            style={styles.row}
+            onPress={() => navigation.navigate('EditProfile')}
+            accessibilityRole="button"
+            accessibilityLabel="Edit profile"
+          >
+            <MaterialIcons name="edit" size={24} color={colors.text} />
+            <Text style={styles.rowText}>Edit profile</Text>
+            <MaterialIcons name="chevron-right" size={22} color={colors.textSecondary} />
+          </Pressable>
+        ) : null}
+
         <Text style={styles.sectionLabel}>General</Text>
         <Pressable
           style={styles.row}

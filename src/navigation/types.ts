@@ -49,6 +49,8 @@ export type RootStackParamList = {
   History: undefined;
   Settings: undefined;
   Account: undefined;
+  /** Edit the signed-in user's own display name (profiles row). */
+  EditProfile: undefined;
   SignIn: undefined;
   SignUp: undefined;
   /** Set-new-password gate shown after a password-recovery email link. */

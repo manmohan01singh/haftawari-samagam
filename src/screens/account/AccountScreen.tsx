@@ -64,6 +64,11 @@ export function AccountScreen({ navigation }: Props) {
               </View>
             </View>
 
+            <Pressable style={styles.row} onPress={() => navigation.navigate('EditProfile')} accessibilityRole="button">
+              <MaterialIcons name="edit" size={24} color={colors.text} />
+              <Text style={styles.rowText}>Edit profile</Text>
+              <MaterialIcons name="chevron-right" size={22} color={colors.textSecondary} />
+            </Pressable>
             <Pressable style={styles.row} onPress={() => navigation.navigate('History')} accessibilityRole="button">
               <MaterialIcons name="history" size={24} color={colors.text} />
               <Text style={styles.rowText}>History</Text>
