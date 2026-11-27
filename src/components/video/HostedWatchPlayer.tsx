@@ -1,12 +1,15 @@
 import React, { forwardRef, useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
+import { useNavigation, type NavigationProp } from '@react-navigation/native';
 import { HostedPlayer, type HostedPlayerHandle } from './HostedPlayer';
 import {
   fetchHostedPlaybackUrl,
   HostedNotConfiguredError,
+  HostedSignInRequiredError,
   reportVideoDurationIfMissing,
 } from '../../features/hosted/hostedService';
+import type { RootStackParamList } from '../../navigation/types';
 import { layout, spacing, useTheme, type ThemeColors } from '../../theme';
 
 interface HostedWatchPlayerProps {
@@ -33,6 +36,7 @@ export type { HostedPlayerHandle };
 export const HostedWatchPlayer = forwardRef<HostedPlayerHandle, HostedWatchPlayerProps>(
   function HostedWatchPlayer({ videoId, thumbnailUrl, autoplay = true, onPlayingChange, mini = false, onReady }, ref) {
   const { colors } = useTheme();
+  const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const styles = useMemo(() => createStyles(colors), [colors]);
   // State is keyed by videoId (same pattern as WatchScreen): a stale
   // entry for a previous video reads as 'loading', so the effect never
@@ -40,9 +44,14 @@ export const HostedWatchPlayer = forwardRef<HostedPlayerHandle, HostedWatchPlaye
   const [stored, setStored] = useState<
     | { videoId: string; kind: 'ready'; url: string }
     | { videoId: string; kind: 'error'; message: string }
+    | { videoId: string; kind: 'signin' }
     | null
   >(null);
-  const state: { kind: 'loading' } | { kind: 'ready'; url: string } | { kind: 'error'; message: string } =
+  const state:
+    | { kind: 'loading' }
+    | { kind: 'ready'; url: string }
+    | { kind: 'error'; message: string }
+    | { kind: 'signin' } =
     stored && stored.videoId === videoId ? stored : { kind: 'loading' };
 
   useEffect(() => {
@@ -53,6 +62,10 @@ export const HostedWatchPlayer = forwardRef<HostedPlayerHandle, HostedWatchPlaye
       })
       .catch((e: unknown) => {
         if (!active) return;
+        if (e instanceof HostedSignInRequiredError) {
+          setStored({ videoId, kind: 'signin' });
+          return;
+        }
         setStored({
           videoId,
           kind: 'error',
@@ -118,6 +131,18 @@ export const HostedWatchPlayer = forwardRef<HostedPlayerHandle, HostedWatchPlaye
       <View style={styles.center}>
         {state.kind === 'loading' ? (
           <ActivityIndicator color="#FFFFFF" />
+        ) : state.kind === 'signin' ? (
+          <>
+            <Text style={styles.message}>Sign in to watch this recording.</Text>
+            <Pressable
+              style={styles.signinButton}
+              onPress={() => navigation.navigate('SignIn')}
+              accessibilityRole="button"
+              accessibilityLabel="Sign in to watch"
+            >
+              <Text style={styles.signinButtonText}>Sign in</Text>
+            </Pressable>
+          </>
         ) : (
           <Text style={styles.message}>{state.message}</Text>
         )}
@@ -156,4 +181,12 @@ const createStyles = (colors: ThemeColors) =>
       padding: spacing.lg,
     },
     message: { color: '#FFFFFF', fontSize: 14, textAlign: 'center' },
+    signinButton: {
+      marginTop: spacing.md,
+      backgroundColor: '#FFFFFF',
+      paddingHorizontal: spacing.lg,
+      paddingVertical: 10,
+      borderRadius: 20,
+    },
+    signinButtonText: { color: '#0F0F0F', fontSize: 14, fontWeight: '600' },
   });

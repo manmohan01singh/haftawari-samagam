@@ -98,16 +98,18 @@ export function PlaylistsScreen({ navigation }: Props) {
         title="Playlists"
         onBack={() => goBackOrTab(navigation, 'Library')}
         right={
-          user ? (
-            <Pressable
-              onPress={() => setCreateOpen(true)}
-              hitSlop={10}
-              accessibilityLabel="Create a new playlist"
-              accessibilityRole="button"
-            >
-              <MaterialIcons name="add" size={26} color={colors.text} />
-            </Pressable>
-          ) : undefined
+          <Pressable
+            // Guests get the same "+" — it routes to sign-in, so the
+            // create path is visible instead of absent (mobile sweep
+            // round 6, 28 Nov 2026: guests saw no create control at
+            // all while public playlists were listed).
+            onPress={() => (user ? setCreateOpen(true) : navigation.navigate('SignIn'))}
+            hitSlop={10}
+            accessibilityLabel={user ? 'Create a new playlist' : 'Sign in to create a playlist'}
+            accessibilityRole="button"
+          >
+            <MaterialIcons name="add" size={26} color={colors.text} />
+          </Pressable>
         }
       />
 

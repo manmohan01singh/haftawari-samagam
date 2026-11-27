@@ -20,6 +20,21 @@ export class HostedNotConfiguredError extends Error {
   }
 }
 
+/**
+ * The r2-playback function rejected the caller as unauthenticated
+ * (hosted playback is members-only). Typed so the player can offer a
+ * "Sign in" button instead of a dead message — the plain-Error
+ * variant used to leave guests staring at a centred logo that reads
+ * like a play button but does nothing (mobile sweep round 6, 28 Nov
+ * 2026).
+ */
+export class HostedSignInRequiredError extends Error {
+  constructor() {
+    super('Sign in to watch this recording.');
+    this.name = 'HostedSignInRequiredError';
+  }
+}
+
 interface PlaybackResponse {
   url?: string;
   expires_in?: number;
@@ -61,7 +76,7 @@ export async function fetchHostedPlaybackUrl(videoId: string): Promise<string> {
       throw new HostedNotConfiguredError();
     }
     if (code === 'UNAUTHENTICATED' || error.message.includes('401')) {
-      throw new Error('Sign in to watch this recording.');
+      throw new HostedSignInRequiredError();
     }
     throw new Error('This recording is not available right now. Please try again later.');
   }
