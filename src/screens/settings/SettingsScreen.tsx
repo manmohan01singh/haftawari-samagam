@@ -128,7 +128,12 @@ export function SettingsScreen({ navigation }: Props) {
           </Pressable>
         ) : (
           <View>
-            <View style={styles.profileRow}>
+            <Pressable
+              style={styles.profileRow}
+              onPress={() => navigation.navigate('SignIn')}
+              accessibilityRole="button"
+              accessibilityLabel="Sign in"
+            >
               <View style={[styles.avatar, styles.avatarGuest]}>
                 <MaterialIcons name="person" size={24} color={lightColors.textSecondary} />
               </View>
@@ -138,7 +143,8 @@ export function SettingsScreen({ navigation }: Props) {
                   Sign in to sync your history, saved videos and playlists.
                 </Text>
               </View>
-            </View>
+              <MaterialIcons name="chevron-right" size={22} color={lightColors.textSecondary} />
+            </Pressable>
             <View style={styles.authButtons}>
               <Pressable
                 style={styles.primaryButton}
