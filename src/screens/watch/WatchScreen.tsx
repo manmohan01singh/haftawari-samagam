@@ -506,12 +506,14 @@ export function WatchScreen({ route, navigation }: Props) {
     const handle = channel?.handle ?? (resolved.row ? OFFICIAL_CHANNEL_HANDLE : null);
     const metaText = [handle, resolved.metaLine].filter(Boolean).join(' · ');
     return (
-      <View>
+      <View style={styles.headerWrap}>
         {/* Seam (round-3, ref-watch-live): for a video the API itself
             reports live, a thin red line sits exactly at the
             player/sheet seam — the live edge, as in the real app.
             Recorded videos get no line: their progress position is
-            not ours to invent. */}
+            not ours to invent. The strip is absolutely positioned at
+            the seam (header top + 17..20 — the list is pulled 20px up
+            over the player, see styles.list). */}
         {resolved.isLive ? <View style={styles.seamLine} /> : null}
         <View style={styles.sheet}>
           {backRow}
@@ -896,8 +898,15 @@ const styles = StyleSheet.create({
     aspectRatio: layout.thumbnailAspectRatio,
     backgroundColor: lightColors.playerBackground,
   },
-  list: { flex: 1 },
+  // The list itself is pulled 20px UP over the player's bottom edge
+  // (round-3 device check: the sheet's old -20 margin was clipped
+  // inside the scroll view, so the rounded corners never actually
+  // overlapped the video — the seam rendered as a straight edge).
+  // With the list overlapping, the sheet's corner notches reveal the
+  // video behind them, exactly as in ref-watch-live.
+  list: { flex: 1, marginTop: -nativeApp.watchSheet.topRadius, zIndex: 1 },
   listContent: { width: '100%', maxWidth: 1100, alignSelf: 'center' },
+  headerWrap: { position: 'relative' },
   playerThumb: { width: '100%', height: '100%', backgroundColor: lightColors.playerBackground },
   // Back control (round-3): lives in the sheet's header zone, above
   // the title — a plain dark arrow on white, 36dp target, icon's left
@@ -911,13 +920,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Seam line (round-3): 3dp red strip pulled 3dp up onto the seam
-  // between player and sheet; zIndex above the sheet so the strip
-  // reads exactly at the boundary, as in ref-watch-live.
+  // Seam line (round-3): 3dp red strip absolutely positioned at the
+  // player/sheet seam. The header starts 20px above the player's
+  // bottom edge (the list overlaps it), so top:17 puts the strip at
+  // the player's bottom 3px, above the sheet (zIndex 2).
   seamLine: {
+    position: 'absolute',
+    top: 17,
+    left: 0,
+    right: 0,
     height: 3,
     backgroundColor: lightColors.accent,
-    marginTop: -3,
     zIndex: 2,
   },
   chatWrap: { marginTop: spacing.lg },
@@ -935,13 +948,13 @@ const styles = StyleSheet.create({
   },
   sheet: {
     backgroundColor: lightColors.surface,
-    // Screenshot 06 / token: exactly 20px rounded top corners
-    // overlapping the player's bottom edge by the same 20px (the old
-    // build used token+4 = 24 on both, which read visibly rounder
-    // and ate 4px more of the player than the reference).
+    // Screenshot 06 / token: exactly 20px rounded top corners. The
+    // OVERLAP itself now comes from the list's -20 margin (see
+    // styles.list) — the sheet's own margin is 0, because a negative
+    // margin inside the scroll view was clipped at its top edge and
+    // the corners never showed over the video (device check).
     borderTopLeftRadius: nativeApp.watchSheet.topRadius,
     borderTopRightRadius: nativeApp.watchSheet.topRadius,
-    marginTop: -nativeApp.watchSheet.topRadius,
     paddingHorizontal: spacing.lg,
     // Round-3: the back row now occupies the sheet's header zone, so
     // top padding drops to 8 — back row (36) + title lands the title
