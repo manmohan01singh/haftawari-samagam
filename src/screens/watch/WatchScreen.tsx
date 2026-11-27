@@ -13,6 +13,7 @@ import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useIsFocused } from '@react-navigation/native';
 import { CardActionSheet } from '../../components/common/CardActionSheet';
 import { EmptyState } from '../../components/common/EmptyState';
 import { LinkedText } from '../../components/common/LinkedText';
@@ -39,6 +40,7 @@ import { useCurrentChatUser } from '../../features/chat/useSessionChat';
 import { joinPresence, leavePresence } from '../../features/presence/presenceService';
 import { useChannelFollow, useOfficialChannel } from '../../features/channel';
 import { getUploadsPageCached } from '../../features/channels/channelCache';
+import { usePlaybackStore, type PlaybackItem } from '../../features/playback/playbackStore';
 import { AddToPlaylistSheet } from '../../features/library';
 import { formatCount } from '../../lib/format';
 import { FEED_LIST_PERF } from '../../lib/listPerf';
@@ -134,6 +136,21 @@ export function WatchScreen({ route, navigation }: Props) {
   // element below), only its container's style changes, so playback
   // continues across collapse/expand with no restart.
   const [mini, setMini] = useState(false);
+  // Phase E: a PLAIN watch (no sessionId) plays through the root
+  // persistent player (see the Phase E block below); a SESSION
+  // watch keeps its in-screen player + mini bar.
+  const persistent = !sessionId;
+  // Minimize affordances (sheet drag-down, header chevron): a plain
+  // watch minimizes to the persistent bar and leaves the screen; a
+  // session watch collapses to the in-screen mini bar.
+  const minimizeAndLeave = useCallback(() => {
+    if (persistent) {
+      usePlaybackStore.getState().minimize();
+      goBackOrTab(navigation, 'Home');
+    } else {
+      setMini(true);
+    }
+  }, [persistent, navigation]);
   // Drag-down gesture on the sheet's header zone (back row + title):
   // a clearly-vertical drag past the snap threshold collapses to
   // mini. Taps are untouched (the responder only claims a gesture
@@ -145,10 +162,10 @@ export function WatchScreen({ route, navigation }: Props) {
         onMoveShouldSetPanResponder: (_e, g) =>
           g.dy > 10 && Math.abs(g.dy) > Math.abs(g.dx) * 1.5,
         onPanResponderRelease: (_e, g) => {
-          if (g.dy > nativeApp.chatSheet.dragSnapThreshold || g.vy > 0.5) setMini(true);
+          if (g.dy > nativeApp.chatSheet.dragSnapThreshold || g.vy > 0.5) minimizeAndLeave();
         },
       }),
-    [],
+    [minimizeAndLeave],
   );
   // Real sangat count for a session watch: Supabase Realtime Presence
   // on the session's room (same service SessionWatchScreen uses).
@@ -217,6 +234,72 @@ export function WatchScreen({ route, navigation }: Props) {
   const [readyFor, setReadyFor] = useState<string | null>(null);
   const playerKey = resolved ? (resolved.youtubeVideoId ?? resolved.row?.id ?? null) : null;
   const playerReady = resolved != null && playerKey != null && readyFor === playerKey;
+
+  // Phase E — persistent player. A PLAIN watch (no sessionId) hands
+  // its video to the root PlaybackHost: this screen renders only a
+  // measured slot, the host positions the single never-unmounted
+  // player over it, and leaving the screen minimizes instead of
+  // stopping (YouTube's behaviour). A SESSION watch keeps the
+  // in-screen player exactly as before — presence, chat and group
+  // sync belong to this screen, so its playback stays here too.
+  const isFocused = useIsFocused();
+  const slotRef = useRef<React.ElementRef<typeof View>>(null);
+
+  const buildItem = useCallback((): PlaybackItem | null => {
+    if (!resolved || !playerKey) return null;
+    return {
+      key: playerKey,
+      kind: resolved.source === 'hosted' && resolved.row ? 'hosted' : 'youtube',
+      youtubeVideoId: resolved.youtubeVideoId ?? null,
+      videoRowId: resolved.row?.id ?? null,
+      title: resolved.title,
+      channelLine: channel?.title ?? resolved.channelTitle,
+      thumbnailUrl: resolved.thumbnailUrl ?? null,
+    };
+  }, [resolved, playerKey, channel]);
+
+  // Hand the video to the host once this screen is focused and the
+  // navigation transition has settled (same 60 ms lazy-mount delay
+  // the in-screen player used). Re-runs on refocus, which is what
+  // restores THIS screen's video after a stacked Watch above it is
+  // popped.
+  useEffect(() => {
+    if (!persistent || !isFocused) return;
+    const item = buildItem();
+    if (!item) return;
+    const t = setTimeout(() => usePlaybackStore.getState().open(item), 60);
+    return () => clearTimeout(t);
+  }, [persistent, isFocused, buildItem]);
+
+  // Leaving a plain watch (back, tab switch, deep link) minimizes
+  // the persistent player instead of killing it. The bar's X is the
+  // only full stop.
+  useEffect(() => {
+    if (!persistent) return;
+    const unsub = navigation.addListener('beforeRemove', () => {
+      const st = usePlaybackStore.getState();
+      if (st.item && st.item.key === playerKey) st.minimize();
+    });
+    return unsub;
+  }, [navigation, persistent, playerKey]);
+
+  const measureSlot = useCallback(() => {
+    if (!persistent || !playerKey) return;
+    const key = playerKey;
+    slotRef.current?.measureInWindow((x, y, width, height) => {
+      if (width > 0) usePlaybackStore.getState().setSlotRect({ key, x, y, width, height });
+    });
+  }, [persistent, playerKey]);
+
+  // Re-measure once the focus transition settles: measureInWindow
+  // during an animated transition can catch a mid-flight position.
+  useEffect(() => {
+    if (!isFocused || !persistent) return;
+    measureSlot();
+    const t = setTimeout(measureSlot, 400);
+    return () => clearTimeout(t);
+  }, [isFocused, persistent, measureSlot]);
+
   const [savedState, setSavedState] = useState<{ rowId: string; saved: boolean } | null>(null);
   // Like (Phase 13): REAL state now — migration 0005's video_likes
   // table (one row per member per video, keyed by youtube_video_id).
@@ -727,9 +810,34 @@ export function WatchScreen({ route, navigation }: Props) {
       {/* The player box is in the SAME tree position in both modes —
           only its style changes (full 16:9 ↔ 106px mini thumb). The
           YouTubePlayer element therefore never unmounts/remounts on
-          collapse/expand, and playback does not restart. */}
-      <View style={[styles.playerBox, mini && styles.playerBoxMini]}>
-        {playerReady ? (
+          collapse/expand, and playback does not restart.
+          Phase E: for a PLAIN watch this box is only a measured
+          SLOT — the player itself lives in the root PlaybackHost,
+          positioned exactly over this box, so it survives leaving
+          the screen (mini player). Session watches keep the
+          in-screen player below. */}
+      <View
+        ref={persistent ? slotRef : undefined}
+        onLayout={persistent ? measureSlot : undefined}
+        style={[styles.playerBox, mini && styles.playerBoxMini]}
+      >
+        {persistent ? (
+          <>
+            {resolved.thumbnailUrl ? (
+              <Image
+                source={{ uri: resolved.thumbnailUrl }}
+                style={styles.playerThumb}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+              />
+            ) : (
+              <View style={styles.playerThumb} />
+            )}
+            <View style={styles.playerSpinner}>
+              <ActivityIndicator color="#FFFFFF" />
+            </View>
+          </>
+        ) : playerReady ? (
           resolved.source === 'hosted' && resolved.row ? (
             <HostedWatchPlayer videoId={resolved.row.id} thumbnailUrl={resolved.thumbnailUrl} />
           ) : resolved.youtubeVideoId ? (
@@ -848,7 +956,7 @@ export function WatchScreen({ route, navigation }: Props) {
             <View style={styles.backRowLine}>
               {backRow}
               <Pressable
-                onPress={() => setMini(true)}
+                onPress={minimizeAndLeave}
                 style={styles.backButton}
                 hitSlop={8}
                 accessibilityRole="button"
@@ -1106,6 +1214,7 @@ export function WatchScreen({ route, navigation }: Props) {
     presenceCount,
     mini,
     sheetPanResponder,
+    minimizeAndLeave,
     colors,
     styles,
     onToggleLike,

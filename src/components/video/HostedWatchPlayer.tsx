@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { forwardRef, useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import { HostedPlayer } from './HostedPlayer';
+import { HostedPlayer, type HostedPlayerHandle } from './HostedPlayer';
 import {
   fetchHostedPlaybackUrl,
   HostedNotConfiguredError,
@@ -13,7 +13,13 @@ interface HostedWatchPlayerProps {
   videoId: string;
   thumbnailUrl: string | null;
   autoplay?: boolean;
+  /** The player's own transport state, as it changes. */
+  onPlayingChange?: (playing: boolean) => void;
+  /** Phase E mini mode: bare video surface (see HostedPlayer). */
+  mini?: boolean;
 }
+
+export type { HostedPlayerHandle };
 
 /**
  * Watch-screen host for a hosted video: mints the short-lived signed
@@ -22,7 +28,8 @@ interface HostedWatchPlayerProps {
  * and a signed-out member is told to sign in (the function requires
  * a member session), instead of showing a dead black box.
  */
-export function HostedWatchPlayer({ videoId, thumbnailUrl, autoplay = true }: HostedWatchPlayerProps) {
+export const HostedWatchPlayer = forwardRef<HostedPlayerHandle, HostedWatchPlayerProps>(
+  function HostedWatchPlayer({ videoId, thumbnailUrl, autoplay = true, onPlayingChange, mini = false }, ref) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   // State is keyed by videoId (same pattern as WatchScreen): a stale
@@ -73,8 +80,11 @@ export function HostedWatchPlayer({ videoId, thumbnailUrl, autoplay = true }: Ho
   if (state.kind === 'ready') {
     return (
       <HostedPlayer
+        ref={ref}
         uri={state.url}
         autoplay={autoplay}
+        mini={mini}
+        onPlayingChange={onPlayingChange}
         onRefreshUri={refreshUri}
         onDuration={(seconds) => void reportVideoDurationIfMissing(videoId, seconds)}
       />
@@ -111,7 +121,7 @@ export function HostedWatchPlayer({ videoId, thumbnailUrl, autoplay = true }: Ho
       </View>
     </View>
   );
-}
+});
 
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({

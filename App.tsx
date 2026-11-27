@@ -4,6 +4,7 @@ import {
   DarkTheme,
   DefaultTheme,
   NavigationContainer,
+  type NavigationContainerRef,
   type Theme as NavigationTheme,
 } from '@react-navigation/native';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
@@ -11,11 +12,14 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { RootNavigator } from './src/navigation';
 import { appLinking } from './src/navigation/linking';
+import type { RootStackParamList } from './src/navigation/types';
 import { AuthProvider, useAuth } from './src/features/auth';
 import { ThemeProvider, useTheme } from './src/theme';
 import { registerServiceWorker } from './src/lib/registerServiceWorker';
 import { PwaBanners } from './src/components/pwa/PwaBanners';
 import { AppErrorBoundary } from './src/components/common/AppErrorBoundary';
+import { PlaybackHost } from './src/components/video/PlaybackHost';
+import { usePlaybackStore } from './src/features/playback/playbackStore';
 
 // Phase 9 (forensic audit §11.1): a real native splash. Hold the
 // OS splash (assets/splash-icon.png on white, configured via the
@@ -75,6 +79,12 @@ function SplashGate() {
  */
 function ThemedNavigation() {
   const { colors, isDark } = useTheme();
+  // Phase E: the persistent player host lives at the root and needs
+  // (a) a navigation handle to re-open the Watch screen from the
+  // mini bar, and (b) the current route name so the bar can hide on
+  // the session/admin surfaces. Both flow through this ref + the
+  // container's state-change callback into the playback store.
+  const navigationRef = useRef<NavigationContainerRef<RootStackParamList> | null>(null);
 
   const navigationTheme = useMemo<NavigationTheme>(() => {
     const base = isDark ? DarkTheme : DefaultTheme;
@@ -93,10 +103,19 @@ function ThemedNavigation() {
   }, [colors, isDark]);
 
   return (
-    <NavigationContainer linking={appLinking} theme={navigationTheme}>
+    <NavigationContainer
+      ref={navigationRef}
+      linking={appLinking}
+      theme={navigationTheme}
+      onStateChange={() => {
+        const name = navigationRef.current?.getCurrentRoute()?.name ?? null;
+        usePlaybackStore.getState().setRouteName(name);
+      }}
+    >
       <AppErrorBoundary>
         <RootNavigator />
       </AppErrorBoundary>
+      <PlaybackHost navigationRef={navigationRef} />
       <StatusBar style={isDark ? 'light' : 'dark'} />
     </NavigationContainer>
   );

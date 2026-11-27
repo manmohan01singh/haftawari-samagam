@@ -60,6 +60,16 @@ export interface HostedPlayerProps {
    * for COMPLETED replay.
    */
   showScrubber?: boolean;
+  /** The player's own transport state, as it changes. */
+  onPlayingChange?: (playing: boolean) => void;
+  /**
+   * Mini-player mode (Phase E): render ONLY the video surface — no
+   * tap layer, no chrome, no settings sheet. The persistent host
+   * shrinks this into the small floating view; its own bar carries
+   * play/pause/close. Playback, URL refresh and error recovery all
+   * keep working (they live in the hooks, not the chrome).
+   */
+  mini?: boolean;
 }
 
 const RATES = [1, 1.25, 1.5, 2, 0.75];
@@ -96,6 +106,8 @@ export const HostedPlayer = memo(
       onError,
       onRefreshUri,
       showScrubber = true,
+      onPlayingChange,
+      mini = false,
     },
     ref,
   ) {
@@ -104,8 +116,8 @@ export const HostedPlayer = memo(
     const viewRef = useRef<VideoView>(null);
     const readyHandledFor = useRef<string | null>(null);
     const durationReportedFor = useRef<string | null>(null);
-    const callbacks = useRef({ onTimeUpdate, onReady, onDuration, onError, onRefreshUri });
-    callbacks.current = { onTimeUpdate, onReady, onDuration, onError, onRefreshUri };
+    const callbacks = useRef({ onTimeUpdate, onReady, onDuration, onError, onRefreshUri, onPlayingChange });
+    callbacks.current = { onTimeUpdate, onReady, onDuration, onError, onRefreshUri, onPlayingChange };
     // Signed-URL refresh bookkeeping (see onRefreshUri): last known
     // position / play state for a seamless resume, plus attempt caps.
     const positionRef = useRef(0);
@@ -153,6 +165,7 @@ export const HostedPlayer = memo(
 
     useEventListener(player, 'playingChange', ({ isPlaying: playing }) => {
       wasPlayingRef.current = playing;
+      callbacks.current.onPlayingChange?.(playing);
     });
 
     useEventListener(player, 'statusChange', ({ status: next, error }) => {
@@ -352,6 +365,24 @@ export const HostedPlayer = memo(
         <View style={[styles.wrap, styles.errorWrap]}>
           <MaterialIcons name="error-outline" size={32} color="#FFFFFF" />
           <Text style={styles.errorText}>{errorMessage}</Text>
+        </View>
+      );
+    }
+
+    if (mini) {
+      // Phase E floating mini: the bare video surface only. The
+      // host's frame around it carries expand/close; transport is
+      // driven through the imperative handle by the host's bar.
+      return (
+        <View style={styles.wrap}>
+          <VideoView
+            ref={viewRef}
+            player={player}
+            style={styles.video}
+            contentFit="contain"
+            nativeControls={false}
+            allowsPictureInPicture
+          />
         </View>
       );
     }
