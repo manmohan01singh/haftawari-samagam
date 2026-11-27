@@ -474,6 +474,7 @@ export function SearchResultsScreen({ route, navigation }: Props) {
       key: 'Library',
       label: 'You',
       kind: 'avatar',
+      avatarUrl: profile?.avatar_url ?? null,
       avatarInitial:
         profile?.display_name?.charAt(0)?.toUpperCase() ?? user?.email?.charAt(0)?.toUpperCase() ?? '?',
     },

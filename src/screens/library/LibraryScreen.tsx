@@ -35,6 +35,7 @@ import type { LibraryRootStackParamList } from '../../features/library/screenTyp
 import { CreatePlaylistSheet } from '../../features/library/components/CreatePlaylistSheet';
 import { ScreenLoading } from '../../features/library/components/ScreenMessage';
 import { listThumbnailUrl } from '../../components/video/cardData';
+import { UserAvatar } from '../../components/common/UserAvatar';
 import { removeLocalHistoryEntry, useLocalHistory } from '../../features/library/localHistory';
 import { PlaylistRow } from '../../features/library/components/PlaylistRow';
 import { H_LIST_PERF } from '../../lib/listPerf';
@@ -209,9 +210,7 @@ export function LibraryScreen({ navigation }: Props) {
         ) : user ? (
           <>
             <View style={styles.profileBlock}>
-              <View style={styles.profileAvatar}>
-                <Text style={styles.profileInitial}>{initial}</Text>
-              </View>
+              <UserAvatar avatarUrl={profile?.avatar_url ?? null} initial={initial} size={72} initialFontSize={28} />
               <View style={styles.profileLines}>
                 <Text style={styles.profileName} numberOfLines={1}>
                   {displayName ?? 'Sangat member'}

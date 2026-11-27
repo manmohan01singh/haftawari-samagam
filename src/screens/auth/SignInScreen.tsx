@@ -16,6 +16,8 @@ import { branding } from '../../config/branding';
 import { goBackOrTab } from '../../navigation/safeBack';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { useAuth } from '../../features/auth/AuthContext';
+import { GoogleSignInButton } from '../../features/auth/components/GoogleSignInButton';
+import { OrDivider } from '../../features/auth/components/OrDivider';
 import { authRedirectUrl, friendlyAuthError, type AuthErrorKind } from '../../features/auth/authHelpers';
 import { lightColors, radii, spacing, typography } from '../../theme';
 import type { RootStackParamList } from '../../navigation/types';
@@ -179,6 +181,15 @@ export function SignInScreen({ navigation }: Props) {
         <Text style={styles.error}>Sign-in is not available: the backend is not configured.</Text>
       ) : (
         <>
+          <GoogleSignInButton
+            onError={(message) => {
+              setError(message);
+              setErrorKind('oauth');
+              setResendMessage(null);
+              setResetMessage(null);
+            }}
+          />
+          <OrDivider />
           <Text style={styles.label}>Email</Text>
           <TextInput
             style={styles.input}

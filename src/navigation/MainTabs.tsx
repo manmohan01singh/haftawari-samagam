@@ -29,6 +29,9 @@ export function MainTabs() {
     profile?.display_name?.charAt(0)?.toUpperCase() ??
     user?.email?.charAt(0)?.toUpperCase() ??
     null;
+  // Real profile photo (synced Google DP) when one exists; the slot
+  // falls back to the initial when it does not or fails to load.
+  const avatarUrl = profile?.avatar_url ?? null;
 
   const renderTabBar = useCallback(
     ({ state, navigation }: BottomTabBarProps) => {
@@ -38,7 +41,7 @@ export function MainTabs() {
         { key: 'Home', label: 'Home', icon: activeRoute.name === 'Home' ? 'home' : 'home' },
         { key: 'Subscriptions', label: 'Subscriptions', icon: 'subscriptions' },
         { key: CREATE_KEY, label: 'Official channel', kind: 'create' },
-        { key: 'Library', label: 'You', kind: 'avatar', avatarInitial: initial },
+        { key: 'Library', label: 'You', kind: 'avatar', avatarUrl, avatarInitial: initial },
       ];
       return (
         <BottomNav
@@ -56,7 +59,7 @@ export function MainTabs() {
         />
       );
     },
-    [initial],
+    [initial, avatarUrl],
   );
 
   return (

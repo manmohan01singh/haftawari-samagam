@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { RealtimeChannel } from '@supabase/supabase-js';
+import type { RealtimeChannel, User } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
+import { extractMetadataProfile } from '../auth/profileSync';
 import type { ChatMessage } from '../../types/database';
 import * as chatService from './chatService';
 import type { ChatAuthor, ChatMessageWithAuthor } from './types';
@@ -9,6 +10,14 @@ import type { ChatAuthor, ChatMessageWithAuthor } from './types';
 export interface ChatUser {
   id: string;
   displayName: string | null;
+  /**
+   * The user's OWN real profile photo (profiles.avatar_url, i.e. the
+   * synced Google DP) when known. Only ever populated for the
+   * signed-in user themselves — other participants' rows carry no
+   * avatar data (session_participant_names returns names only), so
+   * their rows keep the coloured-initial treatment.
+   */
+  avatarUrl?: string | null;
   /** From profiles.role when known; admins may read chat without joining. */
   isAdmin: boolean;
 }
@@ -95,17 +104,24 @@ export function useCurrentChatUser(externalUser?: ChatUser | null): {
     let active = true;
     const client = supabase;
 
-    const resolveProfile = async (userId: string) => {
+    const resolveProfile = async (sessionUser: User) => {
+      const userId = sessionUser.id;
+      // Pre-migration-0004 the row has no avatar_url; the Google DP
+      // still reaches the user's own chat rows via auth metadata.
+      const metaAvatar = extractMetadataProfile(sessionUser).avatarUrl;
       try {
         const profile = await chatService.fetchOwnProfile(userId);
         if (!active) return;
         setResolvedUser({
           id: userId,
           displayName: profile?.display_name ?? null,
+          avatarUrl: profile?.avatar_url ?? metaAvatar,
           isAdmin: profile?.role === 'admin',
         });
       } catch {
-        if (active) setResolvedUser({ id: userId, displayName: null, isAdmin: false });
+        if (active) {
+          setResolvedUser({ id: userId, displayName: null, avatarUrl: metaAvatar, isAdmin: false });
+        }
       }
     };
 
@@ -115,7 +131,7 @@ export function useCurrentChatUser(externalUser?: ChatUser | null): {
         if (!active) return;
         const sessionUser = data.session?.user ?? null;
         if (sessionUser) {
-          void resolveProfile(sessionUser.id);
+          void resolveProfile(sessionUser);
         } else {
           setResolvedUser(null);
         }
@@ -129,7 +145,7 @@ export function useCurrentChatUser(externalUser?: ChatUser | null): {
       if (!active) return;
       const sessionUser = next?.user ?? null;
       if (sessionUser) {
-        void resolveProfile(sessionUser.id);
+        void resolveProfile(sessionUser);
       } else {
         setResolvedUser(null);
       }

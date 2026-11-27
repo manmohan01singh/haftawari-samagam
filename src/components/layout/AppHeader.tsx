@@ -52,7 +52,20 @@ export const AppHeader = memo(function AppHeader({
         </Pressable>
         <Pressable onPress={onAccountPress} hitSlop={ICON_HIT_SLOP} accessibilityLabel="Account" accessibilityRole="button">
           {avatarUrl ? (
-            <Image source={{ uri: avatarUrl }} style={styles.avatar} contentFit="cover" cachePolicy="memory-disk" />
+            <HeaderAvatarImage
+              uri={avatarUrl}
+              fallback={
+                avatarInitial ? (
+                  <View style={[styles.avatar, styles.avatarFallback]}>
+                    <Text style={styles.avatarInitial}>{avatarInitial}</Text>
+                  </View>
+                ) : (
+                  <View style={[styles.avatar, styles.avatarFallback]}>
+                    <MaterialIcons name="person" size={18} color={lightColors.textSecondary} />
+                  </View>
+                )
+              }
+            />
           ) : avatarInitial ? (
             <View style={[styles.avatar, styles.avatarFallback]}>
               <Text style={styles.avatarInitial}>{avatarInitial}</Text>
@@ -72,6 +85,26 @@ export const AppHeader = memo(function AppHeader({
     </View>
   );
 });
+
+/**
+ * Account-slot photo with fallback: a failed load (stale Google DP
+ * URL, offline) falls back to the initial/person treatment rather
+ * than leaving a broken-image circle.
+ */
+function HeaderAvatarImage({ uri, fallback }: { uri: string; fallback: React.ReactNode }) {
+  // Remember WHICH uri failed so a changed uri gets a fresh try.
+  const [failedUri, setFailedUri] = React.useState<string | null>(null);
+  if (failedUri === uri) return <>{fallback}</>;
+  return (
+    <Image
+      source={{ uri }}
+      style={styles.avatar}
+      contentFit="cover"
+      cachePolicy="memory-disk"
+      onError={() => setFailedUri(uri)}
+    />
+  );
+}
 
 const styles = StyleSheet.create({
   bar: {

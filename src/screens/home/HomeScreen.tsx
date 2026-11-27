@@ -411,6 +411,7 @@ export function HomeScreen({ navigation }: Props) {
         <AppHeader
           onSearchPress={() => navigation.navigate('Search')}
           onAccountPress={() => navigation.navigate('Account')}
+          avatarUrl={profile?.avatar_url ?? null}
           avatarInitial={initial}
         />
         <SecondaryTabs

@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { nativeApp } from '../../../theme';
 
@@ -7,6 +8,13 @@ interface ChatAvatarProps {
   userId: string;
   /** Real display name, or null when not knowable under RLS. */
   displayName: string | null;
+  /**
+   * Real profile photo URL when one is knowable for this row. Today
+   * that is only ever the signed-in user's OWN photo (their synced
+   * Google DP): participant data carries names only, so other rows
+   * pass nothing here and keep the coloured initial.
+   */
+  avatarUrl?: string | null;
   size?: number;
 }
 
@@ -41,8 +49,26 @@ export function avatarColorFor(userId: string): string {
  * unknown name it shows a neutral person glyph — never a made-up
  * initial.
  */
-export function ChatAvatar({ userId, displayName, size = nativeApp.chatSheet.avatarSize }: ChatAvatarProps) {
+export function ChatAvatar({
+  userId,
+  displayName,
+  avatarUrl,
+  size = nativeApp.chatSheet.avatarSize,
+}: ChatAvatarProps) {
   const initial = displayName?.trim().charAt(0).toUpperCase();
+  // Remember WHICH url failed so a changed URL gets a fresh try.
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  if (avatarUrl && failedUrl !== avatarUrl) {
+    return (
+      <Image
+        source={{ uri: avatarUrl }}
+        style={{ width: size, height: size, borderRadius: size / 2, flexShrink: 0 }}
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        onError={() => setFailedUrl(avatarUrl)}
+      />
+    );
+  }
   return (
     <View
       style={[
