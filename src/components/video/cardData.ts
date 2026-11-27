@@ -21,8 +21,8 @@ export interface CardVideoData {
   /** Real metadata line ("▷ 12K · 21 hr ago", "591 watching", a date…). */
   metaLine: string;
   channelAvatarUrl: string | null;
-  /** Real YouTube video id (share / watch URLs are built from it). */
-  youtubeVideoId: string;
+  /** Real YouTube video id (share / watch URLs are built from it). NULL for hosted rows (migration 0005) — they have no YouTube id and no YouTube URL may be built for them. */
+  youtubeVideoId: string | null;
   /** Real channel id that published the video (avatar tap target). */
   channelId: string;
 }

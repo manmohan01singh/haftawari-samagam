@@ -27,6 +27,14 @@ import {
   type YouTubeEmbedHandle,
 } from '../../features/sessions/components/YouTubeEmbed';
 import {
+  HostedPlayer,
+  type HostedPlayerHandle,
+} from '../../components/video/HostedPlayer';
+import {
+  fetchHostedPlaybackUrl,
+  HostedNotConfiguredError,
+} from '../../features/hosted/hostedService';
+import {
   formatCountdown,
   formatSessionDateTime,
   formatStartedAgo,
@@ -63,6 +71,14 @@ type Props = NativeStackScreenProps<RootStackParamList, 'SessionWatch'>;
 
 /** Drift (seconds) tolerated before the player is re-seeked to the session position. */
 const DRIFT_TOLERANCE_SECONDS = 5;
+/**
+ * Hosted (native) players seek precisely, so hosted sessions use the
+ * tighter rule from the dual-source plan: check every 10 s, correct
+ * at > 1.5 s. The YouTube embed keeps the looser rule above — its
+ * seeks and time reports are not precise enough for 1.5 s.
+ */
+const HOSTED_DRIFT_TOLERANCE_SECONDS = 1.5;
+const HOSTED_DRIFT_CHECK_MS = 10_000;
 
 /**
  * Synchronized Samagam watch screen.
@@ -118,12 +134,32 @@ export function SessionWatchScreen({ route, navigation }: Props) {
   }, [item, sessionId, showToast]);
 
   const embedRef = useRef<YouTubeEmbedHandle>(null);
+  const hostedRef = useRef<HostedPlayerHandle>(null);
+  // Hosted sessions mint their signed playback URL per video (member
+  // session required — the r2-playback function rejects anonymous
+  // callers, unlike the public YouTube embed).
+  const [hostedPlayback, setHostedPlayback] = useState<
+    | { videoId: string; kind: 'ready'; url: string }
+    | { videoId: string; kind: 'error'; message: string }
+    | null
+  >(null);
   const playerTimeRef = useRef<number | null>(null);
   const presenceChannelRef = useRef<RealtimeChannel | null>(null);
 
   const session = item?.session ?? null;
   const video = item?.video ?? null;
   const durationSeconds = video?.duration_seconds ?? null;
+  const isHosted = (video?.source ?? 'youtube') === 'hosted';
+  // Unified seek/play dispatch: session sync talks to whichever
+  // player is mounted for this video's source.
+  const activeSeekTo = (seconds: number) => {
+    if (isHosted) hostedRef.current?.seekTo(seconds);
+    else embedRef.current?.seekTo(seconds);
+  };
+  const activePlay = () => {
+    if (isHosted) hostedRef.current?.play();
+    else embedRef.current?.play();
+  };
 
   const status = useMemo(() => {
     if (!session) return null;
@@ -238,9 +274,11 @@ export function SessionWatchScreen({ route, navigation }: Props) {
       durationSeconds,
       nowMs: serverClock.nowMs(),
     });
-    embedRef.current?.seekTo(target);
+    activeSeekTo(target);
     playerTimeRef.current = target;
-  }, [status, session, durationSeconds]);
+    // activeSeekTo is re-created per render and dispatches on isHosted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, session, durationSeconds, isHosted]);
 
   // ── Reconnect / foreground: re-sync clock (hook) + re-seek ──────────
   useEffect(() => {
@@ -269,6 +307,8 @@ export function SessionWatchScreen({ route, navigation }: Props) {
   // ── Drift correction while playing ──────────────────────────────────
   useEffect(() => {
     if (status !== 'now_playing' || !playerReady) return;
+    const tolerance = isHosted ? HOSTED_DRIFT_TOLERANCE_SECONDS : DRIFT_TOLERANCE_SECONDS;
+    const checkMs = isHosted ? HOSTED_DRIFT_CHECK_MS : 5000;
     const timer = setInterval(() => {
       const reported = playerTimeRef.current;
       if (reported == null) return;
@@ -277,13 +317,42 @@ export function SessionWatchScreen({ route, navigation }: Props) {
         durationSeconds,
         nowMs: serverClock.nowMs(),
       });
-      if (Math.abs(target - reported) > DRIFT_TOLERANCE_SECONDS) {
-        embedRef.current?.seekTo(target);
+      if (Math.abs(target - reported) > tolerance) {
+        activeSeekTo(target);
         playerTimeRef.current = target;
       }
-    }, 5000);
+    }, checkMs);
     return () => clearInterval(timer);
-  }, [status, playerReady, session, durationSeconds]);
+    // activeSeekTo dispatches on isHosted (in deps).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, playerReady, session, durationSeconds, isHosted]);
+
+  // ── Hosted playback URL (signed, short-lived, members only) ───────
+  useEffect(() => {
+    if (!isHosted || !video) return;
+    const videoId = video.id;
+    let active = true;
+    fetchHostedPlaybackUrl(videoId)
+      .then((url) => {
+        if (active) setHostedPlayback({ videoId, kind: 'ready', url });
+      })
+      .catch((e: unknown) => {
+        if (!active) return;
+        setHostedPlayback({
+          videoId,
+          kind: 'error',
+          message:
+            e instanceof HostedNotConfiguredError
+              ? 'Hosted playback is not configured yet, so this Samagam cannot be played yet.'
+              : e instanceof Error
+                ? e.message
+                : 'This Samagam is not available right now.',
+        });
+      });
+    return () => {
+      active = false;
+    };
+  }, [isHosted, video]);
 
   const handlePlayerReady = useCallback(() => setPlayerReady(true), []);
   const handleTimeUpdate = useCallback((seconds: number) => {
@@ -413,10 +482,16 @@ export function SessionWatchScreen({ route, navigation }: Props) {
   const title = session.title ?? video?.title ?? 'Samagam';
   const thumbnailUrl =
     video?.thumbnail_url ??
-    (video ? `https://i.ytimg.com/vi/${video.youtube_video_id}/hqdefault.jpg` : null);
+    (video?.youtube_video_id
+      ? `https://i.ytimg.com/vi/${video.youtube_video_id}/hqdefault.jpg`
+      : null);
   const isPlaying = status === 'now_playing';
   const isCompleted = status === 'completed';
   const showEmbed = (isPlaying || isCompleted) && video;
+  const hostedForThisVideo =
+    hostedPlayback && video && hostedPlayback.videoId === video.id ? hostedPlayback : null;
+  const hostedUrl = hostedForThisVideo?.kind === 'ready' ? hostedForThisVideo.url : null;
+  const hostedError = hostedForThisVideo?.kind === 'error' ? hostedForThisVideo.message : null;
 
   return (
     <View style={styles.root}>
@@ -426,7 +501,33 @@ export function SessionWatchScreen({ route, navigation }: Props) {
             Watch, round-3). The back control lives in the sheet's
             header zone below — previously it was a dark circle over
             the player, the third back placement in the app. */}
-        {showEmbed ? (
+        {showEmbed && isHosted ? (
+          hostedUrl ? (
+            <HostedPlayer
+              key={`hosted-${video.id}-${isPlaying ? 'playing' : 'replay'}`}
+              ref={hostedRef}
+              uri={hostedUrl}
+              startSeconds={isPlaying ? offsetSeconds : 0}
+              autoplay={isPlaying}
+              onReady={handlePlayerReady}
+              onTimeUpdate={handleTimeUpdate}
+              showScrubber={!isPlaying}
+            />
+          ) : (
+            <View style={styles.thumbnailWrap}>
+              {thumbnailUrl ? (
+                <Image source={{ uri: thumbnailUrl }} style={styles.thumbnail} contentFit="cover" cachePolicy="memory-disk" />
+              ) : (
+                <View style={[styles.thumbnail, styles.thumbnailEmpty]} />
+              )}
+              {hostedError ? (
+                <View style={styles.thumbnailBadge}>
+                  <Text style={styles.hostedErrorText}>{hostedError}</Text>
+                </View>
+              ) : null}
+            </View>
+          )
+        ) : showEmbed && video.youtube_video_id ? (
           <YouTubeEmbed
             key={`${video.youtube_video_id}-${isPlaying ? 'playing' : 'replay'}`}
             ref={embedRef}
@@ -531,9 +632,9 @@ export function SessionWatchScreen({ route, navigation }: Props) {
         {isCompleted ? (
           <Pressable
             onPress={() => {
-              embedRef.current?.seekTo(0);
+              activeSeekTo(0);
               playerTimeRef.current = 0;
-              embedRef.current?.play();
+              activePlay();
             }}
             style={({ pressed }) => [styles.syncButton, pressed && styles.pressed]}
             accessibilityRole="button"
@@ -709,6 +810,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   thumbnailEmpty: { backgroundColor: colors.surfaceVariant },
   thumbnailBadge: { position: 'absolute', left: spacing.sm, bottom: spacing.sm },
+  hostedErrorText: { ...typography.body, color: '#FFFFFF', backgroundColor: 'rgba(0,0,0,0.65)', paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radii.badge, overflow: 'hidden' },
   sheet: {
     flex: 1,
     backgroundColor: colors.surface,

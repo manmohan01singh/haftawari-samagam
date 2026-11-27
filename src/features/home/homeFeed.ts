@@ -55,8 +55,8 @@ export type HomeFeedItem =
   | { kind: 'catalogue'; key: string; video: Video }
   | { kind: 'upload'; key: string; meta: YouTubeVideoMetadata; channel: AppChannel };
 
-/** The YouTube video id behind either item kind (dedupe + share). */
-export function feedItemYoutubeId(item: HomeFeedItem): string {
+/** The YouTube video id behind either item kind (dedupe + share). NULL for hosted catalogue rows — they have no YouTube id. */
+export function feedItemYoutubeId(item: HomeFeedItem): string | null {
   return item.kind === 'catalogue' ? item.video.youtube_video_id : item.meta.youtubeVideoId;
 }
 
@@ -311,7 +311,7 @@ export function createHomeFeedPager({ channels, filter, seed }: HomeFeedPagerOpt
         for (const row of rows) {
           if (filter.kind === 'topic' && !matchesTopic(row.title, filter.keywords)) continue;
           catalogueRows.push(row);
-          catalogueIds.add(row.youtube_video_id);
+          if (row.youtube_video_id) catalogueIds.add(row.youtube_video_id);
         }
         if (rows.length < CATALOGUE_PAGE_SIZE) break;
       }
@@ -324,8 +324,10 @@ export function createHomeFeedPager({ channels, filter, seed }: HomeFeedPagerOpt
   function takeCatalogue(): HomeFeedItem | null {
     while (catalogueEmitted < catalogueRows.length) {
       const row = catalogueRows[catalogueEmitted++];
-      if (seen.has(row.youtube_video_id)) continue;
-      seen.add(row.youtube_video_id);
+      // Hosted rows have no YouTube id; dedupe them by row id instead.
+      const dedupeKey = row.youtube_video_id ?? `row:${row.id}`;
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
       return { kind: 'catalogue', key: `sb-${row.id}`, video: row };
     }
     return null;

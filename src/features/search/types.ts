@@ -26,7 +26,7 @@ export interface VideoResult {
   source: 'local' | 'youtube';
   /** Row id when source is 'local'; null for YouTube-only results. */
   videoRowId: string | null;
-  youtubeVideoId: string;
+  youtubeVideoId: string | null;
   title: string;
   thumbnailUrl: string | null;
   durationSeconds: number | null;

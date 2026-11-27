@@ -20,6 +20,7 @@ type Props = NativeStackScreenProps<AdminStackParamList, 'AdminOverview'>;
 
 const LINKS: { route: keyof AdminStackParamList; label: string; hint: string }[] = [
   { route: 'AdminVideos', label: 'Videos', hint: 'Add samagams from YouTube, publish or unpublish' },
+  { route: 'AdminHosted', label: 'Hosted videos', hint: 'Original files from the rights holder, authorization-gated publishing' },
   { route: 'AdminChannels', label: 'Channels', hint: 'Choose which YouTube channels appear in the app' },
   { route: 'AdminSessions', label: 'Sessions', hint: 'Schedule synchronized Samagam sessions' },
   { route: 'AdminCategories', label: 'Categories', hint: 'Organise the archive shelves' },

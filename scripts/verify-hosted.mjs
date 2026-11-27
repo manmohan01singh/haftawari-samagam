@@ -1,0 +1,188 @@
+#!/usr/bin/env node
+/**
+ * verify-hosted.mjs — static + pipeline assertions for the dual-source
+ * hosted-video build (migration 0005 + R2 Edge Functions + player).
+ *
+ * Asserts:
+ *  1. The migration contains the structural publish gate (trigger +
+ *     function), RLS on both new tables, and the videos source check.
+ *  2. Every Edge Function handles the unconfigured state
+ *     (R2_NOT_CONFIGURED) and NO function file contains a hard-coded
+ *     credential (AWS-style access keys, secret assignments, JWTs).
+ *  3. HostedPlayer exposes the imperative handle API
+ *     (seekTo / play / pause / setRate).
+ *  4. The self-owned pipeline proof exists in /tmp/hosted-test/:
+ *     the HLS master playlist parses and every segment it references
+ *     exists on disk.
+ *
+ * Usage: node scripts/verify-hosted.mjs   (exit 0 = all passed)
+ */
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+let failures = 0;
+function check(label, ok, detail = '') {
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? ` — ${detail}` : ''}`);
+  if (!ok) failures++;
+}
+function read(rel) {
+  const p = join(root, rel);
+  return existsSync(p) ? readFileSync(p, 'utf8') : null;
+}
+
+// ── 1. Migration ─────────────────────────────────────────────────────
+const migration = read('supabase/migrations/0006_hosted_videos.sql');
+check('migration 0005 exists', migration !== null);
+if (migration) {
+  check(
+    'publish gate: trigger on videos',
+    migration.includes('create trigger videos_hosted_publish_gate') &&
+      migration.includes('enforce_hosted_publish_gate'),
+  );
+  check(
+    'publish gate: raises when no authorization exists',
+    migration.includes('content_authorizations') && migration.includes('raise exception'),
+  );
+  check(
+    'videos source check (youtube requires an id)',
+    migration.includes("source in ('youtube', 'hosted')") &&
+      migration.includes('videos_source_id_check'),
+  );
+  check(
+    'youtube_video_id made nullable',
+    migration.includes('alter column youtube_video_id drop not null'),
+  );
+  check(
+    'RLS enabled on hosted_assets + content_authorizations',
+    migration.includes('alter table public.hosted_assets enable row level security') &&
+      migration.includes('alter table public.content_authorizations enable row level security'),
+  );
+  check(
+    'rotation candidates function present, deletes nothing',
+    migration.includes('hosted_rotation_candidates') &&
+      !/delete\s+from\s+public\.hosted_assets/i.test(migration),
+  );
+}
+
+// ── 2. Edge Functions ────────────────────────────────────────────────
+const functions = [
+  'supabase/functions/r2-upload/index.ts',
+  'supabase/functions/r2-playback/index.ts',
+  'supabase/functions/r2-admin/index.ts',
+  'supabase/functions/r2-rotate/index.ts',
+  'supabase/functions/_shared/s3.ts',
+  'supabase/functions/_shared/auth.ts',
+  'supabase/functions/_shared/rotate.ts',
+];
+const SECRET_PATTERNS = [
+  /AKIA[0-9A-Z]{16}/, // AWS access key id shape
+  /R2_SECRET_ACCESS_KEY\s*=\s*['"][^'"]+['"]/, // assigned literal
+  /R2_ACCESS_KEY_ID\s*=\s*['"][^'"]+['"]/,
+  /eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/, // JWT literal
+  /secretAccessKey:\s*['"][0-9a-f]{32,}['"]/i,
+];
+for (const rel of functions) {
+  const src = read(rel);
+  check(`${rel} exists`, src !== null);
+  if (!src) continue;
+  if (rel.includes('index.ts')) {
+    check(`${rel} handles R2_NOT_CONFIGURED`, src.includes('R2_NOT_CONFIGURED'));
+  }
+  const leaked = SECRET_PATTERNS.find((re) => re.test(src));
+  check(`${rel} has no hard-coded secrets`, !leaked, leaked ? `matched ${leaked}` : '');
+}
+
+// ── 2b. Upload validation (server-side enforcement) ─────────────────
+const s3Shared = read('supabase/functions/_shared/s3.ts');
+check('s3.ts exposes headObject (server-measured HEAD)', !!s3Shared && s3Shared.includes('export async function headObject'));
+const uploadFn = read('supabase/functions/r2-upload/index.ts');
+if (uploadFn) {
+  check(
+    'r2-upload MIME allowlist (mp4/webm/quicktime)',
+    uploadFn.includes('"video/mp4"') &&
+      uploadFn.includes('"video/webm"') &&
+      uploadFn.includes('"video/quicktime"'),
+  );
+  check('r2-upload refuses unsupported types (UNSUPPORTED_MEDIA_TYPE)', uploadFn.includes('UNSUPPORTED_MEDIA_TYPE'));
+  check(
+    'r2-upload size cap 8 GiB (FILE_TOO_LARGE)',
+    uploadFn.includes('MAX_OBJECT_BYTES = 8 * 1024 * 1024 * 1024') && uploadFn.includes('FILE_TOO_LARGE'),
+  );
+  check(
+    'r2-upload verify-object action (OBJECT_NOT_FOUND)',
+    uploadFn.includes('"verify-object"') && uploadFn.includes('OBJECT_NOT_FOUND') && uploadFn.includes('headObject'),
+  );
+  check(
+    'r2-upload content signature check (ftyp / EBML, mismatch + no silent pass)',
+    uploadFn.includes('CONTENT_SIGNATURE_MISMATCH') &&
+      uploadFn.includes('CONTENT_SIGNATURE_CHECK_FAILED') &&
+      uploadFn.includes('"ftyp"') &&
+      uploadFn.includes('0x1a') &&
+      uploadFn.includes('bytes=0-31'),
+  );
+  check(
+    'r2-upload audit trail (upload_completed / object_verified, best-effort)',
+    uploadFn.includes('writeAudit') &&
+      uploadFn.includes('hosted.upload_completed') &&
+      uploadFn.includes('hosted.object_verified') &&
+      uploadFn.includes('auditQuietly'),
+  );
+}
+// ── 2c. Playback playlist rewriting (signed segments) ──────────────
+const playbackFn = read('supabase/functions/r2-playback/index.ts');
+if (playbackFn) {
+  check(
+    'r2-playback fetches master playlist server-side (s3Fetch GET)',
+    playbackFn.includes('s3Fetch(cfg, "GET", asset.hls_master_key)'),
+  );
+  check(
+    'r2-playback rewrites segment lines with presignUrl',
+    playbackFn.includes('presignUrl(cfg, "GET", prefix + trimmed, PLAYBACK_EXPIRES)'),
+  );
+  check(
+    'r2-playback stores rewritten playlist at playback/master.m3u8 (s3Fetch PUT)',
+    playbackFn.includes('playback/master.m3u8') && playbackFn.includes('s3Fetch(cfg, "PUT"'),
+  );
+}
+const adminService = read('src/features/admin/adminService.ts');
+check(
+  'adminService verifyHostedAsset overwrites size with measured values',
+  !!adminService && adminService.includes('verifyHostedAsset') && adminService.includes("'verify-object'"),
+);
+const adminScreen = read('src/features/admin/screens/AdminHostedScreen.tsx');
+check(
+  'Admin UI verifies before marking ready',
+  !!adminScreen && adminScreen.includes('verifyHostedAsset(asset.id'),
+);
+
+// ── 3. HostedPlayer handle API ───────────────────────────────────────
+const player = read('src/components/video/HostedPlayer.tsx');
+check('HostedPlayer exists', player !== null);
+if (player) {
+  for (const method of ['seekTo', 'play', 'pause', 'setRate']) {
+    check(`HostedPlayer handle exposes ${method}()`, player.includes(`${method}:`) || player.includes(`${method}(`));
+  }
+  check('HostedPlayer supports showScrubber (session NOW PLAYING rule)', player.includes('showScrubber'));
+}
+
+// ── 4. Pipeline proof (/tmp/hosted-test) ─────────────────────────────
+const hlsDir = '/tmp/hosted-test/hls';
+const masterPath = join(hlsDir, 'master.m3u8');
+check('pipeline proof: master.m3u8 exists', existsSync(masterPath), masterPath);
+if (existsSync(masterPath)) {
+  const playlist = readFileSync(masterPath, 'utf8');
+  const segments = playlist
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.endsWith('.ts'));
+  check('playlist references segments', segments.length > 0, `${segments.length} segments`);
+  const missing = segments.filter((s) => !existsSync(join(hlsDir, s)));
+  check('every referenced segment exists on disk', missing.length === 0, missing.join(','));
+  const totalBytes = segments.reduce((sum, s) => sum + statSync(join(hlsDir, s)).size, 0);
+  check('segments carry real bytes', totalBytes > 100_000, `${totalBytes} bytes`);
+}
+
+console.log(failures === 0 ? '\nALL CHECKS PASSED' : `\n${failures} CHECK(S) FAILED`);
+process.exit(failures === 0 ? 0 : 1);

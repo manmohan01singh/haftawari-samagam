@@ -46,7 +46,8 @@
             "backgroundColor": "#0F0F0F"
           }
         }
-      ]
+      ],
+      "expo-video"
     ],
     "experiments": {
       "baseUrl": "/haftawari-samagam"

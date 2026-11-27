@@ -378,7 +378,7 @@ export function HomeScreen({ navigation }: Props) {
       map.set(
         item.key,
         item.kind === 'catalogue'
-          ? supabaseCardData(item.video, avatarUrl, liveMap.get(item.video.youtube_video_id) ?? null)
+          ? supabaseCardData(item.video, avatarUrl, item.video.youtube_video_id ? (liveMap.get(item.video.youtube_video_id) ?? null) : null)
           : apiCardData(item.meta, avatarByChannelId.get(item.meta.channelId) ?? item.channel.avatarUrl),
       );
     }
@@ -508,7 +508,7 @@ export function HomeScreen({ navigation }: Props) {
             data={
               cardDataByKey.get(item.key) ??
               (item.kind === 'catalogue'
-                ? supabaseCardData(item.video, avatarUrl, liveMap.get(item.video.youtube_video_id) ?? null)
+                ? supabaseCardData(item.video, avatarUrl, item.video.youtube_video_id ? (liveMap.get(item.video.youtube_video_id) ?? null) : null)
                 : apiCardData(item.meta, item.channel.avatarUrl))
             }
             saved={item.kind === 'catalogue' && savedIds.has(item.video.id)}

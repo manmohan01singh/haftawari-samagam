@@ -5,6 +5,7 @@ import {
   AdminCategoriesScreen,
   AdminChannelsScreen,
   AdminChatModerationScreen,
+  AdminHostedScreen,
   AdminMembersScreen,
   AdminOverviewScreen,
   AdminSessionsScreen,
@@ -24,6 +25,7 @@ export function AdminStack() {
     <Stack.Navigator>
       <Stack.Screen name="AdminOverview" component={AdminOverviewScreen} options={{ title: 'Admin' }} />
       <Stack.Screen name="AdminVideos" component={AdminVideosScreen} options={{ title: 'Videos' }} />
+      <Stack.Screen name="AdminHosted" component={AdminHostedScreen} options={{ title: 'Hosted videos' }} />
       <Stack.Screen name="AdminChannels" component={AdminChannelsScreen} options={{ title: 'Channels' }} />
       <Stack.Screen name="AdminSessions" component={AdminSessionsScreen} options={{ title: 'Sessions' }} />
       <Stack.Screen name="AdminCategories" component={AdminCategoriesScreen} options={{ title: 'Categories' }} />
