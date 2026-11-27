@@ -1,6 +1,9 @@
+import { useNavigation } from '@react-navigation/native';
+import type { NavigationProp } from '@react-navigation/native';
 import React, { type ReactNode } from 'react';
 import { View } from 'react-native';
 import { EmptyState } from '../../../components/common/EmptyState';
+import type { RootStackParamList } from '../../../navigation/types';
 import type { Profile } from '../../../types/database';
 import { useAdminGate } from '../useAdminGate';
 import { AdminButton, LoadingView } from './AdminUi';
@@ -21,6 +24,13 @@ export interface AdminContext {
  */
 export function AdminGate({ children }: { children: (ctx: AdminContext) => ReactNode }) {
   const { gate, refresh } = useAdminGate();
+  // The gate renders inside the Admin stack, which is the first screen
+  // of its own navigator — so there is no in-app back arrow above it.
+  // A signed-out guest arriving on /admin by direct link would
+  // otherwise be stuck with no way forward or back. The gate's own
+  // action button is the way out (navigate() bubbles to the root
+  // navigator for routes the Admin stack does not own).
+  const navigation = useNavigation<NavigationProp<RootStackParamList>>();
 
   switch (gate.status) {
     case 'admin':
@@ -40,6 +50,8 @@ export function AdminGate({ children }: { children: (ctx: AdminContext) => React
           <EmptyState
             title="Sign-in required"
             message="The admin dashboard is only available to signed-in admin accounts. Sign in from the Account area, then return here."
+            actionLabel="Sign in"
+            onAction={() => navigation.navigate('SignIn')}
           />
         </View>
       );
@@ -49,6 +61,8 @@ export function AdminGate({ children }: { children: (ctx: AdminContext) => React
           <EmptyState
             title="Not authorized"
             message="This account is a member account, not an admin. Admin access is granted only by the project owner, who promotes a profile in the Supabase dashboard SQL editor — it cannot be granted from inside the app."
+            actionLabel="Go to Home"
+            onAction={() => navigation.navigate('MainTabs', { screen: 'Home' })}
           />
         </View>
       );
