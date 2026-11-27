@@ -337,7 +337,10 @@ const styles = StyleSheet.create({
     width: '100%',
     aspectRatio: layout.thumbnailAspectRatio,
     borderRadius: 8,
-    backgroundColor: lightColors.playerBackground,
+    // Light placeholder while loading (was playerBackground black —
+    // a slow Up Next row read as a black rectangle; same fix as the
+    // feed thumbnail, QA issue 7 pattern).
+    backgroundColor: lightColors.surfaceVariant,
   },
   upNextBadge: {
     position: 'absolute',

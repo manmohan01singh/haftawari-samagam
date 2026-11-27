@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -10,6 +11,7 @@ import {
 import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { CardActionSheet } from '../../components/common/CardActionSheet';
 import { EmptyState } from '../../components/common/EmptyState';
 import { LinkedText } from '../../components/common/LinkedText';
 import { Toast, useToast } from '../../components/common/Toast';
@@ -23,12 +25,15 @@ import {
   type CardVideoData,
 } from '../../components/video/cardData';
 import { useAuth } from '../../features/auth';
-import { useOfficialChannel } from '../../features/channel';
+import { ChatPreviewCard, SessionChat } from '../../features/chat/components';
+import { useChannelFollow, useOfficialChannel } from '../../features/channel';
 import { AddToPlaylistSheet } from '../../features/library';
 import { formatCount } from '../../lib/format';
 import { FEED_LIST_PERF } from '../../lib/listPerf';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import {
+  OFFICIAL_CHANNEL_HANDLE,
+  OFFICIAL_CHANNEL_ID,
   fetchChannelById,
   fetchChannelUploads,
   fetchVideoMetadata,
@@ -59,6 +64,8 @@ interface ResolvedWatch {
   channelTitle: string;
   metaLine: string;
   thumbnailUrl: string | null;
+  /** Real duration (API contentDetails or the catalogue row). */
+  durationSeconds: number | null;
   row: Video | null;
   /** True only when the YouTube API itself reports this video live. */
   isLive: boolean;
@@ -76,7 +83,7 @@ interface ResolvedWatch {
  * screen plays archive recordings.
  */
 export function WatchScreen({ route, navigation }: Props) {
-  const { videoRowId, youtubeVideoId } = route.params;
+  const { videoRowId, youtubeVideoId, sessionId } = route.params;
   const { user } = useAuth();
   const officialChannel = useOfficialChannel();
   // The resolved video is stored keyed by its route params; loading and
@@ -92,6 +99,14 @@ export function WatchScreen({ route, navigation }: Props) {
   const error = watchState.key === watchKey ? watchState.error : null;
   const loading = watchState.key !== watchKey;
   const [channel, setChannel] = useState<YouTubeChannelInfo | null>(null);
+  // Bell pill (reference §5): the Subscribed pill's geometry — bell +
+  // chevron in a light-grey pill. There is no subscriptions backend,
+  // so this drives the honest DEVICE-LOCAL follow state shared with
+  // the Channel/Search screens (useChannelFollow): it never claims a
+  // YouTube subscription and never changes any subscriber count.
+  const { following, toggleFollow } = useChannelFollow(channel?.channelId ?? OFFICIAL_CHANNEL_ID);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   // Up Next items: local catalogue rows first; when the catalogue is
   // thin, real channel uploads from the YouTube API fill the list
   // (QA issue 58) — same compact-row rendering either way.
@@ -103,16 +118,19 @@ export function WatchScreen({ route, navigation }: Props) {
   const [readyFor, setReadyFor] = useState<string | null>(null);
   const playerReady = resolved != null && readyFor === resolved.youtubeVideoId;
   const [savedState, setSavedState] = useState<{ rowId: string; saved: boolean } | null>(null);
-  // Local pressed-state for the icon-only Like/Dislike pair (screenshot
-  // 06 action row shows no counts; the real like count, when the API
-  // provides one, lives in the metadata line). No count is displayed
-  // or stored from these toggles.
-  const [reaction, setReaction] = useState<'like' | 'dislike' | null>(null);
+  // Like/Dislike (round-3): NO state at all. The pair previously kept
+  // a local toggle that rendered a FILLED black thumb — a persistent
+  // "you liked this" claim with no backend behind it, i.e. fabricated
+  // data (app-watch-live2.jpg). The icons now stay outline-only and a
+  // tap answers honestly via toast that nothing was recorded. The
+  // real like count, when the API provides one, lives in the meta
+  // line — that is YouTube's count, not the user's action.
   const [playlistSheetOpen, setPlaylistSheetOpen] = useState(false);
   const { toast, showToast } = useToast();
   const saved =
     resolved?.row && savedState?.rowId === resolved.row.id ? savedState.saved : false;
-  const historyRecordedFor = useRef<string | null>(null);
+  const localHistoryRecordedFor = useRef<string | null>(null);
+  const serverHistoryRecordedFor = useRef<string | null>(null);
 
   // Resolve the video from Supabase (archive row) or the YouTube API.
   useEffect(() => {
@@ -139,9 +157,12 @@ export function WatchScreen({ route, navigation }: Props) {
         const isLive = meta?.liveBroadcastContent === 'live';
         const metaParts: string[] = [];
         if (meta) {
-          if (meta.liveBroadcastContent === 'live' && meta.concurrentViewers != null) {
-            metaParts.push(`${formatCount(meta.concurrentViewers)} watching`);
-          }
+          // Reference §5 meta line, ONE line, in this order:
+          // @handle · N likes · N watching (live) or ▷ N views
+          // (recorded) · date · #hashtag · more. The previous build
+          // pushed "watching" TWICE for live videos and put it before
+          // likes — screenshot order is likes first, watching second,
+          // each exactly once.
           if (meta.likeCount != null) metaParts.push(`${formatCount(meta.likeCount)} likes`);
           if (isLive) {
             if (meta.concurrentViewers != null) {
@@ -152,6 +173,8 @@ export function WatchScreen({ route, navigation }: Props) {
             // prefix ("▷ 3.3 lakh", "▷332 watching").
             metaParts.push(`▷ ${formatCount(meta.viewCount)} views`);
           }
+          // ONE date format everywhere: formatDateLine (en-IN,
+          // "30 Nov 2020") — the same helper the cards use.
           metaParts.push(formatDateLine(meta.publishedAt));
           // Hashtags come from the video's OWN description text
           // (real API data), first two, as in the reference meta line.
@@ -168,8 +191,9 @@ export function WatchScreen({ route, navigation }: Props) {
             description: row?.description ?? meta?.description ?? '',
             channelId: meta?.channelId ?? null,
             channelTitle: meta?.channelTitle ?? officialChannel?.title ?? '',
-            metaLine: metaParts.filter(Boolean).join('  ·  '),
+            metaLine: metaParts.filter(Boolean).join(' · '),
             thumbnailUrl: row?.thumbnail_url ?? meta?.thumbnailUrl ?? null,
+            durationSeconds: meta?.durationSeconds ?? row?.duration_seconds ?? null,
             row,
             isLive,
           },
@@ -254,26 +278,47 @@ export function WatchScreen({ route, navigation }: Props) {
     };
   }, [user, resolved]);
 
-  // Record watch history once per recording per mount. Signed-in:
-  // the server watch_history row (archive rows only). Signed-out:
-  // a DEVICE-LOCAL entry (features/library/localHistory) so History
-  // can honestly show what was watched on this device instead of
-  // claiming nothing happened (QA issue 78).
+  // ── History write path (round-3 audit — the user, signed in,
+  // watched live videos all morning and History stayed empty) ──
+  // The old single effect had THREE holes:
+  //  1. Signed-in + API-only video (every live/upload opened from
+  //     Home/Search/Subscriptions/Channel/Up Next, which pass only a
+  //     youtubeVideoId and have NO catalogue row): neither branch
+  //     fired — no server row (watch_history.video_id is an FK to
+  //     videos, so none can exist) and no local entry either.
+  //  2. Auth race: one shared "recorded" guard was set by whichever
+  //     branch ran first. On the PWA the session restores async, so
+  //     the effect usually ran signed-OUT (local write, guard set);
+  //     when the user arrived a moment later the guard blocked the
+  //     server write for catalogue rows too.
+  //  3. API-only entries lost their duration (only row durations
+  //     were stored).
+  // Now the two stores are written by separate effects with separate
+  // guards:
+  //  - LOCAL: every watch, signed in or out, row or API-only, once
+  //    per video per mount, with youtube_video_id + title +
+  //    thumbnail + duration — everything the History screen needs
+  //    to render the entry.
+  //  - SERVER: catalogue rows only, fired when the signed-in user
+  //    is known (whenever auth resolves), once per row per mount.
   useEffect(() => {
     if (!resolved) return;
-    if (historyRecordedFor.current === resolved.youtubeVideoId) return;
-    historyRecordedFor.current = resolved.youtubeVideoId;
-    if (user && resolved.row) {
-      void recordWatchHistory(user.id, resolved.row.id).catch(() => undefined);
-    } else if (!user) {
-      void recordLocalWatch({
-        youtubeVideoId: resolved.youtubeVideoId,
-        videoRowId: resolved.row?.id ?? null,
-        title: resolved.title,
-        thumbnailUrl: resolved.thumbnailUrl,
-        durationSeconds: resolved.row?.duration_seconds ?? null,
-      }).catch(() => undefined);
-    }
+    if (localHistoryRecordedFor.current === resolved.youtubeVideoId) return;
+    localHistoryRecordedFor.current = resolved.youtubeVideoId;
+    void recordLocalWatch({
+      youtubeVideoId: resolved.youtubeVideoId,
+      videoRowId: resolved.row?.id ?? null,
+      title: resolved.title,
+      thumbnailUrl: resolved.thumbnailUrl,
+      durationSeconds: resolved.durationSeconds,
+    }).catch(() => undefined);
+  }, [resolved]);
+
+  useEffect(() => {
+    if (!resolved?.row || !user) return;
+    if (serverHistoryRecordedFor.current === resolved.row.id) return;
+    serverHistoryRecordedFor.current = resolved.row.id;
+    void recordWatchHistory(user.id, resolved.row.id).catch(() => undefined);
   }, [user, resolved]);
 
   // Lazy player mount: mark this video ready only after the navigation
@@ -393,47 +438,61 @@ export function WatchScreen({ route, navigation }: Props) {
           </View>
         </>
       )}
-      {/* QA issue 64: a clear red LIVE pill on the player itself when
-          the API reports the video live (bottom-right, as in the
-          reference thumbnails/player), not just a small label that
-          appears somewhere after load. */}
-      {resolved.isLive ? (
-        <View style={styles.playerLiveBadge}>
-          <MaterialIcons name="sensors" size={14} color="#FFFFFF" />
-          <Text style={styles.playerLiveText}>LIVE</Text>
-        </View>
-      ) : null}
-      {/* QA issues 26/71: Watch previously had NO on-screen way back
-          (browser Back exited the PWA). A back overlay on the pinned
-          player is the always-visible exit. */}
-      <Pressable
-        onPress={() => goBackOrTab(navigation, 'Home')}
-        style={styles.backOverlay}
-        hitSlop={8}
-        accessibilityLabel="Back"
-        accessibilityRole="button"
-      >
-        <MaterialIcons name="arrow-back" size={22} color="#FFFFFF" />
-      </Pressable>
+      {/* Round-3 (user's phone, 27 Nov): NOTHING of ours overlays the
+          player rectangle — no back arrow, no LIVE pill. The old
+          back overlay sat on top of the embed's own title/channel
+          icon ("LIVE | Dhan Guru…" was cut), and our LIVE pill
+          duplicated the embed's own LIVE badge. The embed's own
+          branding/badges stay exactly as YouTube serves them; the
+          back control lives in the sheet's header zone (below). The
+          only thing inside this rectangle besides the embed is its
+          own loading poster (thumbnail + spinner, pointer-events
+          none), removed the moment the embed mounts. */}
     </View>
   ) : null;
 
-  // QA26: Watch had NO back affordance at all — the browser Back button
-  // exits the SPA, stranding phone users. The back target floats over
-  // the pinned player's top-left (see the player element above); the
-  // error state offers its own "Go back" action.
+  // Back control (round-3): a plain dark arrow in the SHEET's header
+  // zone, above the title — never on the video. Shared by the loaded,
+  // loading and error states so the exit is always in the same place.
+  const backRow = useMemo(
+    () => (
+      <View style={styles.backRow}>
+        <Pressable
+          onPress={() => goBackOrTab(navigation, 'Home')}
+          style={styles.backButton}
+          hitSlop={8}
+          accessibilityLabel="Back"
+          accessibilityRole="button"
+        >
+          <MaterialIcons name="arrow-back" size={24} color={lightColors.text} />
+        </Pressable>
+      </View>
+    ),
+    [navigation],
+  );
+
   const header = useMemo(() => {
     if (!resolved) return null;
     const channelName = channel?.title ?? resolved.channelTitle;
     const channelAvatar = channel?.avatarUrl ?? null;
     // Screenshot 06 metadata line: "@handle · N likes · ▷ N views ·
-    // date · more" — single line, parts joined only when present (the
-    // old build left a leading space when the handle was missing).
-    const metaText = [channel?.handle, resolved.metaLine].filter(Boolean).join('  ·  ');
+    // date · #tag · more" — ONE single line, parts joined only when
+    // present. Archive rows belong to the official channel, so its
+    // real handle fills in until the channel fetch lands (the old
+    // build left the handle out entirely in that window).
+    const handle = channel?.handle ?? (resolved.row ? OFFICIAL_CHANNEL_HANDLE : null);
+    const metaText = [handle, resolved.metaLine].filter(Boolean).join(' · ');
     return (
       <View>
+        {/* Seam (round-3, ref-watch-live): for a video the API itself
+            reports live, a thin red line sits exactly at the
+            player/sheet seam — the live edge, as in the real app.
+            Recorded videos get no line: their progress position is
+            not ours to invent. */}
+        {resolved.isLive ? <View style={styles.seamLine} /> : null}
         <View style={styles.sheet}>
-          <Text style={styles.title} numberOfLines={expanded ? undefined : 1}>
+          {backRow}
+          <Text style={styles.title} numberOfLines={expanded ? undefined : 2}>
             {resolved.title}
           </Text>
           <Pressable
@@ -481,50 +540,56 @@ export function WatchScreen({ route, navigation }: Props) {
             </View>
           </Pressable>
 
-          {/* Action row (screenshot 06): at left the light-grey pill
-              beside the channel row's avatar column — here the real
-              "View Channel" destination in the Subscribed pill's
-              geometry (this app has no subscribe backend, so the pill
-              is NOT labelled Subscribed); right-aligned icon-only
-              group Like / Dislike / Share / Save / •••, no counts,
-              no labels. Previously Save/Playlist/Share were crowded
-              into the channel row and the pill sat alone below it. */}
+          {/* Action row (screenshot 06): at left the light-grey bell
+              pill in the Subscribed pill's exact geometry (bell +
+              chevron-down). It toggles the device-local follow state
+              (see useChannelFollow above) — it is NOT labelled
+              "Subscribed" because there is no subscription backend.
+              Right-aligned icon-only group: Like / Dislike / Share /
+              Save / ⋮, 24px, no counts, no labels. The reference's
+              sparkle (Ask) slot is NOT rendered: this app has no Ask
+              backend, and a dead sparkle would be a fake action —
+              flagged in the QA report. Like/Dislike keep the row's
+              geometry but hold NO state (round-3): outline icons
+              only, a tap toasts honestly that nothing is recorded. */}
           <View style={styles.actionRow}>
             <Pressable
               style={styles.channelPill}
-              onPress={() => navigation.navigate('Channel', { channelId: channel?.channelId })}
+              onPress={() => {
+                toggleFollow();
+                showToast(
+                  following
+                    ? 'Removed from your followed channels on this device'
+                    : 'Following this channel on this device',
+                );
+              }}
               accessibilityRole="button"
-              accessibilityLabel="View Channel"
+              accessibilityLabel={following ? 'Following this channel' : 'Follow this channel'}
+              accessibilityState={{ selected: following }}
             >
-              <Text style={styles.channelPillText}>View Channel</Text>
-              <MaterialIcons name="chevron-right" size={18} color={lightColors.text} />
+              <MaterialIcons
+                name={following ? 'notifications' : 'notifications-none'}
+                size={20}
+                color={lightColors.text}
+              />
+              <MaterialIcons name="expand-more" size={18} color={lightColors.text} />
             </Pressable>
             <View style={styles.actions}>
               <Pressable
-                onPress={() => setReaction((r) => (r === 'like' ? null : 'like'))}
+                onPress={() => showToast('Likes are not available in this app yet — nothing was recorded')}
                 hitSlop={ICON_HIT_SLOP}
                 accessibilityLabel="Like"
                 accessibilityRole="button"
-                accessibilityState={{ selected: reaction === 'like' }}
               >
-                <MaterialIcons
-                  name={reaction === 'like' ? 'thumb-up' : 'thumb-up-off-alt'}
-                  size={24}
-                  color={lightColors.text}
-                />
+                <MaterialIcons name="thumb-up-off-alt" size={24} color={lightColors.text} />
               </Pressable>
               <Pressable
-                onPress={() => setReaction((r) => (r === 'dislike' ? null : 'dislike'))}
+                onPress={() => showToast('Dislikes are not available in this app yet — nothing was recorded')}
                 hitSlop={ICON_HIT_SLOP}
                 accessibilityLabel="Dislike"
                 accessibilityRole="button"
-                accessibilityState={{ selected: reaction === 'dislike' }}
               >
-                <MaterialIcons
-                  name={reaction === 'dislike' ? 'thumb-down' : 'thumb-down-off-alt'}
-                  size={24}
-                  color={lightColors.text}
-                />
+                <MaterialIcons name="thumb-down-off-alt" size={24} color={lightColors.text} />
               </Pressable>
               <Pressable onPress={onShare} hitSlop={ICON_HIT_SLOP} accessibilityLabel="Share" accessibilityRole="button">
                 <MaterialIcons name="share" size={23} color={lightColors.text} />
@@ -540,20 +605,44 @@ export function WatchScreen({ route, navigation }: Props) {
                   <MaterialIcons name={saved ? 'bookmark' : 'bookmark-border'} size={24} color={lightColors.text} />
                 </Pressable>
               ) : null}
-              {resolved.row ? (
-                <Pressable
-                  onPress={
-                    user ? () => setPlaylistSheetOpen(true) : () => navigation.navigate('SignIn')
-                  }
-                  hitSlop={ICON_HIT_SLOP}
-                  accessibilityLabel="Save to playlist"
-                  accessibilityRole="button"
-                >
-                  <MaterialIcons name="more-horiz" size={24} color={lightColors.text} />
-                </Pressable>
-              ) : null}
+              {/* ⋮ (screenshot 06's horizontal •••): opens the real
+                  action menu (Share / Save / Save to playlist / View
+                  Channel) — always present, for API-only videos too.
+                  Previously this icon was hidden for non-archive
+                  videos and, when shown, opened the playlist sheet
+                  directly under a misleading "more" glyph. */}
+              <Pressable
+                onPress={() => setMenuOpen(true)}
+                hitSlop={ICON_HIT_SLOP}
+                accessibilityLabel="More actions"
+                accessibilityRole="button"
+              >
+                <MaterialIcons name="more-horiz" size={24} color={lightColors.text} />
+              </Pressable>
             </View>
           </View>
+
+          {/* Live chat preview (reference §5 + round-3): rendered
+              ONLY when this watch was opened for a real Samagam
+              session (route carries a sessionId) — the grey box,
+              "Live chat" label and the signed-in user's own
+              "Chat publicly as …" pill, in ChatPreviewCard's ref
+              geometry (radius 16, padding 12, avatar 36). Tapping it
+              opens the real SessionChat sheet (rendered at the root
+              below). A plain recording has no session and gets NO
+              chat box — a "Live chat" label under a prerecorded
+              video would mislabel it. No participant count is passed:
+              this screen does not join Presence, so the count is
+              honestly hidden rather than invented. */}
+          {sessionId ? (
+            <View style={styles.chatWrap}>
+              <ChatPreviewCard
+                sessionId={sessionId}
+                onPress={() => setChatOpen(true)}
+                onSignInPress={() => navigation.navigate('SignIn')}
+              />
+            </View>
+          ) : null}
 
           {/* QA issues 55/65: a description PREVIEW box is visible in
               the collapsed state (2 lines, tap to expand); in the
@@ -584,22 +673,58 @@ export function WatchScreen({ route, navigation }: Props) {
                 <Text style={styles.descriptionText} numberOfLines={2} ellipsizeMode="tail">
                   {resolved.description}
                 </Text>
+                {/* Visible expand control, mirroring the expanded
+                    state's "Show less" — the collapsed box previously
+                    gave no sign it could be opened. */}
+                <Text style={styles.descriptionToggle}>Show more</Text>
               </Pressable>
             )
           ) : null}
         </View>
       </View>
     );
-  }, [resolved, channel, expanded, user, saved, onToggleSave, onShare, navigation, reaction]);
+  }, [
+    resolved,
+    channel,
+    expanded,
+    user,
+    saved,
+    onToggleSave,
+    onShare,
+    navigation,
+    following,
+    toggleFollow,
+    showToast,
+    backRow,
+    sessionId,
+  ]);
 
   if (loading) {
     return (
       <View style={styles.container}>
+        {/* Player loading state: the video's REAL thumbnail (derived
+            from the route's YouTube id when we have one) + spinner —
+            never a long black box, and (round-3) NOTHING overlaid on
+            it: the back control sits in the sheet skeleton below,
+            exactly where it sits in the loaded sheet. */}
         <View style={styles.playerSkeleton}>
-          <ActivityIndicator color={lightColors.textSecondary} />
-          <Text style={styles.playerSkeletonLabel}>Loading recording…</Text>
+          {youtubeVideoId ? (
+            <Image
+              source={{ uri: `https://i.ytimg.com/vi/${encodeURIComponent(youtubeVideoId)}/hqdefault.jpg` }}
+              style={styles.playerThumb}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+            />
+          ) : null}
+          <View style={styles.playerSpinner}>
+            <ActivityIndicator color={youtubeVideoId ? '#FFFFFF' : lightColors.textSecondary} />
+            {!youtubeVideoId ? (
+              <Text style={styles.playerSkeletonLabel}>Loading recording…</Text>
+            ) : null}
+          </View>
         </View>
         <View style={styles.sheetSkeleton}>
+          {backRow}
           <View style={[styles.skelLine, { width: '85%' }]} />
           <View style={[styles.skelLine, { width: '55%', marginTop: 8 }]} />
           <View style={styles.skelRow}>
@@ -618,6 +743,7 @@ export function WatchScreen({ route, navigation }: Props) {
     return (
       <View style={styles.container}>
         <View style={styles.playerSkeleton} />
+        <View style={styles.sheetSkeleton}>{backRow}</View>
         <EmptyState
           title="Recording unavailable"
           message={error ?? 'This recording could not be loaded.'}
@@ -648,6 +774,68 @@ export function WatchScreen({ route, navigation }: Props) {
         }
         {...FEED_LIST_PERF}
       />
+      {/* ⋮ action menu (screenshot 06 •••): only actions that really
+          work here — Share (system sheet), Save + Save to playlist
+          (saved_videos / playlists backends, archive rows + signed-in
+          users; signed-out taps go to SignIn, as the Save icon does),
+          and View Channel. */}
+      <CardActionSheet
+        visible={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        actions={[
+          { key: 'share', label: 'Share', icon: 'share', onPress: onShare },
+          ...(resolved.row
+            ? [
+                {
+                  key: 'save',
+                  label: saved ? 'Remove from saved' : 'Save',
+                  icon: saved ? 'bookmark' : 'bookmark-border',
+                  onPress: user ? onToggleSave : () => navigation.navigate('SignIn'),
+                },
+                {
+                  key: 'playlist',
+                  label: 'Save to playlist',
+                  icon: 'playlist-add',
+                  onPress: user
+                    ? () => setPlaylistSheetOpen(true)
+                    : () => navigation.navigate('SignIn'),
+                },
+              ]
+            : []),
+          {
+            key: 'channel',
+            label: 'View Channel',
+            icon: 'account-circle',
+            onPress: () =>
+              navigation.navigate('Channel', { channelId: channel?.channelId }),
+          },
+        ]}
+      />
+      {/* Live chat sheet — only reachable when a real sessionId
+          opened this watch (the preview card above is its only
+          doorway). Same host pattern as SessionWatchScreen:
+          SessionChat owns its own height so the player stays
+          visible above the sheet. */}
+      {sessionId ? (
+        <Modal
+          visible={chatOpen}
+          animationType="slide"
+          transparent
+          onRequestClose={() => setChatOpen(false)}
+        >
+          <View style={styles.chatBackdrop}>
+            <Pressable
+              style={styles.chatBackdropTap}
+              onPress={() => setChatOpen(false)}
+              accessibilityLabel="Close chat"
+              accessibilityRole="button"
+            />
+            <View style={styles.chatSheetHost}>
+              <SessionChat sessionId={sessionId} onClose={() => setChatOpen(false)} />
+            </View>
+          </View>
+        </Modal>
+      ) : null}
       {/* "Save to playlist" sheet (library stream) — archive rows and
           signed-in users only, matching the action button's gating. */}
       <AddToPlaylistSheet
@@ -669,32 +857,31 @@ const styles = StyleSheet.create({
     backgroundColor: lightColors.playerBackground,
   },
   playerThumb: { width: '100%', height: '100%', backgroundColor: lightColors.playerBackground },
-  playerLiveBadge: {
-    position: 'absolute',
-    right: 8,
-    bottom: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: lightColors.accent,
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    zIndex: 2,
-  },
-  playerLiveText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
-  backOverlay: {
-    position: 'absolute',
-    top: spacing.sm,
-    left: spacing.sm,
-    zIndex: 10,
+  // Back control (round-3): lives in the sheet's header zone, above
+  // the title — a plain dark arrow on white, 36dp target, icon's left
+  // edge aligned with the title text (sheet padding 16 + margin -6 +
+  // (36-24)/2 = 16).
+  backRow: { flexDirection: 'row', alignItems: 'center' },
+  backButton: {
     width: 36,
     height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    marginLeft: -6,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Seam line (round-3): 3dp red strip pulled 3dp up onto the seam
+  // between player and sheet; zIndex above the sheet so the strip
+  // reads exactly at the boundary, as in ref-watch-live.
+  seamLine: {
+    height: 3,
+    backgroundColor: lightColors.accent,
+    marginTop: -3,
+    zIndex: 2,
+  },
+  chatWrap: { marginTop: spacing.lg },
+  chatBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
+  chatBackdropTap: { flex: 1 },
+  chatSheetHost: { justifyContent: 'flex-end' },
   playerSpinner: {
     position: 'absolute',
     top: 0,
@@ -714,12 +901,16 @@ const styles = StyleSheet.create({
     borderTopRightRadius: nativeApp.watchSheet.topRadius,
     marginTop: -nativeApp.watchSheet.topRadius,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
+    // Round-3: the back row now occupies the sheet's header zone, so
+    // top padding drops to 8 — back row (36) + title lands the title
+    // at the measured screenshot-06 offset (sheet top → title ≈28dp
+    // of content + the radius zone).
+    paddingTop: spacing.sm,
     paddingBottom: spacing.md,
     zIndex: 1,
   },
   title: { fontSize: 20, lineHeight: 26, fontWeight: '600', color: lightColors.text },
-  metaLine: { fontSize: 14, color: lightColors.textSecondary, marginTop: spacing.sm },
+  metaLine: { fontSize: 14, color: lightColors.textSecondary, marginTop: spacing.md },
   moreText: { color: lightColors.text, fontWeight: '600' },
   channelRow: {
     flexDirection: 'row',
@@ -750,10 +941,10 @@ const styles = StyleSheet.create({
     gap: 2,
     backgroundColor: lightColors.surfaceVariant,
     borderRadius: radii.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 8,
+    // Screenshot 06 bell pill: ≈52×40dp, icon-only (bell + chevron).
+    paddingHorizontal: spacing.md + 2,
+    paddingVertical: 9,
   },
-  channelPillText: { fontSize: 14, fontWeight: '500', color: lightColors.text },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 20, flexShrink: 0 },
   descriptionBox: {
     backgroundColor: lightColors.surfaceVariant,
