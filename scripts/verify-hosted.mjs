@@ -130,6 +130,22 @@ if (uploadFn) {
       uploadFn.includes('auditQuietly'),
   );
 }
+// ── 2c. Playback playlist rewriting (signed segments) ──────────────
+const playbackFn = read('supabase/functions/r2-playback/index.ts');
+if (playbackFn) {
+  check(
+    'r2-playback fetches master playlist server-side (s3Fetch GET)',
+    playbackFn.includes('s3Fetch(cfg, "GET", asset.hls_master_key)'),
+  );
+  check(
+    'r2-playback rewrites segment lines with presignUrl',
+    playbackFn.includes('presignUrl(cfg, "GET", prefix + trimmed, PLAYBACK_EXPIRES)'),
+  );
+  check(
+    'r2-playback stores rewritten playlist at playback/master.m3u8 (s3Fetch PUT)',
+    playbackFn.includes('playback/master.m3u8') && playbackFn.includes('s3Fetch(cfg, "PUT"'),
+  );
+}
 const adminService = read('src/features/admin/adminService.ts');
 check(
   'adminService verifyHostedAsset overwrites size with measured values',

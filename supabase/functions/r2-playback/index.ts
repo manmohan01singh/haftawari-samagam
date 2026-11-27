@@ -7,24 +7,29 @@
 //   * a content_authorizations row exists for the video (the same
 //     evidence the DB publish gate required).
 //
-// SEGMENT SIGNING — READ THIS LIMITATION:
-// Signing the master playlist alone does NOT make the whole stream
-// private. The player fetches the playlist, then requests every
-// segment/sub-playlist by RELATIVE URL from the same bucket path —
-// those requests are unsigned, so this scheme only protects playback
-// if the deployment ALSO puts an authorizing layer in front of the
-// bucket (e.g. a Cloudflare Worker checking a cookie/token per
-// object) or accepts that segment URLs are obscurity-grade once the
-// playlist URL leaks. What this function DOES guarantee: no public
-// or permanent URL is ever handed out, links expire in <= 15 min,
-// and only members can obtain one. For convenience the function also
+// SEGMENT SIGNING — HOW PLAYBACK STAYS PRIVATE:
+// The bucket is private, so a signed master playlist alone is NOT
+// enough: the player resolves the playlist's RELATIVE segment lines
+// against the bucket path, and those requests would be unsigned
+// (403). Instead, the master flow below fetches the master playlist
+// server-side, rewrites every segment line into an individually
+// presigned GET URL (each expiring in <= 15 min, same as the
+// playlist itself), stores the rewritten playlist back into R2 at
+// <asset-prefix>playback/master.m3u8, and returns a signed URL for
+// THAT object. No public or permanent URL is ever handed out, and
+// only members can mint one. SCOPE: variant/multi-level playlists
+// are NOT recursively rewritten — a variant playlist line would be
+// signed as an object, but its own segment lines would not be
+// rewritten. That is safe for this project because the transcode
+// pipeline produces SINGLE-LEVEL playlists (master.m3u8 listing
+// .ts segments directly). For convenience the function also
 // accepts {video_id, key} to sign ONE additional object (e.g. a
 // variant playlist) — strictly limited to keys under the video's own
 // asset prefix, so it cannot be used to sign arbitrary bucket keys.
 // If R2 secrets are not configured: 503 {error:'R2_NOT_CONFIGURED'}.
 
 import { CORS_HEADERS, getCaller, json, serviceRest } from "../_shared/auth.ts";
-import { getR2Config, presignUrl } from "../_shared/s3.ts";
+import { getR2Config, presignUrl, s3Fetch } from "../_shared/s3.ts";
 
 const PLAYBACK_EXPIRES = 900; // 15 minutes, hard cap
 
@@ -105,7 +110,42 @@ Deno.serve(async (req: Request) => {
       return json(200, { url, expires_in: PLAYBACK_EXPIRES, kind: "object" });
     }
 
-    const url = await presignUrl(cfg, "GET", asset.hls_master_key, PLAYBACK_EXPIRES);
+    // Master flow: rewrite the single-level playlist with individually
+    // signed segment URLs, store the rewrite, and sign the rewrite.
+    const prefix = assetPrefix(asset);
+    const masterRes = await s3Fetch(cfg, "GET", asset.hls_master_key);
+    if (!masterRes.ok) {
+      return json(502, {
+        error: "PLAYBACK_ERROR",
+        detail: `R2 master playlist fetch failed (${masterRes.status})`,
+      });
+    }
+    const masterText = await masterRes.text();
+    const rewrittenLines: string[] = [];
+    for (const line of masterText.split("\n")) {
+      const trimmed = line.trim();
+      // '#' tag lines and blank lines pass through unchanged. NOTE:
+      // URI attributes inside '#' tags (e.g. EXT-X-KEY URI="...") are
+      // NOT rewritten — the project pipeline emits none.
+      if (!trimmed || trimmed.startsWith("#")) {
+        rewrittenLines.push(line);
+        continue;
+      }
+      rewrittenLines.push(
+        await presignUrl(cfg, "GET", prefix + trimmed, PLAYBACK_EXPIRES),
+      );
+    }
+    // Overwritten on every mint; concurrent mints produce equivalent
+    // content (same keys, same expiry window).
+    const playbackKey = `${prefix}playback/master.m3u8`;
+    const putRes = await s3Fetch(cfg, "PUT", playbackKey, {}, rewrittenLines.join("\n"));
+    if (!putRes.ok) {
+      return json(502, {
+        error: "PLAYBACK_ERROR",
+        detail: `R2 rewritten playlist store failed (${putRes.status})`,
+      });
+    }
+    const url = await presignUrl(cfg, "GET", playbackKey, PLAYBACK_EXPIRES);
     return json(200, { url, expires_in: PLAYBACK_EXPIRES, kind: "master" });
   } catch (e) {
     return json(502, { error: "PLAYBACK_ERROR", detail: e instanceof Error ? e.message : String(e) });

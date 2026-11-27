@@ -208,13 +208,21 @@ inside the tier; overage auto-bills slowly if the library outgrows
     a playable, untampered video (no full-file checksum/transcode
     verification yet), or anything about HLS segment objects —
     verification covers the uploaded original only.
-- **HLS segment signing.** A signed master playlist does not by
-  itself make segments private: the player requests segments by
-  relative URL, unsigned. What is guaranteed today: no public or
-  permanent URLs, links expire in ≤15 min, only members can mint
-  one. True per-object enforcement needs an authorizing layer in
-  front of the bucket (e.g. a Cloudflare Worker checking a token) —
-  not built; the `r2.dev` public endpoint must stay disabled.
+- **HLS segment signing.** The bucket is private, so a signed
+  master playlist alone would leave the player fetching segments
+  by relative URL, unsigned (403). `r2-playback` therefore rewrites
+  the playlist at mint time: it fetches the master playlist
+  server-side, replaces every segment line with an individually
+  presigned GET URL (each expiring in ≤15 min, same as the
+  playlist), stores the rewritten playlist back into R2 at
+  `<asset-prefix>playback/master.m3u8`, and returns a signed URL
+  for that object. No public or permanent URLs, and only members
+  can mint one; the `r2.dev` public endpoint must stay disabled.
+  Scope limit: variant/multi-level playlists are NOT recursively
+  rewritten — a variant playlist line is signed as an object, but
+  its own segment lines are not rewritten. That is safe here
+  because the transcode pipeline produces single-level playlists
+  (master.m3u8 listing `.ts` segments directly).
 - **Web HLS** goes through expo-video's web implementation
   (HTML5 + hls.js where the browser lacks native HLS); Safari is
   native. Device/PWA verification is still owed once R2 exists.
