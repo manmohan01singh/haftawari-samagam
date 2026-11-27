@@ -1,5 +1,6 @@
 import React, { memo, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { layout, spacing, typography, useTheme, type ThemeColors } from '../../theme';
 import { BarBlurBackground } from './BarBlurBackground';
@@ -55,8 +56,10 @@ export const BackButton = memo(function BackButton({ onPress }: { onPress: () =>
 export const StackHeader = memo(function StackHeader({ title, onBack, right }: StackHeaderProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  // Same edge-to-edge top-inset duty as AppHeader (first-APK fix).
+  const insets = useSafeAreaInsets();
   return (
-    <View style={styles.bar}>
+    <View style={[styles.bar, { paddingTop: insets.top, height: layout.headerHeight + insets.top }]}>
       <BarBlurBackground />
       <View style={styles.left}>
         <BackButton onPress={onBack} />

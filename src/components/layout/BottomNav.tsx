@@ -63,16 +63,20 @@ export const BottomNav = memo(function BottomNav({ items, activeKey, onPress, ov
   // caller did, so on gesture-nav Android the slots sat under the
   // system gesture pill and taps near the bottom felt swallowed.
   const insets = useSafeAreaInsets();
+  // Floor the inset: some gesture-nav devices report a near-zero
+  // bottom inset, which left the slots visually colliding with the
+  // system gesture pill in the first APK (user report, 27 Nov 2026).
+  const bottomInset = Math.max(insets.bottom, 12);
   return (
     <View
       style={[
         styles.bar,
-        { height: layout.bottomNavHeight + insets.bottom },
+        { height: layout.bottomNavHeight + bottomInset },
         overlay && styles.barOverlay,
       ]}
     >
       <BarBlurBackground />
-      <View style={[styles.row, { paddingBottom: insets.bottom }]}>
+      <View style={[styles.row, { paddingBottom: bottomInset }]}>
       {items.map((item) => {
         const active = item.key === activeKey;
         return (

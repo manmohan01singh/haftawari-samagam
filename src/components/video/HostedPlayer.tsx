@@ -315,7 +315,9 @@ const createStyles = (colors: ThemeColors) =>
       left: 0,
       height: 3,
       borderRadius: 2,
-      backgroundColor: '#FFFFFF',
+      // YouTube's signature red progress line — the hosted session
+      // player mirrors the live-watch look (user request, 27 Nov).
+      backgroundColor: '#FF0000',
     },
     trackThumb: {
       position: 'absolute',
@@ -323,7 +325,7 @@ const createStyles = (colors: ThemeColors) =>
       height: 12,
       borderRadius: 6,
       marginLeft: -6,
-      backgroundColor: '#FFFFFF',
+      backgroundColor: '#FF0000',
     },
     errorWrap: {
       alignItems: 'center',

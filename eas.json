@@ -1,13 +1,29 @@
 {
-  "cli": { "version": ">= 13.0.0", "appVersionSource": "local" },
+  "cli": {
+    "version": ">= 13.0.0",
+    "appVersionSource": "local"
+  },
   "build": {
     "preview": {
       "distribution": "internal",
-      "android": { "buildType": "apk" },
-      "env": {}
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://umbdfrjxcxootvshxveg.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_mHA7jCPuy2Uh1YgPjKY9mw_nLcxSU3E",
+        "EXPO_PUBLIC_YOUTUBE_API_KEY": "AIzaSyAI7JttshCnZHiDrN7HX3ag9nSwkPLlVr0"
+      }
     },
     "production": {
-      "android": { "buildType": "app-bundle" }
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://umbdfrjxcxootvshxveg.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_mHA7jCPuy2Uh1YgPjKY9mw_nLcxSU3E",
+        "EXPO_PUBLIC_YOUTUBE_API_KEY": "AIzaSyAI7JttshCnZHiDrN7HX3ag9nSwkPLlVr0"
+      }
     }
   }
 }

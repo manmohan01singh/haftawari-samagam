@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { CardActionSheet } from '../../components/common/CardActionSheet';
@@ -100,6 +101,9 @@ interface ResolvedWatch {
 export function WatchScreen({ route, navigation }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  // Expanded player must clear the status bar on edge-to-edge
+  // Android (first-APK fix); the mini bar is a bottom bar, exempt.
+  const insets = useSafeAreaInsets();
   const { videoRowId, youtubeVideoId, sessionId } = route.params;
   const { user } = useAuth();
   const officialChannel = useOfficialChannel();
@@ -719,7 +723,7 @@ export function WatchScreen({ route, navigation }: Props) {
   // screenshot 06. Previously it lived inside ListHeaderComponent and
   // scrolled away with the sheet.
   const player = resolved ? (
-    <View style={[styles.playerWrap, mini && styles.playerWrapMini]}>
+    <View style={[styles.playerWrap, mini && styles.playerWrapMini, !mini && { marginTop: insets.top }]}>
       {/* The player box is in the SAME tree position in both modes —
           only its style changes (full 16:9 ↔ 106px mini thumb). The
           YouTubePlayer element therefore never unmounts/remounts on

@@ -1,5 +1,6 @@
 import React, { memo, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { branding } from '../../config/branding';
@@ -39,8 +40,12 @@ export const AppHeader = memo(function AppHeader({
 }: AppHeaderProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  // Edge-to-edge Android draws under the status bar; the bar must
+  // carry the top inset itself or the wordmark collides with the
+  // system status icons (user report, 27 Nov 2026, first APK).
+  const insets = useSafeAreaInsets();
   return (
-    <View style={styles.bar}>
+    <View style={[styles.bar, { paddingTop: insets.top, height: layout.headerHeight + insets.top }]}>
       <BarBlurBackground />
       <View style={styles.brand}>
         <Image
