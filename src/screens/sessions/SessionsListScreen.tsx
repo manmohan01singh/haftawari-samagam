@@ -1,7 +1,6 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   SectionList,
@@ -237,10 +236,6 @@ export function SessionsListScreen({ navigation, route }: Props) {
       <View style={styles.screen}>
         {topBar}
         <View style={styles.loadingPad}>
-          <View style={styles.loadingRow}>
-            <ActivityIndicator color={lightColors.text} />
-            <Text style={styles.loadingLabel}>Loading Samagams…</Text>
-          </View>
           <SkeletonCard variant="shelf" />
           <SkeletonCard variant="shelf" />
           <SkeletonCard variant="shelf" />
@@ -338,8 +333,6 @@ const styles = StyleSheet.create({
     backgroundColor: lightColors.background,
   },
   loadingPad: { flex: 1, backgroundColor: lightColors.background, paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
-  loadingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingBottom: spacing.lg },
-  loadingLabel: { ...typography.body, color: lightColors.textSecondary },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
