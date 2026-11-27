@@ -54,12 +54,27 @@ async function writeAll(entries: LocalHistoryEntry[]): Promise<boolean> {
 
 /** Record (or move to the front) an opened recording. Fire-and-forget safe. */
 export async function recordLocalWatch(entry: Omit<LocalHistoryEntry, 'watchedAt'>): Promise<void> {
+  const stamped: LocalHistoryEntry = { ...entry, watchedAt: new Date().toISOString() };
   const entries = await readAll();
   const next = [
-    { ...entry, watchedAt: new Date().toISOString() },
+    stamped,
     ...entries.filter((e) => e.youtubeVideoId !== entry.youtubeVideoId),
   ].slice(0, MAX_ENTRIES);
-  await writeAll(next);
+  // Merge against a FRESH re-read just before writing: with the app
+  // open in two tabs, a blind overwrite dropped whatever the other
+  // tab recorded in between (seen live as history entries flickering
+  // between visits). Entries that appeared meanwhile are kept;
+  // youtubeVideoId is the key and the newest watchedAt wins.
+  const fresh = await readAll();
+  const byId = new Map<string, LocalHistoryEntry>();
+  for (const e of [...next, ...fresh]) {
+    const prev = byId.get(e.youtubeVideoId);
+    if (!prev || e.watchedAt > prev.watchedAt) byId.set(e.youtubeVideoId, e);
+  }
+  const merged = [...byId.values()]
+    .sort((a, b) => (a.watchedAt < b.watchedAt ? 1 : -1))
+    .slice(0, MAX_ENTRIES);
+  await writeAll(merged);
 }
 
 export async function fetchLocalHistory(): Promise<LocalHistoryEntry[]> {

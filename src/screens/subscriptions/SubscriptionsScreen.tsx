@@ -268,7 +268,14 @@ export function SubscriptionsScreen({ navigation }: Props) {
                 {isLiveNow ? <View style={styles.liveDot} /> : null}
               </View>
               <Text style={styles.railName} numberOfLines={1}>
-                {c.title}
+                {/* Rail labels elide a trailing parenthetical
+                    ("(OFFICIAL CHANNEL)") before truncating: at 76dp
+                    the raw title cut to "BHAI GURS…" in the live
+                    mobile check, hiding the actual name. The main
+                    part of the channel's real title is shown; the
+                    full title is on the channel page and in the
+                    accessibility label above. */}
+                {c.title.split(' (')[0]}
               </Text>
             </Pressable>
           );
