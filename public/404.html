@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Haftawari Samagam</title>
+    <!--
+      GitHub Pages SPA fallback (the standard spa-github-pages
+      pattern). Pages is a static host with no rewrite rules, so a
+      hard refresh or a direct visit to a deep app URL such as
+      /haftawari-samagam/history returns this 404 page. This script
+      rewrites the requested path into a query string on the app root
+      and redirects there; the matching snippet in index.html restores
+      the real URL with history.replaceState before the app boots, so
+      React Navigation's linking opens the intended screen.
+
+      pathSegmentsToKeep = 1: the first segment is the project base
+      path (/haftawari-samagam) and must stay in the URL.
+    -->
+    <script type="text/javascript">
+      var pathSegmentsToKeep = 1;
+
+      var l = window.location;
+      l.replace(
+        l.protocol +
+          '//' +
+          l.hostname +
+          (l.port ? ':' + l.port : '') +
+          l.pathname
+            .split('/')
+            .slice(0, 1 + pathSegmentsToKeep)
+            .join('/') +
+          '/?/' +
+          l.pathname
+            .slice(1)
+            .split('/')
+            .slice(pathSegmentsToKeep)
+            .join('/')
+            .replace(/&/g, '~and~') +
+          (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') +
+          l.hash,
+      );
+    </script>
+  </head>
+  <body></body>
+</html>
