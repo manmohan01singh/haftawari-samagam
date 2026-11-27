@@ -11,13 +11,21 @@ import { ChipsRow } from '../../components/layout/ChipsRow';
 import { Toast, useToast } from '../../components/common/Toast';
 import { AddToPlaylistSheet } from '../../features/library';
 import { shareContent, shareFeedback } from '../../lib/share';
-import { SecondaryTabs } from '../../components/layout/SecondaryTabs';
 import { EmptyState } from '../../components/common/EmptyState';
 import { FeedCard } from '../../components/video/FeedCard';
 import { SkeletonCard } from '../../components/video/SkeletonCard';
-import { supabaseCardData, type CardVideoData } from '../../components/video/cardData';
+import { apiCardData, supabaseCardData, type CardVideoData } from '../../components/video/cardData';
 import { useAuth } from '../../features/auth';
 import { useOfficialChannel } from '../../features/channel';
+import { useActiveChannels } from '../../features/channels/channelsService';
+import {
+  HOME_CHIPS,
+  createHomeFeedPager,
+  feedItemYoutubeId,
+  resolveChipFilter,
+  type HomeFeedItem,
+  type HomeFeedPager,
+} from '../../features/home/homeFeed';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import {
   OFFICIAL_CHANNEL_ID,
@@ -25,20 +33,12 @@ import {
   isYouTubeConfigured,
   type YouTubeVideoMetadata,
 } from '../../lib/youtube';
-import {
-  fetchCategories,
-  fetchPublishedVideos,
-  fetchSavedVideoIds,
-  setVideoSaved,
-} from '../../lib/videos';
+import { fetchSavedVideoIds, setVideoSaved } from '../../lib/videos';
 import { FEED_LIST_PERF } from '../../lib/listPerf';
-import {
-  listSessionsWithVideos,
-} from '../../features/sessions/sessionService';
+import { listSessionsWithVideos } from '../../features/sessions/sessionService';
 import { deriveStatus } from '../../features/sessions/stateMachine';
 import { serverClock } from '../../features/sessions/serverClock';
 import { layout, lightColors, spacing, typography } from '../../theme';
-import type { Category, Video } from '../../types/database';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
 
 type Props = CompositeScreenProps<
@@ -49,108 +49,129 @@ type Props = CompositeScreenProps<
 const PAGE_SIZE = 25;
 const ALL_CHIP = 'All';
 
-interface HomeFeedItemProps {
-  video: Video;
+interface HomeFeedCellProps {
+  item: HomeFeedItem;
   data: CardVideoData;
   saved: boolean;
   canSave: boolean;
-  onPressVideo: (video: Video) => void;
-  onToggleSaveVideo: (video: Video) => void;
-  onShareVideo: (video: Video) => void;
-  onChannelPress: () => void;
-  onOpenPlaylistVideo: (video: Video) => void;
+  onPressItem: (item: HomeFeedItem) => void;
+  onToggleSaveItem: (item: HomeFeedItem) => void;
+  onShareItem: (item: HomeFeedItem) => void;
+  onChannelPressItem: (item: HomeFeedItem) => void;
+  onOpenPlaylistItem: (item: HomeFeedItem) => void;
 }
 
 /**
- * Memoised feed-cell wrapper (UX perf pass). The previous renderItem
- * built a fresh onPress/onToggleSave/onShare closure AND a fresh
- * CardVideoData object for every card on every render, and its
- * identity changed whenever ANY card's saved state changed — so
- * FeedCard's memo never held and one bookmark tap re-rendered every
- * visible card. Here the card receives only stable handler props plus
- * per-item primitives; the per-item closures are created inside this
- * wrapper, which re-renders only when its own item's props change.
+ * Memoised feed-cell wrapper (UX perf pass). The card receives only
+ * stable handler props plus per-item primitives; the per-item
+ * closures are created inside this wrapper, which re-renders only
+ * when its own item's props change.
  */
-const HomeFeedItem = memo(function HomeFeedItem({
-  video,
+const HomeFeedCell = memo(function HomeFeedCell({
+  item,
   data,
   saved,
   canSave,
-  onPressVideo,
-  onToggleSaveVideo,
-  onShareVideo,
-  onChannelPress,
-  onOpenPlaylistVideo,
-}: HomeFeedItemProps) {
+  onPressItem,
+  onToggleSaveItem,
+  onShareItem,
+  onChannelPressItem,
+  onOpenPlaylistItem,
+}: HomeFeedCellProps) {
   // Kebab menu actions (QA 31/32): only real actions — share (system
-  // sheet via the share util), save toggle and save-to-playlist for
-  // signed-in users (real saved_videos / playlist backends).
+  // sheet via the share util) everywhere; save toggle and
+  // save-to-playlist only for catalogue rows and signed-in users
+  // (saved_videos / playlists are FKs to catalogue rows, so an
+  // API-only upload cannot be saved — the same gating Watch uses);
+  // uploads additionally get View Channel, matching Watch's row menu.
+  const isCatalogue = item.kind === 'catalogue';
   const menuActions = useMemo(
     () => [
       {
         key: 'share',
         label: 'Share',
         icon: 'share',
-        onPress: () => onShareVideo(video),
+        onPress: () => onShareItem(item),
       },
-      ...(canSave
+      ...(canSave && isCatalogue
         ? [
             {
               key: 'save-toggle',
               label: saved ? 'Remove from Saved' : 'Save to Saved',
               icon: saved ? 'bookmark' : 'bookmark-border',
-              onPress: () => onToggleSaveVideo(video),
+              onPress: () => onToggleSaveItem(item),
             },
             {
               key: 'playlist',
               label: 'Save to playlist',
               icon: 'playlist-add',
-              onPress: () => onOpenPlaylistVideo(video),
+              onPress: () => onOpenPlaylistItem(item),
             },
           ]
         : []),
+      ...(isCatalogue
+        ? []
+        : [
+            {
+              key: 'channel',
+              label: 'View Channel',
+              icon: 'smart-display',
+              onPress: () => onChannelPressItem(item),
+            },
+          ]),
     ],
-    [canSave, saved, video, onShareVideo, onToggleSaveVideo, onOpenPlaylistVideo],
+    [canSave, isCatalogue, saved, item, onShareItem, onToggleSaveItem, onOpenPlaylistItem, onChannelPressItem],
   );
   return (
     <FeedCard
       data={data}
       saved={saved}
-      onPress={() => onPressVideo(video)}
-      onToggleSave={canSave ? () => onToggleSaveVideo(video) : undefined}
-      onShare={() => onShareVideo(video)}
-      onChannelPress={onChannelPress}
+      onPress={() => onPressItem(item)}
+      onToggleSave={canSave && isCatalogue ? () => onToggleSaveItem(item) : undefined}
+      onShare={() => onShareItem(item)}
+      onChannelPress={() => onChannelPressItem(item)}
       menuActions={menuActions}
     />
   );
 });
 
 /**
- * Home feed — real data only: published rows from the Supabase
- * `videos` table, paginated incrementally (25/page) into a FlatList
- * of memoized full-bleed FeedCards (reference §1 geometry). Category
- * chips come from the real `categories` table. While the first page
- * loads, geometry-matched skeletons hold the layout (no jumps).
+ * Home feed (Phase 11) — real data only, from TWO real sources
+ * interleaved by the homeFeed pager: the published Supabase catalogue
+ * and the uploads of every active sangat channel (Bhai Gursharan
+ * Singh Ji official, Amritvela Trust Live, Amritvela Trust,
+ * Sakhiyan), round-robin by recency with a light deterministic
+ * shuffle per batch, deduped by YouTube id, Shorts-free, paging
+ * endlessly via each channel's uploads playlist. The topic chips
+ * under the header really filter (title keywords / channel sets);
+ * the Live chip keeps the old segment row's destination (Sessions,
+ * NOW PLAYING). While the first page loads, geometry-matched
+ * skeletons hold the layout (no jumps).
  */
 export function HomeScreen({ navigation }: Props) {
   const { user, profile } = useAuth();
   // QA 89: tapping the Home tab while already on Home scrolls the
   // feed back to the top (useScrollToTop hooks the tab re-press).
-  const feedRef = useRef<FlatList<Video>>(null);
+  const feedRef = useRef<FlatList<HomeFeedItem>>(null);
   useScrollToTop(feedRef);
   const channel = useOfficialChannel();
-  const [videos, setVideos] = useState<Video[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string>(ALL_CHIP);
+  const { channels, loading: channelsLoading } = useActiveChannels();
+  const [items, setItems] = useState<HomeFeedItem[]>([]);
+  const [selectedChip, setSelectedChip] = useState<string>(ALL_CHIP);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(isSupabaseConfigured);
+  const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [exhausted, setExhausted] = useState(false);
   const [playlistVideoId, setPlaylistVideoId] = useState<string | null>(null);
   const { toast, showToast } = useToast();
   const loadingRef = useRef(false);
+  const pagerRef = useRef<HomeFeedPager | null>(null);
+  // Bumped on every feed (re)start so a stale pager's late page can
+  // never land on top of a newer filter/refresh.
+  const generationRef = useRef(0);
+  // Refresh seed: a pull-to-refresh reshuffles and restarts paging.
+  const seedRef = useRef(1);
   // Real live state from the YouTube API (QA 49/68): a map of
   // youtube_video_id → live/upcoming metadata for the official
   // channel. Archive rows have no live flag of their own.
@@ -217,38 +238,50 @@ export function HomeScreen({ navigation }: Props) {
     };
   }, []);
 
-  const loadPage = useCallback(async (offset: number): Promise<Video[]> => {
-    const page = await fetchPublishedVideos(PAGE_SIZE, offset);
-    setExhausted(page.length < PAGE_SIZE);
-    return page;
-  }, []);
-
-  const loadInitial = useCallback(async () => {
-    if (loadingRef.current) return;
+  // (Re)build the pager for the current chip + channel set and load
+  // its first batch. The pager itself degrades per source (a failed
+  // channel or the catalogue never walls the feed), so a throw here
+  // is only a last-resort guard.
+  const startFeed = useCallback(async () => {
+    const generation = ++generationRef.current;
     loadingRef.current = true;
+    const resolved = resolveChipFilter(selectedChip, channels);
+    const pager = createHomeFeedPager({
+      channels,
+      filter: resolved === 'live' ? { kind: 'all' } : resolved,
+      seed: seedRef.current,
+    });
+    pagerRef.current = pager;
     try {
-      const [page, cats] = await Promise.all([loadPage(0), fetchCategories().catch(() => [])]);
-      setError(null);
-      setVideos(page);
-      setCategories(cats);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load the feed.');
+      const first = await pager.next(PAGE_SIZE);
+      if (generationRef.current !== generation) return;
+      setItems(first.items);
+      setExhausted(first.exhausted);
+    } catch {
+      if (generationRef.current !== generation) return;
+      setItems([]);
+      setExhausted(true);
     } finally {
-      loadingRef.current = false;
-      setLoading(false);
-      setRefreshing(false);
+      if (generationRef.current === generation) {
+        loadingRef.current = false;
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
-  }, [loadPage]);
+  }, [channels, selectedChip]);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
-    // Deferred one tick so the initial load does not run (or set state)
-    // synchronously inside the effect.
+    // Wait for the channel registry before the first pager exists —
+    // a catalogue-only first paint would reshuffle under the user
+    // the moment the channels land.
+    if (channelsLoading) return;
+    // Deferred one tick so the initial load does not run (or set
+    // state) synchronously inside the effect.
     const t = setTimeout(() => {
-      void loadInitial();
+      void startFeed();
     }, 0);
     return () => clearTimeout(t);
-  }, [loadInitial]);
+  }, [channelsLoading, startFeed]);
 
   useEffect(() => {
     if (!user) {
@@ -268,9 +301,10 @@ export function HomeScreen({ navigation }: Props) {
   }, [user]);
 
   const onRefresh = useCallback(() => {
+    seedRef.current += 1;
     setRefreshing(true);
-    void loadInitial();
-  }, [loadInitial]);
+    void startFeed();
+  }, [startFeed]);
 
   // Web pull-to-refresh (gestures round): react-native-web's
   // RefreshControl is a no-op stub, so the FlatList's own
@@ -279,51 +313,75 @@ export function HomeScreen({ navigation }: Props) {
   const ptr = useWebPullToRefresh({ onRefresh, refreshing });
 
   const onEndReached = useCallback(() => {
-    if (loadingRef.current || exhausted || loading || videos.length === 0) return;
+    if (loadingRef.current || exhausted || loading || items.length === 0) return;
+    const pager = pagerRef.current;
+    if (!pager) return;
+    const generation = generationRef.current;
     loadingRef.current = true;
     setLoadingMore(true);
-    loadPage(videos.length)
+    pager
+      .next(PAGE_SIZE)
       .then((page) => {
-        setVideos((prev) => [...prev, ...page]);
+        if (generationRef.current !== generation) return;
+        if (page.items.length > 0) setItems((prev) => [...prev, ...page.items]);
+        setExhausted(page.exhausted);
       })
       .catch(() => undefined)
       .finally(() => {
-        loadingRef.current = false;
-        setLoadingMore(false);
+        if (generationRef.current === generation) {
+          loadingRef.current = false;
+          setLoadingMore(false);
+        }
       });
-  }, [exhausted, loadPage, loading, videos.length]);
+  }, [exhausted, loading, items.length]);
 
-  const visibleVideos = useMemo(() => {
-    const filtered =
-      selectedCategory === ALL_CHIP
-        ? videos
-        : (() => {
-            const cat = categories.find((c) => c.name === selectedCategory);
-            return cat ? videos.filter((v) => v.category_id === cat.id) : videos;
-          })();
-    // Live first (QA 68): stable float of genuinely-live items (real
-    // API state) above the newest-first catalogue order.
-    if (liveMap.size === 0) return filtered;
-    const live = filtered.filter((v) => liveMap.get(v.youtube_video_id)?.liveBroadcastContent === 'live');
-    if (live.length === 0) return filtered;
-    const rest = filtered.filter((v) => liveMap.get(v.youtube_video_id)?.liveBroadcastContent !== 'live');
-    return [...live, ...rest];
-  }, [videos, categories, selectedCategory, liveMap]);
+  // Chip taps: 'Live' is a destination, not a filter — it keeps the
+  // exact destination the old Home/Subs/Live segment row's Live tab
+  // had (Sessions filtered to NOW PLAYING). Every other chip selects
+  // a real feed filter and restarts the pager (effect above). The
+  // loading flag flips in a timer callback, matching the codebase's
+  // no-sync-setState-in-handler-adjacent pattern for feed restarts.
+  const handleSelectChip = useCallback(
+    (chip: string) => {
+      if (chip === 'Live') {
+        navigation.navigate('Sessions', { filter: 'live' });
+        return;
+      }
+      if (chip === selectedChip) return;
+      setTimeout(() => setLoading(true), 0);
+      setSelectedChip(chip);
+    },
+    [navigation, selectedChip],
+  );
 
   const avatarUrl = channel?.avatarUrl ?? null;
 
-  // Stable per-card display data: one CardVideoData object per video,
-  // rebuilt only when the feed, the channel avatar or the live map
-  // changes — never on a saved-state toggle. The live map feeds the
-  // QA 49 enrichment (LIVE badge + real watching count) inside
-  // supabaseCardData.
-  const cardDataById = useMemo(() => {
+  // Per-channel avatars for upload cards (registry/DB values; the
+  // official channel's fresh API avatar wins over its registry row).
+  const avatarByChannelId = useMemo(() => {
+    const map = new Map<string, string | null>();
+    for (const c of channels) map.set(c.youtubeChannelId, c.avatarUrl);
+    if (channel?.avatarUrl) map.set(OFFICIAL_CHANNEL_ID, channel.avatarUrl);
+    return map;
+  }, [channels, channel]);
+
+  // Stable per-card display data: one CardVideoData object per item,
+  // rebuilt only when the feed, the avatars or the live map change —
+  // never on a saved-state toggle. The live map feeds the QA 49
+  // enrichment (LIVE badge + real watching count) for catalogue rows;
+  // upload cards carry their own API live state via apiCardData.
+  const cardDataByKey = useMemo(() => {
     const map = new Map<string, CardVideoData>();
-    for (const v of videos) {
-      map.set(v.id, supabaseCardData(v, avatarUrl, liveMap.get(v.youtube_video_id) ?? null));
+    for (const item of items) {
+      map.set(
+        item.key,
+        item.kind === 'catalogue'
+          ? supabaseCardData(item.video, avatarUrl, liveMap.get(item.video.youtube_video_id) ?? null)
+          : apiCardData(item.meta, avatarByChannelId.get(item.meta.channelId) ?? item.channel.avatarUrl),
+      );
     }
     return map;
-  }, [videos, avatarUrl, liveMap]);
+  }, [items, avatarUrl, avatarByChannelId, liveMap]);
 
   // Mirror of savedIds for the stable toggle handler below.
   const savedIdsRef = useRef(savedIds);
@@ -331,9 +389,17 @@ export function HomeScreen({ navigation }: Props) {
     savedIdsRef.current = savedIds;
   }, [savedIds]);
 
-  const handlePressVideo = useCallback(
-    (video: Video) => {
-      navigation.navigate('Watch', { videoRowId: video.id });
+  const handlePressItem = useCallback(
+    (item: HomeFeedItem) => {
+      // Catalogue rows open via their row id (history/saves need it);
+      // uploads that matched a catalogue row never reach the feed as
+      // uploads (the pager dedupes them), so an upload here opens via
+      // the same API-video watch path Channel/Search use.
+      if (item.kind === 'catalogue') {
+        navigation.navigate('Watch', { videoRowId: item.video.id });
+      } else {
+        navigation.navigate('Watch', { youtubeVideoId: item.meta.youtubeVideoId });
+      }
     },
     [navigation],
   );
@@ -341,30 +407,39 @@ export function HomeScreen({ navigation }: Props) {
   // Share goes through the shared share util (QA 30): Web Share API
   // with a clipboard fallback, and the outcome is surfaced as a toast
   // so the tap never feels dead.
-  const handleShareVideo = useCallback(
-    (video: Video) => {
-      void shareContent(
-        video.title,
-        `https://www.youtube.com/watch?v=${video.youtube_video_id}`,
-      ).then((outcome) => {
-        const feedback = shareFeedback(outcome);
-        if (feedback) showToast(feedback);
-      });
+  const handleShareItem = useCallback(
+    (item: HomeFeedItem) => {
+      const title = item.kind === 'catalogue' ? item.video.title : item.meta.title;
+      void shareContent(title, `https://www.youtube.com/watch?v=${feedItemYoutubeId(item)}`).then(
+        (outcome) => {
+          const feedback = shareFeedback(outcome);
+          if (feedback) showToast(feedback);
+        },
+      );
     },
     [showToast],
   );
 
-  const handleChannelPress = useCallback(() => {
-    navigation.navigate('Channel', { channelId: channel?.channelId ?? OFFICIAL_CHANNEL_ID });
-  }, [navigation, channel]);
+  const handleChannelPressItem = useCallback(
+    (item: HomeFeedItem) => {
+      navigation.navigate('Channel', {
+        channelId:
+          item.kind === 'catalogue'
+            ? (channel?.channelId ?? OFFICIAL_CHANNEL_ID)
+            : item.meta.channelId,
+      });
+    },
+    [navigation, channel],
+  );
 
-  const handleOpenPlaylistVideo = useCallback((video: Video) => {
-    setPlaylistVideoId(video.id);
+  const handleOpenPlaylistItem = useCallback((item: HomeFeedItem) => {
+    if (item.kind === 'catalogue') setPlaylistVideoId(item.video.id);
   }, []);
 
-  const handleToggleSaveVideo = useCallback(
-    (video: Video) => {
-      if (!user) return;
+  const handleToggleSaveItem = useCallback(
+    (item: HomeFeedItem) => {
+      if (!user || item.kind !== 'catalogue') return;
+      const video = item.video;
       const next = !savedIdsRef.current.has(video.id);
       setSavedIds((prev) => {
         const copy = new Set(prev);
@@ -385,16 +460,13 @@ export function HomeScreen({ navigation }: Props) {
     [user],
   );
 
-  // The Sessions entry + category chips strip (rendered by
-  // renderItem after the second card — see the round-2 note there).
-  // The ChipsRow itself is ALWAYS rendered when the strip shows
-  // (QA issue 11): with no categories it shows just "All".
+  // The Sessions entry strip (rendered by renderItem after the
+  // second card — see the round-2 note there). The topic chips that
+  // used to ride in this strip moved up under the header in Phase 11
+  // (the YouTube pattern the user asked for); there is ONE filter row
+  // now, not two.
   const feedStrip = useMemo(
     () => (
-    <View>
-      {/* Samagam Sessions entry point — scheduled group playbacks
-          (UPCOMING / NOW PLAYING / COMPLETED), listed on their own
-          screen. Styled as a plain reference row, not a banner. */}
       <Pressable
         style={({ pressed }) => [styles.sessionsRow, pressed && styles.sessionsRowPressed]}
         onPress={() =>
@@ -416,62 +488,59 @@ export function HomeScreen({ navigation }: Props) {
         </View>
         <MaterialIcons name="chevron-right" size={24} color={lightColors.textSecondary} />
       </Pressable>
-      <ChipsRow
-        chips={[ALL_CHIP, ...categories.map((c) => c.name)]}
-        selected={selectedCategory}
-        onSelect={setSelectedCategory}
-      />
-    </View>
     ),
-    [categories, selectedCategory, navigation, liveSession],
+    [navigation, liveSession],
   );
 
   const renderItem = useCallback(
-    ({ item, index }: { item: Video; index: number }) => {
+    ({ item, index }: { item: HomeFeedItem; index: number }) => {
       // Round-2 pixel pass: the feed must start IMMEDIATELY with the
       // first card (ref-1 goes straight from the tab row to card 1).
-      // The Sessions entry + category chips strip renders after the
-      // SECOND card (or after the only card), never above card 1.
-      const stripAfter = Math.min(1, visibleVideos.length - 1);
+      // The Sessions entry strip renders after the SECOND card (or
+      // after the only card), never above card 1.
+      const stripAfter = Math.min(1, items.length - 1);
       return (
         <>
-          <HomeFeedItem
-            video={item}
+          <HomeFeedCell
+            item={item}
             data={
-              cardDataById.get(item.id) ??
-              supabaseCardData(item, avatarUrl, liveMap.get(item.youtube_video_id) ?? null)
+              cardDataByKey.get(item.key) ??
+              (item.kind === 'catalogue'
+                ? supabaseCardData(item.video, avatarUrl, liveMap.get(item.video.youtube_video_id) ?? null)
+                : apiCardData(item.meta, item.channel.avatarUrl))
             }
-            saved={savedIds.has(item.id)}
+            saved={item.kind === 'catalogue' && savedIds.has(item.video.id)}
             canSave={!!user}
-            onPressVideo={handlePressVideo}
-            onToggleSaveVideo={handleToggleSaveVideo}
-            onShareVideo={handleShareVideo}
-            onChannelPress={handleChannelPress}
-            onOpenPlaylistVideo={handleOpenPlaylistVideo}
+            onPressItem={handlePressItem}
+            onToggleSaveItem={handleToggleSaveItem}
+            onShareItem={handleShareItem}
+            onChannelPressItem={handleChannelPressItem}
+            onOpenPlaylistItem={handleOpenPlaylistItem}
           />
           {index === stripAfter ? feedStrip : null}
         </>
       );
     },
     [
-      cardDataById,
+      cardDataByKey,
       avatarUrl,
       liveMap,
       savedIds,
       user,
-      handlePressVideo,
-      handleToggleSaveVideo,
-      handleShareVideo,
-      handleChannelPress,
-      handleOpenPlaylistVideo,
-      visibleVideos.length,
+      handlePressItem,
+      handleToggleSaveItem,
+      handleShareItem,
+      handleChannelPressItem,
+      handleOpenPlaylistItem,
+      items.length,
       feedStrip,
     ],
   );
 
-  const keyExtractor = useCallback((item: Video) => item.id, []);
+  const keyExtractor = useCallback((item: HomeFeedItem) => item.key, []);
 
   const initial = profile?.display_name?.charAt(0)?.toUpperCase() ?? user?.email?.charAt(0)?.toUpperCase() ?? null;
+  const notConfigured = !isSupabaseConfigured && !isYouTubeConfigured;
 
   return (
     <View style={styles.container}>
@@ -482,46 +551,32 @@ export function HomeScreen({ navigation }: Props) {
           avatarUrl={profile?.avatar_url ?? null}
           avatarInitial={initial}
         />
-        <SecondaryTabs
-          items={[
-            { key: 'home', label: 'Home' },
-            { key: 'subs', label: 'Subs' },
-            { key: 'live', label: 'Live' },
-          ]}
-          selectedKey="home"
-          onSelect={(key) => {
-            if (key === 'subs') navigation.navigate('Subscriptions');
-            // "Live" is the reference tab row's live entry; in this
-            // app the live surface is Samagam Sessions filtered to
-            // NOW PLAYING (the filter value 'live' is mapped to the
-            // real status vocabulary by the Sessions screen) —
-            // a real destination, not a dead tab. "Music"/"More" from
-            // the screenshot have no section in this app and are not
-            // shown as dead tabs.
-            if (key === 'live') navigation.navigate('Sessions', { filter: 'live' });
-          }}
-        />
+        {/* Phase 11: the topic chips row sits directly under the
+            header (the YouTube pattern from the user's screenshot)
+            and is the feed's ONE filter row. It replaces the old
+            Home/Subs/Live segment row on this screen: Subscriptions
+            stays in the bottom tab bar, and the Live destination is
+            preserved by the Live chip itself. */}
+        <ChipsRow chips={[...HOME_CHIPS]} selected={selectedChip} onSelect={handleSelectChip} />
       </View>
 
-      {!isSupabaseConfigured ? (
+      {notConfigured ? (
         <EmptyState
           title="Backend not configured"
-          message="Published samagams will appear here once Supabase is connected."
+          message="Samagams will appear here once the app is connected to its data sources."
         />
       ) : loading ? (
         <View>
           <SkeletonCard variant="feed" />
           <SkeletonCard variant="feed" />
         </View>
-      ) : error ? (
-        <EmptyState title="Could not load the feed" message={error} />
-      ) : visibleVideos.length === 0 ? (
+      ) : items.length === 0 ? (
         <EmptyState
-          title="No samagams published yet"
+          title={selectedChip === ALL_CHIP ? 'No samagams yet' : 'Nothing in this filter yet'}
           message={
-            videos.length > 0
-              ? 'Nothing published in this category yet.'
-              : 'Recordings published by the admin will appear here.'
+            selectedChip === ALL_CHIP
+              ? 'Recordings from the sangat channels will appear here.'
+              : `No videos match "${selectedChip}" yet — try another chip.`
           }
         />
       ) : (
@@ -530,35 +585,34 @@ export function HomeScreen({ navigation }: Props) {
           <FlatList
             {...ptr.listProps}
             ref={feedRef}
-            data={visibleVideos}
-          renderItem={renderItem}
-          keyExtractor={keyExtractor}
-          // The bottom bar is an OVERLAY now (blur material): the
-          // feed scrolls under it, so the last cards need clearance
-          // ≥ the bar height (56) + breathing room, or the bar would
-          // cover them at the end of the list.
-          contentContainerStyle={styles.feedContent}
-          onEndReached={onEndReached}
-          onEndReachedThreshold={0.6}
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          ListFooterComponent={
-            loadingMore ? (
-              <ActivityIndicator style={styles.footerSpinner} color={lightColors.textSecondary} />
-            ) : exhausted ? (
-              <View style={styles.endOfFeed}>
-                <MaterialIcons name="check-circle" size={18} color={lightColors.textSecondary} />
-                <Text style={styles.endOfFeedText}>
-                  You&rsquo;re all caught up — that&rsquo;s every published samagam
-                </Text>
-              </View>
-            ) : undefined
-          }
+            data={items}
+            renderItem={renderItem}
+            keyExtractor={keyExtractor}
+            // The bottom bar is an OVERLAY now (blur material): the
+            // feed scrolls under it, so the last cards need clearance
+            // ≥ the bar height (56) + breathing room, or the bar would
+            // cover them at the end of the list.
+            contentContainerStyle={styles.feedContent}
+            onEndReached={onEndReached}
+            onEndReachedThreshold={0.6}
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            ListFooterComponent={
+              loadingMore ? (
+                <ActivityIndicator style={styles.footerSpinner} color={lightColors.textSecondary} />
+              ) : exhausted ? (
+                <View style={styles.endOfFeed}>
+                  <MaterialIcons name="check-circle" size={18} color={lightColors.textSecondary} />
+                  <Text style={styles.endOfFeedText}>
+                    That&rsquo;s every video from the sangat channels
+                  </Text>
+                </View>
+              ) : undefined
+            }
             {...FEED_LIST_PERF}
           />
         </View>
       )}
-      {error && videos.length > 0 ? <Text style={styles.inlineError}>{error}</Text> : null}
       <AddToPlaylistSheet
         visible={playlistVideoId != null}
         userId={user?.id ?? null}
@@ -573,13 +627,13 @@ export function HomeScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   // Screenshot 01: cards are white containers on a light-grey page
   // ground — the grey shows in the gaps between cards and around the
-  // chips/sessions rows. White-on-white made the feed read as one
+  // sessions row. White-on-white made the feed read as one
   // unbroken sheet with no card separation.
   container: { flex: 1, backgroundColor: '#F8F8F8' },
   // Web pull-to-refresh wrapper: fills the feed area under the
   // header block; the indicator anchors to it.
   ptrWrap: { flex: 1 },
-  // Translucent now: AppHeader carries the blur material; the tab
+  // Translucent now: AppHeader carries the blur material; the chips
   // row below it sits on the same near-white translucent tone so the
   // whole top block reads as one glass bar (no solid white slab).
   headerBlock: { backgroundColor: 'rgba(255,255,255,0.88)' },
@@ -605,10 +659,4 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   endOfFeedText: { ...typography.metadata, color: lightColors.textSecondary, textAlign: 'center' },
-  inlineError: {
-    ...typography.metadata,
-    color: lightColors.accent,
-    textAlign: 'center',
-    padding: spacing.sm,
-  },
 });

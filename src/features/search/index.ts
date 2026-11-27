@@ -33,6 +33,7 @@ export {
   searchChannelVideosFor,
   searchChannelVideosWithFallback,
   searchUploadsFallback,
+  searchUploadsFallbackFor,
   type ChannelIdentity,
   type YoutubeLegOutcome,
 } from './youtubeSearch';

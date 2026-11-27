@@ -27,10 +27,9 @@ import {
   fetchChannelTitlesFor,
   matchChannel,
   searchChannelVideosFor,
-  searchUploadsFallback,
+  searchUploadsFallbackFor,
 } from './youtubeSearch';
 import { YouTubeApiError, type YouTubeErrorClass } from './youtubeError';
-import { OFFICIAL_CHANNEL } from './config';
 import type { SearchOptions, SearchResults, VideoResult } from './types';
 
 function tierOf(result: VideoResult): number {
@@ -180,34 +179,37 @@ async function runLegs(query: string, options: SearchOptions): Promise<LegsOutco
   // failed search and must not light the degraded banner).
   const targets = channels.slice(0, MAX_YOUTUBE_SEARCH_CHANNELS);
   let firstError: YouTubeErrorClass | null = null;
-  let officialFailed = false;
   // SEQUENTIAL, not Promise.all: Google throttles this project's
   // search.list in bursts (separate "Search Queries" rate metric,
   // diagnosed 2026-11-27), so firing every channel's search in the
   // same instant risks losing all of them; spaced calls succeed.
   // (This fix was lost once in a union merge — keep it.)
-  const legs: { ok: boolean; results: VideoResult[] }[] = [];
+  const legs: { ok: boolean; channelId: string; results: VideoResult[] }[] = [];
   for (const identity of targets) {
     try {
       const results = await searchChannelVideosFor(identity.id, query, options.signal);
-      legs.push({ ok: true, results });
+      legs.push({ ok: true, channelId: identity.id, results });
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') throw error;
-      if (error instanceof YouTubeApiError) {
-        if (firstError === null) firstError = error.errorClass;
-        if (identity.id === OFFICIAL_CHANNEL.id) officialFailed = true;
+      if (error instanceof YouTubeApiError && firstError === null) {
+        firstError = error.errorClass;
       }
-      legs.push({ ok: false, results: [] });
+      legs.push({ ok: false, channelId: identity.id, results: [] });
     }
   }
   let youtubeVideos = legs.flatMap((leg) => leg.results);
   let youtubeFallback = false;
-  if (officialFailed) {
-    // Degraded fallback: fuzzy-match the official channel's latest
-    // uploads (playlistItems, 1 unit/page) so real channel results can
-    // still appear when search.list is down or rate-limited.
+  // Degraded fallback, PER FAILED CHANNEL (Phase 11): fuzzy-match
+  // each failed channel's latest uploads (playlistItems, 1 unit/page,
+  // cached 6h) so its real results can still appear when search.list
+  // is down or rate-limited. This used to run ONLY for the official
+  // channel — a failed Amritvela/Sakhiyan leg silently returned
+  // nothing even though the same cheap fallback could have covered
+  // it. Sequential, like the legs, for burst discipline.
+  for (const leg of legs) {
+    if (leg.ok) continue;
     try {
-      const fallbackVideos = await searchUploadsFallback(query, options.signal);
+      const fallbackVideos = await searchUploadsFallbackFor(leg.channelId, query, options.signal);
       if (fallbackVideos.length > 0) {
         youtubeVideos = [...youtubeVideos, ...fallbackVideos];
         youtubeFallback = true;
