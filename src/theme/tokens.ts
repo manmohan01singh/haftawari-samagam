@@ -94,6 +94,21 @@ export interface ThemeColors {
   searchTint: string;
   /** Pale pill behind the selected SecondaryTabs item (ref-1; Phase 9 W2 tokenised). */
   secondaryTabSelectedBg: string;
+  /**
+   * Home page ground under the feed cards (Phase 13): light keeps the
+   * measured #F8F8F8 grey that separates the white cards; dark is the
+   * flat #0F0F0F page (YouTube dark home has no lighter ground — the
+   * cards and the page are one tone). This value was previously
+   * hard-coded in HomeScreen and leaked the light grey into dark mode.
+   */
+  pageGround: string;
+  /**
+   * Translucent tone of the Home header block (header + chips) that
+   * sits over the feed (Phase 13): near-white in light, near-black in
+   * dark — same family as the BarBlurBackground tint. Previously
+   * hard-coded white in HomeScreen, so dark mode got a white band.
+   */
+  headerBlockBackground: string;
 }
 
 export const lightColors: ThemeColors = {
@@ -112,6 +127,8 @@ export const lightColors: ThemeColors = {
   playerBackground: '#000000',
   searchTint: '#E8EEF2',
   secondaryTabSelectedBg: '#F8E9EC',
+  pageGround: '#F8F8F8',
+  headerBlockBackground: 'rgba(255,255,255,0.88)',
 };
 
 export const darkColors: ThemeColors = {
@@ -128,8 +145,16 @@ export const darkColors: ThemeColors = {
   selectedChipBackground: '#F1F1F1',
   selectedChipText: '#0F0F0F',
   playerBackground: '#000000',
-  searchTint: '#1C262C',
-  secondaryTabSelectedBg: '#3A2A2E',
+  // Phase 13: was #1C262C — a blue-grey slab that read dirty against
+  // the neutral dark page. YouTube's dark raised surface is the
+  // neutral #212121; the search channel block now uses it.
+  searchTint: '#212121',
+  // Phase 13: was #3A2A2E — a muddy maroon-brown with no counterpart
+  // in YouTube's dark scheme. The selected pill in dark is the same
+  // neutral raised grey as the chips: #272727 (surfaceVariant).
+  secondaryTabSelectedBg: '#272727',
+  pageGround: '#0F0F0F',
+  headerBlockBackground: 'rgba(15,15,15,0.88)',
 };
 
 /**

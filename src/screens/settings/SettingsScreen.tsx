@@ -4,7 +4,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   View,
 } from 'react-native';
@@ -60,9 +59,9 @@ const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
  *    YouTube — real destinations.
  *  - Appearance (Phase 12): Theme — System default / Light / Dark,
  *    applied app-wide the moment it is picked (ThemeContext) and
- *    persisted; and the "Blur effects" switch, which turns the
- *    translucent bar blur on/off everywhere (also persisted). Both
- *    controls are real: the theme engine they drive now exists.
+ *    persisted. (Phase 13 removed the Phase 12 "Blur effects"
+ *    switch on the user's order: the bars' glass blur is now
+ *    unconditional and there is nothing left to toggle.)
  *  - Library rows: Sessions, History, Saved, Playlists — all real
  *    screens. Admin dashboard row for admins only.
  *  - Sign out: confirmation, busy state, error toast on failure, and
@@ -77,8 +76,7 @@ const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
 export function SettingsScreen({ navigation }: Props) {
   const { user, profile, isAdmin, signOut } = useAuth();
   const { toast, showToast } = useToast();
-  const { colors, preference, setPreference, blurEnabled, setBlurEnabled } =
-    useTheme();
+  const { colors, preference, setPreference } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [confirmingSignOut, setConfirmingSignOut] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -260,24 +258,6 @@ export function SettingsScreen({ navigation }: Props) {
               );
             })
           : null}
-        <View style={styles.row}>
-          <MaterialIcons name="blur-on" size={24} color={colors.text} />
-          <View style={styles.profileLines}>
-            <Text style={styles.rowText}>Blur effects</Text>
-            <Text style={styles.profileMeta}>
-              Soft blur behind the top and bottom bars
-            </Text>
-          </View>
-          <Switch
-            value={blurEnabled}
-            onValueChange={setBlurEnabled}
-            trackColor={{ false: colors.surfaceVariant, true: colors.textSecondary }}
-            thumbColor={colors.surface}
-            ios_backgroundColor={colors.surfaceVariant}
-            accessibilityLabel="Blur effects"
-          />
-        </View>
-
         <Text style={styles.sectionLabel}>Library</Text>
         {libraryRows.map((row) => (
           <Pressable

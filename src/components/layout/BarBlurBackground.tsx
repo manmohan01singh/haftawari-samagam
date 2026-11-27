@@ -1,5 +1,5 @@
 import React, { memo, useMemo } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { BlurView } from 'expo-blur';
 
 import { useTheme } from '../../theme';
@@ -22,57 +22,45 @@ import { useTheme } from '../../theme';
  * sample that layer instead of the scrolling content, and the bar
  * renders as a uniform solid slab. There must be NO backing layer
  * under the blur: the translucency lives in the BlurView's own
- * tint + background (0.68 white), which on web sits in the SAME
- * element as the backdrop-filter, so content colour genuinely
- * washes through. Where backdrop-filter is unsupported, the bar
- * degrades to that 0.68 translucent white with unblurred content
- * showing through — still glassy, never a solid slab and never
- * fully transparent.
+ * tint + background, which on web sits in the SAME element as the
+ * backdrop-filter, so content colour genuinely washes through.
+ * Where backdrop-filter is unsupported, the bar degrades to that
+ * translucent tint with unblurred content showing through — still
+ * glassy, never a solid slab and never fully transparent.
  *
  * Performance: the blur is STATIC (fixed intensity, no animation,
  * no scroll-linked updates) — but a backdrop-filter must still be
  * re-composited for every scroll frame under BOTH bars, and cost
  * grows steeply with radius. Intensity 48 (perf3) keeps the same
- * milky look at materially lower cost, and low-core web devices
- * (hardwareConcurrency <= 4 — the low-end Android class the user
- * tests on) skip the BlurView entirely and keep the same 0.68
- * translucent tint as a plain layer. Icons render ABOVE this
- * layer, never inside it.
+ * milky look at materially lower cost.
  *
  * Phase 12: the material is theme-aware — in dark mode the tint is
- * 0.68 near-black (#0F0F0F, the dark background token) and the
- * BlurView tint flips to 'dark', so the bars read as dark glass.
- * It also honours the "Blur effects" appearance switch: when the
- * user turns blur off, the bars render the plain translucent tint
- * (the same degraded form low-core web gets) on every platform.
- * Light mode with blur on is byte-for-byte the pre-Phase-12 look.
+ * near-black (#0F0F0F, the dark background token) and the BlurView
+ * tint flips to 'dark', so the bars read as dark glass.
+ *
+ * Phase 13 (user order): the blur is UNCONDITIONAL. The Phase 12
+ * "Blur effects" switch and the low-core-web plain-tint fallback
+ * are removed — the glass is always there, on every bar, on every
+ * device class, and never disappears. The dark tint alpha rises
+ * 0.68 → 0.85: at 0.68 nearly a third of whatever bright thumbnail
+ * sat under the bar bled through the dark glass and washed it a
+ * muddy grey-brown (the user's "dark mode ganda lagda" report);
+ * at 0.85 the bars read as dark glass — content still visibly
+ * washes through, but the bar's own tone wins. Light stays at the
+ * measured 0.68, pixel-identical to before.
  */
-const LOW_CORE_WEB =
-  Platform.OS === 'web' &&
-  typeof navigator !== 'undefined' &&
-  typeof navigator.hardwareConcurrency === 'number' &&
-  navigator.hardwareConcurrency <= 4;
-
 export const BarBlurBackground = memo(function BarBlurBackground() {
-  const { isDark, blurEnabled } = useTheme();
+  const { isDark } = useTheme();
 
   const tintStyle = useMemo(
     () => ({
       backgroundColor: isDark
-        ? 'rgba(15,15,15,0.68)'
+        ? 'rgba(15,15,15,0.85)'
         : 'rgba(255,255,255,0.68)',
     }),
     [isDark],
   );
 
-  if (!blurEnabled || LOW_CORE_WEB) {
-    return (
-      <View
-        style={[StyleSheet.absoluteFill, tintStyle]}
-        pointerEvents="none"
-      />
-    );
-  }
   return (
     <BlurView
       intensity={48}
