@@ -110,7 +110,11 @@ export const FeedCard = memo(function FeedCard({
     const metaParts = [data.channelLine, data.metaLine].filter(Boolean);
     return (
       <>
-      <Pressable onPress={onPress} style={styles.upNextCard} accessibilityRole="button">
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => [styles.upNextCard, pressed && styles.cardPressed]}
+        accessibilityRole="button"
+      >
         <View style={styles.upNextThumbWrap}>
           {data.thumbnailUrl ? (
             <Image
@@ -163,7 +167,11 @@ export const FeedCard = memo(function FeedCard({
 
   return (
     <>
-    <Pressable onPress={onPress} style={styles.card} accessibilityRole="button">
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+      accessibilityRole="button"
+    >
       {thumbnail}
       <View style={styles.body}>
         <Text style={styles.title} numberOfLines={2} ellipsizeMode="tail">
@@ -248,6 +256,9 @@ const styles = StyleSheet.create({
   card: {
     marginBottom: spacing.lg,
   },
+  // Press feedback (P10): a pressed card dips to 0.92 opacity, the
+  // same pressed-state language BottomNav/StackHeader already use.
+  cardPressed: { opacity: 0.92 },
   thumbnailWrap: { position: 'relative' },
   thumbnail: {
     width: '100%',

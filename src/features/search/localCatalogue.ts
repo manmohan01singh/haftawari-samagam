@@ -30,7 +30,11 @@ export async function fetchPublishedVideos(signal?: AbortSignal): Promise<Video[
     .from('videos')
     .select('*')
     .eq('publish_state', 'published')
+    // Deterministic order, same keys as src/lib/videos.ts (P10):
+    // published_at ties must not reshuffle between loads.
     .order('published_at', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
     .limit(500);
   if (signal) query = query.abortSignal(signal);
 

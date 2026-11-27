@@ -169,11 +169,43 @@ export async function getCurrentSessionUser(): Promise<{
   };
 }
 
+/**
+ * Realtime channel topics must be UNIQUE per subscription instance
+ * (P10 leftover fix — Sessions blank page on second visit).
+ *
+ * Evidence for the root cause, verified against the installed
+ * @supabase/realtime-js source:
+ *  - RealtimeClient.channel(topic) returns the EXISTING channel when
+ *    a channel with the same topic is already registered — it does
+ *    not create a fresh one.
+ *  - RealtimeChannel.on() THROWS `cannot add 'postgres_changes'
+ *    callbacks for realtime:<topic> after 'subscribe()'` when the
+ *    channel is already joined/joining.
+ *  - The list screen's cleanup was fire-and-forget
+ *    (`void unsubscribe(channel)`), and removeChannel() only tears a
+ *    channel down after its async unsubscribe resolves — so a quick
+ *    leave-and-return (a SECOND visit within one page load) called
+ *    channel('sessions:list') while the first channel was still
+ *    registered and subscribed, .on() threw synchronously inside the
+ *    effect, and React unmounted the screen to a blank page.
+ *
+ * A monotonic per-instance suffix makes channel() always create a
+ * fresh, unsubscribed channel, so .on() can never hit that throw;
+ * unsubscribe() below additionally force-tears-down a channel whose
+ * async removal did not complete, so stale channels cannot pile up
+ * in the client registry either.
+ */
+let realtimeChannelSeq = 0;
+function uniqueTopic(base: string): string {
+  realtimeChannelSeq += 1;
+  return `${base}:${realtimeChannelSeq}`;
+}
+
 /** Subscribe to ANY session schedule change (list screen refresh). */
 export function subscribeToSessionList(onChange: () => void): RealtimeChannel {
   const supabase = requireSupabase();
   const channel = supabase
-    .channel('sessions:list')
+    .channel(uniqueTopic('sessions:list'))
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'sessions' },
@@ -190,7 +222,7 @@ export function subscribeToParticipants(
 ): RealtimeChannel {
   const supabase = requireSupabase();
   const channel = supabase
-    .channel(`session-participants:${sessionId}`)
+    .channel(uniqueTopic(`session-participants:${sessionId}`))
     .on(
       'postgres_changes',
       {
@@ -260,7 +292,7 @@ export function subscribeToSession(
 ): RealtimeChannel {
   const supabase = requireSupabase();
   const channel = supabase
-    .channel(`session:${sessionId}`)
+    .channel(uniqueTopic(`session:${sessionId}`))
     .on(
       'postgres_changes',
       { event: 'UPDATE', schema: 'public', table: 'sessions', filter: `id=eq.${sessionId}` },
@@ -270,7 +302,27 @@ export function subscribeToSession(
   return channel;
 }
 
-export async function unsubscribe(channel: RealtimeChannel): Promise<void> {
+/**
+ * Remove a channel created by the subscribe* helpers. Never throws:
+ * removeChannel() only tears a channel down when its async
+ * unsubscribe resolves 'ok', so on a timeout/error the channel would
+ * otherwise stay registered forever (the reuse hazard above). When
+ * it is still registered after the attempt, force teardown() so the
+ * registry is clean for the next subscription.
+ */
+export async function unsubscribe(channel: RealtimeChannel | null): Promise<void> {
+  if (!channel) return;
   const supabase = requireSupabase();
-  await supabase.removeChannel(channel);
+  try {
+    await supabase.removeChannel(channel);
+  } catch {
+    // Removal is best-effort — the teardown fallback below still runs.
+  }
+  try {
+    if (supabase.getChannels().includes(channel)) {
+      channel.teardown();
+    }
+  } catch {
+    // Teardown is a cleanup fallback only — never break unmount.
+  }
 }

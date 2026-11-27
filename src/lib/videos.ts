@@ -20,7 +20,15 @@ export async function fetchPublishedVideos(limit = 25, offset = 0): Promise<Vide
     .from('videos')
     .select('*')
     .eq('publish_state', 'published')
+    // Deterministic order (P10 leftover fix): published_at alone is
+    // NOT a stable sort — rows published in the same admin batch
+    // share a timestamp, and Postgres may return ties in any order,
+    // so the first feed card differed between loads (and offset
+    // pagination could repeat/skip rows). created_at + id are the
+    // stable secondary/tertiary keys that make every load identical.
     .order('published_at', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
     .range(offset, offset + limit - 1);
   if (error) throw new Error(error.message);
   return (data ?? []) as Video[];
@@ -40,7 +48,10 @@ export async function fetchUpNext(excludeRowId: string | null, limit = 15): Prom
     .from('videos')
     .select('*')
     .eq('publish_state', 'published')
+    // Same deterministic ordering as fetchPublishedVideos (P10).
     .order('published_at', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
     .limit(limit);
   if (excludeRowId) query = query.neq('id', excludeRowId);
   const { data, error } = await query;
@@ -66,7 +77,10 @@ export async function searchPublishedVideos(query: string, limit = 25): Promise<
     .select('*')
     .eq('publish_state', 'published')
     .ilike('title', `%${query.replace(/[%_]/g, '')}%`)
+    // Same deterministic ordering as fetchPublishedVideos (P10).
     .order('published_at', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
     .limit(limit);
   if (error) throw new Error(error.message);
   return (data ?? []) as Video[];

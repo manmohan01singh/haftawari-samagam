@@ -30,7 +30,20 @@ import { lightColors, radii, spacing, typography } from '../../theme';
  * signed-in) user continues into the app.
  */
 export function SetNewPasswordScreen() {
-  const { clearPasswordRecovery } = useAuth();
+  const { clearPasswordRecovery, signOut } = useAuth();
+
+  // Escape hatch (P10 leftover fix): this gate screen previously
+  // offered only "Skip for now", which kept the recovery session and
+  // dropped the user INTO the app — there was no way to abandon the
+  // reset and go back to signing in normally. "Back to sign in"
+  // signs the recovery session OUT (the reset is abandoned, the old
+  // password stays in place) and clears the recovery gate;
+  // RootNavigator sees the gate lift with no signed-in user after a
+  // recovery gate and mounts the main stack on SignIn (see there).
+  const backToSignIn = async () => {
+    await signOut();
+    clearPasswordRecovery();
+  };
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -157,6 +170,14 @@ export function SetNewPasswordScreen() {
             <Pressable onPress={clearPasswordRecovery} style={styles.switchRow}>
               <Text style={styles.switchText}>Skip for now — keep my old password</Text>
             </Pressable>
+            <Pressable
+              onPress={() => void backToSignIn()}
+              style={styles.switchRow}
+              accessibilityRole="button"
+              accessibilityLabel="Back to sign in"
+            >
+              <Text style={styles.switchStrong}>Back to sign in</Text>
+            </Pressable>
           </>
         )}
       </ScrollView>
@@ -212,4 +233,5 @@ const styles = StyleSheet.create({
   primaryButtonText: { fontSize: 16, fontWeight: '600', color: lightColors.subscribeText },
   switchRow: { alignItems: 'center', marginTop: spacing.xl, paddingVertical: spacing.md, minHeight: 44, justifyContent: 'center' },
   switchText: { ...typography.body, color: lightColors.textSecondary },
+  switchStrong: { ...typography.body, color: lightColors.text, fontWeight: '600' },
 });

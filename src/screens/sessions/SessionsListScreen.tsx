@@ -115,7 +115,17 @@ export function SessionsListScreen({ navigation, route }: Props) {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
-    const channel = subscribeToSessionList(() => void load());
+    // Realtime is a refresh accelerator, never a screen dependency:
+    // a subscription failure must degrade to the already-fetched
+    // list, never blank the screen (P10 leftover fix — the old
+    // fixed-topic subscribe could throw synchronously on remount;
+    // see sessionService.uniqueTopic for the verified root cause).
+    let channel: ReturnType<typeof subscribeToSessionList> | null = null;
+    try {
+      channel = subscribeToSessionList(() => void load());
+    } catch {
+      channel = null;
+    }
     return () => {
       cancelled = true;
       void unsubscribe(channel);
@@ -200,6 +210,10 @@ export function SessionsListScreen({ navigation, route }: Props) {
   // users who arrived from Home (or a shared URL) had no on-screen way
   // out, and the error state told them to "pull down to retry" on a
   // non-scrollable surface with no retry control — a dead end.
+  // Bottom bar: activeTab is deliberately null in every state of
+  // this screen — Sessions belongs to no main tab, so NO tab may
+  // render selected here (P10 leftover fix; it previously passed
+  // "Home", which lit the Home slot while the user was on Sessions).
   const topBar = (
     <StackHeader title="Samagam Sessions" onBack={() => goBackOrTab(navigation, 'Home')} />
   );
@@ -212,7 +226,7 @@ export function SessionsListScreen({ navigation, route }: Props) {
           title="Samagams are not available yet"
           message="The backend is not configured in this build, so no sessions can be shown."
         />
-        <StackTabBar navigation={navigation} activeTab="Home" />
+        <StackTabBar navigation={navigation} activeTab={null} />
       </View>
     );
   }
@@ -228,7 +242,7 @@ export function SessionsListScreen({ navigation, route }: Props) {
           <SkeletonCard variant="shelf" />
           <SkeletonCard variant="shelf" />
         </View>
-        <StackTabBar navigation={navigation} activeTab="Home" />
+        <StackTabBar navigation={navigation} activeTab={null} />
       </View>
     );
   }
@@ -246,7 +260,7 @@ export function SessionsListScreen({ navigation, route }: Props) {
             void load();
           }}
         />
-        <StackTabBar navigation={navigation} activeTab="Home" />
+        <StackTabBar navigation={navigation} activeTab={null} />
       </View>
     );
   }
@@ -294,7 +308,7 @@ export function SessionsListScreen({ navigation, route }: Props) {
       }
       stickySectionHeadersEnabled={false}
     />
-      <StackTabBar navigation={navigation} activeTab="Home" />
+      <StackTabBar navigation={navigation} activeTab={null} />
     </View>
   );
 }

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { MainTabs } from './MainTabs';
 import { AdminStack } from './AdminStack';
@@ -19,7 +19,31 @@ import type { RootStackParamList } from './types';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export function RootNavigator() {
-  const { isAdmin, passwordRecovery, loading } = useAuth();
+  const { isAdmin, passwordRecovery, loading, user } = useAuth();
+
+  // "Back to sign in" landing (P10 leftover fix): SetNewPassword's
+  // escape signs the recovery session out and clears the gate. This
+  // navigator unmounts/remounts when the gate flips, so when it lifts
+  // with NO signed-in user after having shown the recovery gate, the
+  // main stack must open on SignIn — not MainTabs. (Completing the
+  // reset or "Skip for now" keeps a signed-in user, so those exits
+  // still land on MainTabs as before.) The flag is consumed once the
+  // gate has lifted; initialRouteName is ignored after first mount.
+  const [recoveryGateSeen, setRecoveryGateSeen] = useState(false);
+  useEffect(() => {
+    // Deferred one tick, matching the codebase's pattern for state
+    // resets inside effects (see HomeScreen's saved-ids reset).
+    if (passwordRecovery && !recoveryGateSeen) {
+      const t = setTimeout(() => setRecoveryGateSeen(true), 0);
+      return () => clearTimeout(t);
+    }
+    if (!passwordRecovery && recoveryGateSeen) {
+      const t = setTimeout(() => setRecoveryGateSeen(false), 0);
+      return () => clearTimeout(t);
+    }
+    return undefined;
+  }, [passwordRecovery, recoveryGateSeen]);
+  const startOnSignIn = recoveryGateSeen && !passwordRecovery && !user;
 
   // Password-recovery gate: a user who landed from a reset email has
   // a live session but came here to SET A NEW PASSWORD — before this
@@ -36,6 +60,7 @@ export function RootNavigator() {
 
   return (
     <Stack.Navigator
+      initialRouteName={startOnSignIn ? 'SignIn' : 'MainTabs'}
       screenOptions={{ headerShown: false, animation: 'slide_from_right', animationDuration: 280 }}
     >
       <Stack.Screen name="MainTabs" component={MainTabs} />

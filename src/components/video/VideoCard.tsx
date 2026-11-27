@@ -41,7 +41,7 @@ export const VideoCard = memo(function VideoCard({
     <Pressable
       onPress={onPress ? () => onPress(video) : undefined}
       disabled={!onPress}
-      style={styles.card}
+      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
       accessibilityRole={onPress ? 'button' : undefined}
       accessibilityLabel={video.title}
     >
@@ -86,6 +86,8 @@ export function formatDuration(totalSeconds: number): string {
 
 const styles = StyleSheet.create({
   card: { marginBottom: spacing.lg },
+  // Press feedback (P10): same 0.92 pressed opacity as FeedCard.
+  cardPressed: { opacity: 0.92 },
   thumbnailWrap: { position: 'relative' },
   thumbnail: {
     width: '100%',

@@ -40,6 +40,7 @@ import {
   fetchChannelById,
   fetchChannelUploads,
   fetchVideoMetadata,
+  isShortVideo,
   type YouTubeChannelInfo,
   type YouTubeVideoMetadata,
 } from '../../lib/youtube';
@@ -161,6 +162,18 @@ export function WatchScreen({ route, navigation }: Props) {
     | { kind: 'row'; video: Video }
     | { kind: 'api'; meta: YouTubeVideoMetadata };
   const [upNextItems, setUpNextItems] = useState<UpNextItem[]>([]);
+  // Up Next pagination (P10 leftover fix): the uploads page token
+  // from the last fetchChannelUploads page, whether uploads paging
+  // has started at all, and the in-flight flag for the footer button.
+  // Previously the token was discarded and the list was sliced to 15
+  // with no way to load more.
+  const [upNextToken, setUpNextToken] = useState<string | null>(null);
+  const [upNextStarted, setUpNextStarted] = useState(false);
+  const [upNextLoadingMore, setUpNextLoadingMore] = useState(false);
+  // Saved state for Up Next CATALOGUE rows (their ⋮ menu carries the
+  // same Save action as the main menu — it needs the row's real
+  // saved state, loaded with the current video's in the effect below).
+  const [upNextSavedIds, setUpNextSavedIds] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState(false);
   const [readyFor, setReadyFor] = useState<string | null>(null);
   const playerReady = resolved != null && readyFor === resolved.youtubeVideoId;
@@ -172,7 +185,10 @@ export function WatchScreen({ route, navigation }: Props) {
   // tap answers honestly via toast that nothing was recorded. The
   // real like count, when the API provides one, lives in the meta
   // line — that is YouTube's count, not the user's action.
-  const [playlistSheetOpen, setPlaylistSheetOpen] = useState(false);
+  // "Save to playlist" target row id (P10): the main ⋮ menu targets
+  // the current video's row; an Up Next row's ⋮ menu targets THAT
+  // row. One sheet, whichever id is set.
+  const [playlistTargetId, setPlaylistTargetId] = useState<string | null>(null);
   const { toast, showToast } = useToast();
   const saved =
     resolved?.row && savedState?.rowId === resolved.row.id ? savedState.saved : false;
@@ -293,31 +309,110 @@ export function WatchScreen({ route, navigation }: Props) {
         ? await fetchUpNext(videoRowId ?? null).catch(() => [] as Video[])
         : [];
       const items: UpNextItem[] = rows.map((video) => ({ kind: 'row' as const, video }));
+      let token: string | null = null;
+      let started = false;
       if (items.length < 4 && officialChannel?.uploadsPlaylistId) {
         const page = await fetchChannelUploads(officialChannel.uploadsPlaylistId).catch(() => null);
         if (page) {
+          started = true;
+          // P10: KEEP the page token — "Load more" (footer below)
+          // continues from exactly here instead of the list ending.
+          token = page.nextPageToken;
           const seen = new Set(rows.map((r) => r.youtube_video_id));
           if (currentYtId) seen.add(currentYtId);
           for (const meta of page.videos) {
-            if (!seen.has(meta.youtubeVideoId)) items.push({ kind: 'api' as const, meta });
+            // NO Shorts anywhere (locked rule) — uploads pages are
+            // filtered with the app's established isShortVideo rule.
+            if (!seen.has(meta.youtubeVideoId) && !isShortVideo(meta)) {
+              items.push({ kind: 'api' as const, meta });
+            }
           }
         }
       }
-      if (active) setUpNextItems(items.slice(0, 15));
+      if (active) {
+        setUpNextItems(items.slice(0, 15));
+        setUpNextToken(token);
+        setUpNextStarted(started);
+      }
     })();
     return () => {
       active = false;
     };
   }, [videoRowId, officialChannel, currentYtId]);
 
-  // Saved state for archive rows (stored keyed by row id).
+  // "Load more" (P10): fetch the NEXT page of channel uploads —
+  // page 1 when the catalogue alone filled the list and uploads
+  // paging has not started, otherwise the stored next page — and
+  // append only videos not already shown and not the current one.
+  const upNextHasMore = !!officialChannel?.uploadsPlaylistId && (!upNextStarted || upNextToken != null);
+  const loadMoreUpNext = useCallback(() => {
+    const playlistId = officialChannel?.uploadsPlaylistId;
+    if (!playlistId || upNextLoadingMore || !upNextHasMore) return;
+    setUpNextLoadingMore(true);
+    fetchChannelUploads(playlistId, upNextStarted ? (upNextToken ?? undefined) : undefined)
+      .then((page) => {
+        const seen = new Set<string>();
+        if (currentYtId) seen.add(currentYtId);
+        for (const item of upNextItems) {
+          seen.add(item.kind === 'row' ? item.video.youtube_video_id : item.meta.youtubeVideoId);
+        }
+        const fresh = page.videos.filter(
+          (meta) => !seen.has(meta.youtubeVideoId) && !isShortVideo(meta),
+        );
+        if (fresh.length > 0) {
+          setUpNextItems((prev) => [...prev, ...fresh.map((meta) => ({ kind: 'api' as const, meta }))]);
+        }
+        setUpNextStarted(true);
+        setUpNextToken(page.nextPageToken);
+      })
+      .catch(() => {
+        // A failed page must not loop the button forever on the
+        // same token: mark paging started with no token (footer
+        // hides) — the already-shown list stays fully usable.
+        setUpNextStarted(true);
+        setUpNextToken(null);
+      })
+      .finally(() => setUpNextLoadingMore(false));
+  }, [officialChannel, upNextLoadingMore, upNextHasMore, upNextStarted, upNextToken, currentYtId, upNextItems]);
+
+  // Save toggle for an Up Next catalogue row (its ⋮ menu's Save) —
+  // same optimistic pattern as the current video's onToggleSave,
+  // rolled back when the saved_videos write fails.
+  const onToggleSaveUpNext = useCallback(
+    (video: Video) => {
+      if (!user) return;
+      const next = !upNextSavedIds.has(video.id);
+      setUpNextSavedIds((prev) => {
+        const copy = new Set(prev);
+        if (next) copy.add(video.id);
+        else copy.delete(video.id);
+        return copy;
+      });
+      void setVideoSaved(user.id, video.id, next).catch(() =>
+        setUpNextSavedIds((prev) => {
+          const copy = new Set(prev);
+          if (next) copy.delete(video.id);
+          else copy.add(video.id);
+          return copy;
+        }),
+      );
+    },
+    [user, upNextSavedIds],
+  );
+
+  // Saved state for archive rows (stored keyed by row id). The same
+  // fetch also seeds the Up Next rows' saved set (P10) — one
+  // saved_videos read serves both menus.
   useEffect(() => {
     if (!user || !resolved?.row) return;
     const rowId = resolved.row.id;
     let active = true;
     fetchSavedVideoIds(user.id)
       .then((ids) => {
-        if (active) setSavedState({ rowId, saved: ids.has(rowId) });
+        if (active) {
+          setSavedState({ rowId, saved: ids.has(rowId) });
+          setUpNextSavedIds(ids);
+        }
       })
       .catch(() => undefined);
     return () => {
@@ -433,6 +528,13 @@ export function WatchScreen({ route, navigation }: Props) {
           navigation.push('Watch', { youtubeVideoId: params.youtubeVideoId });
         }
       };
+      // Row ⋮ menu (P10 leftover fix): the SAME items as the main
+      // ⋮ menu wherever they make sense for another video — Share,
+      // Save, Save to playlist, View Channel (CardActionSheet adds
+      // Cancel itself). Save/playlist exist only for catalogue rows
+      // (saved_videos/playlists are FKs to videos rows), exactly as
+      // the main menu omits them for API-only videos; signed-out
+      // taps go to SignIn, mirroring the main menu's gating.
       if (item.kind === 'api') {
         const data: CardVideoData = apiCardData(item.meta, officialChannel?.avatarUrl ?? null);
         return (
@@ -451,10 +553,18 @@ export function WatchScreen({ route, navigation }: Props) {
                 icon: 'share',
                 onPress: () => shareItem(item.meta.title, item.meta.youtubeVideoId),
               },
+              {
+                key: 'channel',
+                label: 'View Channel',
+                icon: 'account-circle',
+                onPress: () =>
+                  navigation.navigate('Channel', { channelId: item.meta.channelId }),
+              },
             ]}
           />
         );
       }
+      const rowSaved = upNextSavedIds.has(item.video.id);
       const data: CardVideoData = supabaseCardData(item.video, officialChannel?.avatarUrl ?? null);
       return (
         <FeedCard
@@ -472,11 +582,34 @@ export function WatchScreen({ route, navigation }: Props) {
               icon: 'share',
               onPress: () => shareItem(item.video.title, item.video.youtube_video_id),
             },
+            {
+              key: 'save',
+              label: rowSaved ? 'Remove from saved' : 'Save',
+              icon: rowSaved ? 'bookmark' : 'bookmark-border',
+              onPress: user
+                ? () => onToggleSaveUpNext(item.video)
+                : () => navigation.navigate('SignIn'),
+            },
+            {
+              key: 'playlist',
+              label: 'Save to playlist',
+              icon: 'playlist-add',
+              onPress: user
+                ? () => setPlaylistTargetId(item.video.id)
+                : () => navigation.navigate('SignIn'),
+            },
+            {
+              key: 'channel',
+              label: 'View Channel',
+              icon: 'account-circle',
+              onPress: () =>
+                navigation.navigate('Channel', { channelId: officialChannel?.channelId }),
+            },
           ]}
         />
       );
     },
-    [navigation, officialChannel, showToast, mini],
+    [navigation, officialChannel, showToast, mini, user, upNextSavedIds, onToggleSaveUpNext],
   );
 
   const keyExtractor = useCallback(
@@ -621,13 +754,17 @@ export function WatchScreen({ route, navigation }: Props) {
               {resolved.title}
             </Text>
           </View>
+          {/* P10 leftover fix: collapsed keeps the single truncated
+              line, but EXPANDED must wrap the meta text fully — it
+              previously stayed numberOfLines={1}, so expanding still
+              showed "…17.2K vie…" cut off mid-word. */}
           <Pressable
             onPress={() => setExpanded((v) => !v)}
             hitSlop={{ top: 10, bottom: 10, left: 0, right: 0 }}
             accessibilityRole="button"
             accessibilityLabel={expanded ? 'Show less' : 'Show more'}
           >
-            <Text style={styles.metaLine} numberOfLines={1}>
+            <Text style={styles.metaLine} numberOfLines={expanded ? undefined : 1}>
               {metaText}
               {metaText ? '  ' : ''}
               <Text style={styles.moreText}>{expanded ? 'less' : 'more'}</Text>
@@ -718,7 +855,7 @@ export function WatchScreen({ route, navigation }: Props) {
                 <MaterialIcons name="thumb-down-off-alt" size={24} color={lightColors.text} />
               </Pressable>
               <Pressable onPress={onShare} hitSlop={ICON_HIT_SLOP} accessibilityLabel="Share" accessibilityRole="button">
-                <MaterialIcons name="share" size={23} color={lightColors.text} />
+                <MaterialIcons name="share" size={24} color={lightColors.text} />
               </Pressable>
               {resolved.row ? (
                 <Pressable
@@ -905,6 +1042,25 @@ export function WatchScreen({ route, navigation }: Props) {
         ListEmptyComponent={
           <Text style={styles.upNextEmpty}>No other published recordings yet.</Text>
         }
+        ListFooterComponent={
+          // "Load more" (P10): continues the channel-uploads paging
+          // above; rendered only while another page can exist.
+          upNextItems.length > 0 && upNextHasMore ? (
+            <Pressable
+              style={styles.loadMoreRow}
+              onPress={loadMoreUpNext}
+              disabled={upNextLoadingMore}
+              accessibilityRole="button"
+              accessibilityLabel="Load more videos"
+            >
+              {upNextLoadingMore ? (
+                <ActivityIndicator color={lightColors.textSecondary} />
+              ) : (
+                <Text style={styles.loadMoreText}>Load more</Text>
+              )}
+            </Pressable>
+          ) : undefined
+        }
         {...FEED_LIST_PERF}
       />
       {/* ⋮ action menu (screenshot 06 •••): only actions that really
@@ -930,7 +1086,7 @@ export function WatchScreen({ route, navigation }: Props) {
                   label: 'Save to playlist',
                   icon: 'playlist-add',
                   onPress: user
-                    ? () => setPlaylistSheetOpen(true)
+                    ? () => setPlaylistTargetId(resolved.row?.id ?? null)
                     : () => navigation.navigate('SignIn'),
                 },
               ]
@@ -974,12 +1130,14 @@ export function WatchScreen({ route, navigation }: Props) {
         </Modal>
       ) : null}
       {/* "Save to playlist" sheet (library stream) — archive rows and
-          signed-in users only, matching the action button's gating. */}
+          signed-in users only, matching the action button's gating.
+          The target is whichever row opened it: the current video
+          (main ⋮ menu) or an Up Next row (its ⋮ menu). */}
       <AddToPlaylistSheet
-        visible={playlistSheetOpen}
+        visible={playlistTargetId != null}
         userId={user?.id ?? null}
-        videoId={resolved.row?.id ?? null}
-        onClose={() => setPlaylistSheetOpen(false)}
+        videoId={playlistTargetId}
+        onClose={() => setPlaylistTargetId(null)}
       />
       <Toast message={toast} />
     </View>
@@ -1164,6 +1322,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: spacing.xl,
   },
+  loadMoreRow: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
+    marginHorizontal: spacing.lg,
+    marginVertical: spacing.md,
+    borderRadius: radii.pill,
+    backgroundColor: lightColors.surfaceVariant,
+  },
+  loadMoreText: { fontSize: 14, fontWeight: '600', color: lightColors.text },
   playerSkeleton: {
     width: '100%',
     maxWidth: 1100,
