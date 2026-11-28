@@ -72,7 +72,7 @@ export const FeedCard = memo(function FeedCard({
           thumbnail loads (or fails) the card shows the ੴ mark on
           the surface instead of a dead grey rectangle. */}
       <View style={styles.thumbnailPlaceholder} pointerEvents="none">
-        <IkOnkarMark size={44} />
+        <IkOnkarMark size={44} bare />
       </View>
       {data.thumbnailUrl ? (
         <Image

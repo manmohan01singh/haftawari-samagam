@@ -6,6 +6,14 @@ interface IkOnkarMarkProps {
   /** Optional line under the mark (e.g. "Searching for …"). */
   label?: string;
   size?: number;
+  /**
+   * Bare: no vertical padding around the mark. For embedding inside
+   * a fixed-geometry placeholder (a feed thumbnail, the channel
+   * banner strip and its skeleton) — the standalone wrap's 28px
+   * padding otherwise inflates those boxes past the real layout's
+   * proportions (loading-state audit, 28 Nov 2026).
+   */
+  bare?: boolean;
 }
 
 /**
@@ -18,7 +26,7 @@ interface IkOnkarMarkProps {
  * on every page (28 Nov 2026). Loaded in App.tsx with the platform
  * Gurmukhi face as fallback.
  */
-export function IkOnkarMark({ label, size = 84 }: IkOnkarMarkProps) {
+export function IkOnkarMark({ label, size = 84, bare = false }: IkOnkarMarkProps) {
   const { colors } = useTheme();
   const [pulse] = useState(() => new Animated.Value(0));
 
@@ -37,7 +45,7 @@ export function IkOnkarMark({ label, size = 84 }: IkOnkarMarkProps) {
   const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.99, 1.01] });
 
   return (
-    <View style={styles.wrap} accessibilityElementsHidden>
+    <View style={bare ? styles.wrapBare : styles.wrap} accessibilityElementsHidden>
       <Animated.Text style={[styles.mark, { fontSize: size, opacity, transform: [{ scale }] }]}>
         {'ੴ'}
       </Animated.Text>
@@ -48,6 +56,7 @@ export function IkOnkarMark({ label, size = 84 }: IkOnkarMarkProps) {
 
 const styles = StyleSheet.create({
   wrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: 28 },
+  wrapBare: { alignItems: 'center', justifyContent: 'center' },
   // The app's own accent red — the mark the user asked for, in red,
   // large, in the platform Gurmukhi face.
   mark: { fontFamily: 'NotoSerifGurmukhi', color: '#E8112D', lineHeight: undefined },

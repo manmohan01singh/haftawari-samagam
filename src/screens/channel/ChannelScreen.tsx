@@ -335,7 +335,7 @@ export function ChannelScreen({ route, navigation }: Props) {
               under the image from the first frame and the image
               fades in over it — no void, no jump. */}
           <View style={styles.bannerPlaceholder} pointerEvents="none">
-            <IkOnkarMark size={40} />
+            <IkOnkarMark size={40} bare />
           </View>
           <Image
             source={{ uri: channel.bannerUrl }}
@@ -507,7 +507,7 @@ export function ChannelScreen({ route, navigation }: Props) {
                 round 5, #36): the flat block read as a broken grey
                 void for the seconds the channel takes to load —
                 this reads as the app loading, on purpose. */}
-            <IkOnkarMark size={40} />
+            <IkOnkarMark size={40} bare />
           </View>
           <View style={styles.skelIdentity}>
             <View style={styles.skelAvatar} />
