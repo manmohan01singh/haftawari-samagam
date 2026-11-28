@@ -183,9 +183,18 @@ export function SessionsListScreen({ navigation, route }: Props) {
     const order: VisibleStatus[] = liveOnly
       ? ['now_playing']
       : ['now_playing', 'upcoming', 'completed'];
-    return order
-      .filter((status) => grouped[status].length > 0)
-      .map((status) => ({ status, title: SECTION_TITLES[status], data: grouped[status] }));
+    // All three sections always render (fix round 4, Chat 2 #29):
+    // with only finished sessions in the data, the page used to
+    // show a lone COMPLETED heading and read as if nothing else
+    // existed. Empty sections now render with an honest empty line
+    // (see renderSectionFooter) — the page structure tells the
+    // truth about what is live, what is coming, and what finished.
+    if (liveOnly) {
+      return grouped.now_playing.length > 0
+        ? [{ status: 'now_playing' as VisibleStatus, title: SECTION_TITLES.now_playing, data: grouped.now_playing }]
+        : [];
+    }
+    return order.map((status) => ({ status, title: SECTION_TITLES[status], data: grouped[status] }));
   }, [items, nowMs, liveOnly]);
 
   const handlePressSession = useCallback(
@@ -211,6 +220,24 @@ export function SessionsListScreen({ navigation, route }: Props) {
       />
     ),
     [nowMs, handlePressSession],
+  );
+
+  const renderSectionFooter = useCallback(
+    ({ section }: { section: Section }) => {
+      if (section.data.length > 0) return null;
+      const line =
+        section.status === 'now_playing'
+          ? 'No samagam is playing right now.'
+          : section.status === 'upcoming'
+            ? 'No samagam is scheduled right now — new sessions appear here when they are announced.'
+            : 'No finished samagams yet.';
+      return (
+        <View style={styles.sectionEmpty}>
+          <Text style={styles.sectionEmptyText}>{line}</Text>
+        </View>
+      );
+    },
+    [styles],
   );
 
   const renderSectionHeader = useCallback(
@@ -310,6 +337,7 @@ export function SessionsListScreen({ navigation, route }: Props) {
         />
       }
       renderSectionHeader={renderSectionHeader}
+      renderSectionFooter={renderSectionFooter}
       renderItem={renderItem}
       windowSize={7}
       initialNumToRender={6}
@@ -371,6 +399,8 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingVertical: 1,
     overflow: 'hidden',
   },
+  sectionEmpty: { paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
+  sectionEmptyText: { fontSize: 13, lineHeight: 18, color: colors.textSecondary },
   sectionTitle: {
     ...typography.sectionTitle,
     color: colors.text,

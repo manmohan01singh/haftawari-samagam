@@ -173,7 +173,12 @@ export function ShortsScreen({ navigation }: Props) {
   const [failed, setFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [cycles, setCycles] = useState(1);
-  const [itemH, setItemH] = useState(0);
+  // Page height = the stage ABOVE the bottom nav (fix round 4,
+  // Chat 2 #23): the nav floats over the tab scene, so the raw
+  // layout height included the strip under it — and the embed's
+  // own seek bar rendered across the nav, clipping its labels.
+  const [rawH, setRawH] = useState(0);
+  const itemH = rawH > 0 ? Math.max(0, rawH - layout.bottomNavHeight) : 0;
   const [activeIndex, setActiveIndex] = useState(0);
   const [userPaused, setUserPaused] = useState(false);
   // Muted-autoplay pattern (blueprint round 2, fault 22): browsers
@@ -463,7 +468,7 @@ export function ShortsScreen({ navigation }: Props) {
   );
 
   return (
-    <View style={styles.root} onLayout={(e) => setItemH(e.nativeEvent.layout.height)}>
+    <View style={styles.root} onLayout={(e) => setRawH(e.nativeEvent.layout.height)}>
       {pool === null && !failed ? (
         <View style={styles.stateWrap}>
           <ActivityIndicator color="#FFFFFF" />

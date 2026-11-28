@@ -44,3 +44,52 @@ export function dedupeByContent<T>(
   }
   return out;
 }
+
+/** Hard title normalisation for fuzzy matching: case, punctuation,
+ *  emoji and extra whitespace all washed out. */
+export function normaliseTitleHard(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Fuzzy content dedupe for finite pools (fix round 4, Chat 2 #23):
+ * same channel + same hard-normalised title + durations within
+ * ±3 s = the same clip re-uploaded (exact-second keys missed
+ * copies trimmed by a second or two, so the same Short appeared
+ * three times in five slots). Items missing channel or duration
+ * are always kept; genuinely different lengths (a 0:30 clip vs
+ * the full programme) are far outside the tolerance and stay.
+ */
+export function dedupeByContentFuzzy<T>(
+  items: readonly T[],
+  partsOf: (item: T) => { channelId: string | null; title: string; durationSeconds: number | null },
+): T[] {
+  const kept: { channelId: string; title: string; durationSeconds: number }[] = [];
+  const out: T[] = [];
+  for (const item of items) {
+    const parts = partsOf(item);
+    if (!parts.channelId || parts.durationSeconds == null || parts.durationSeconds <= 0) {
+      out.push(item);
+      continue;
+    }
+    const title = normaliseTitleHard(parts.title);
+    if (!title) {
+      out.push(item);
+      continue;
+    }
+    const dupe = kept.some(
+      (k) =>
+        k.channelId === parts.channelId &&
+        k.title === title &&
+        Math.abs(k.durationSeconds - (parts.durationSeconds as number)) <= 3,
+    );
+    if (dupe) continue;
+    kept.push({ channelId: parts.channelId, title, durationSeconds: parts.durationSeconds });
+    out.push(item);
+  }
+  return out;
+}

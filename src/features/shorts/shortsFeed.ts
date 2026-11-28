@@ -1,5 +1,5 @@
 import { isShortVideo, type YouTubeVideoMetadata } from '../../lib/youtube';
-import { contentKeyFor, dedupeByContent } from '../../lib/contentDedupe';
+import { dedupeByContentFuzzy } from '../../lib/contentDedupe';
 import {
   fetchActiveChannels,
   getUploadsPageCached,
@@ -87,8 +87,13 @@ export async function fetchShorts(limit = 60): Promise<ShortItem[]> {
   // Content dedupe (fault 23/N10): the same clip re-uploaded under
   // a different id appears ONCE — which also stops its like counts
   // "flapping" between copies, since only one copy is ever shown.
-  const all = dedupeByContent(byId, (it) =>
-    contentKeyFor(it.meta.channelId, it.meta.title, it.meta.durationSeconds),
-  );
+  // Fuzzy (fix round 4): ±3 s duration tolerance + hard title
+  // normalisation — exact-second keys missed re-uploads trimmed
+  // by a second or two, so one Hazoor Sahib clip showed 3×.
+  const all = dedupeByContentFuzzy(byId, (it) => ({
+    channelId: it.meta.channelId,
+    title: it.meta.title,
+    durationSeconds: it.meta.durationSeconds,
+  }));
   return spreadByChannel(all).slice(0, limit);
 }

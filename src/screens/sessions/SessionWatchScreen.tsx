@@ -910,7 +910,7 @@ export function SessionWatchScreen({ route, navigation }: Props) {
                 recording above" contradicted it. Hosted playback is
                 members-only; YouTube recordings play for guests. */}
             {isHosted && !user && !guestYoutubeFallback
-              ? 'This Samagam has ended. Sign in to watch the full recording.'
+              ? 'This Samagam has ended. Its recording is hosted by the sangat for members, so sign in to watch it here. Samagams that are also on YouTube play above for everyone.'
               : 'This Samagam has ended. You can watch the full recording above.'}
           </Text>
         ) : null}

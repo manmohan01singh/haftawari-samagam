@@ -503,6 +503,20 @@ export function LibraryScreen({ navigation }: Props) {
           </View>
         ) : null}
 
+        {/* Guest Liked section (fix round 4, Chat 2 #28): the
+            section exists for guests too — as an honest sign-in
+            explanation, never a fake list. */}
+        {!user ? (
+          <>
+            <View style={styles.sectionHeadingRow}>
+              <Text style={styles.sectionHeading}>Liked videos</Text>
+            </View>
+            <Text style={styles.emptyLine}>
+              Sign in and like a recording — the ones you like will wait for you here.
+            </Text>
+          </>
+        ) : null}
+
         {/* Library chips (reference §4 filter chips, wired to real sections) */}
         <Text style={[styles.sectionHeading, styles.libraryHeading]}>Library</Text>
         <ScrollView
@@ -515,7 +529,7 @@ export function LibraryScreen({ navigation }: Props) {
             <MaterialIcons name="keyboard-arrow-down" size={18} color={colors.text} />
           </Pressable>
           <Pressable style={styles.chip} onPress={() => navigation.navigate('Saved')} hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }} accessibilityRole="button">
-            <Text style={styles.chipText}>Saved</Text>
+            <Text style={styles.chipText}>Watch Later</Text>
           </Pressable>
           <Pressable style={styles.chip} onPress={() => navigation.navigate('Playlists')} hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }} accessibilityRole="button">
             <Text style={styles.chipText}>Playlists</Text>
@@ -525,7 +539,9 @@ export function LibraryScreen({ navigation }: Props) {
         {/* Playlists — stacked rows. A guest's rows are PUBLIC
             playlists from the sangat, never the guest's own —
             the heading says which (Chat 2 fault 28). */}
-        <Text style={styles.rowsHeading}>{user ? 'Your playlists' : 'Public playlists from the sangat'}</Text>
+        <Text style={styles.rowsHeading}>
+          {user ? 'Your playlists' : 'Public playlists from the sangat — shared by everyone, not your own'}
+        </Text>
         <View style={styles.rowsBlock}>
           {playlistPreview.map((summary) => (
             <PlaylistRow key={summary.playlist.id} summary={summary} onPress={openPlaylist} />
@@ -594,7 +610,7 @@ export function LibraryScreen({ navigation }: Props) {
             </View>
             <View style={styles.collectionLines}>
               <Text style={styles.collectionTitle} numberOfLines={2}>
-                Saved
+                Watch Later
               </Text>
               <Text style={styles.collectionMeta} numberOfLines={1}>
                 {user

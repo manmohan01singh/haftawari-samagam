@@ -557,8 +557,10 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   // Fault 26: at 76dp the names cut to "BHAI GUR…" — unreadable.
   // Wider items + two-line names keep every registry channel's
   // name legible; the heading below is the labelled path to the
-  // channel page itself.
-  railItem: { width: 96, alignItems: 'center' },
+  // channel page itself. Round 4: 96 still cut the longest
+  // all-caps names ("BHAI GURSHARAN .."), so 112 + a step smaller
+  // name size — every registry name now fits its two lines.
+  railItem: { width: 112, alignItems: 'center' },
   headerZone: { position: 'relative', overflow: 'hidden' },
   guestNote: {
     paddingHorizontal: 16,
@@ -598,8 +600,8 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     borderColor: colors.background,
   },
   railName: {
-    fontSize: nativeApp.avatarRail.nameFontSize,
-    lineHeight: 15,
+    fontSize: 11,
+    lineHeight: 14,
     color: colors.text,
     marginTop: spacing.xs,
     textAlign: 'center',

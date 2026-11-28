@@ -410,7 +410,7 @@ export function ChannelScreen({ route, navigation }: Props) {
             // explains once what "follow" means in this app.
             if (following) {
               toggleFollow();
-              showToast(`Unfollowed ${channel?.title ?? 'this channel'} — tap Subscribe to undo`);
+              showToast(`Unfollowed ${channel?.title ?? 'this channel'} — tap Follow to undo`);
             } else {
               toggleFollow();
               showToast("Following in this app — this doesn't subscribe you on YouTube");
@@ -418,16 +418,16 @@ export function ChannelScreen({ route, navigation }: Props) {
           }}
           accessibilityRole="button"
           accessibilityState={{ selected: following }}
-          accessibilityLabel={following ? 'Subscribed on this device' : 'Subscribe on this device'}
+          accessibilityLabel={following ? 'Following on this device' : 'Follow on this device'}
         >
           {following ? (
             <>
               <MaterialIcons name="notifications" size={20} color={colors.text} />
-              <Text style={[styles.subscribeText, styles.subscribeTextActive]}>Subscribed</Text>
+              <Text style={[styles.subscribeText, styles.subscribeTextActive]}>Following</Text>
               <MaterialIcons name="expand-more" size={18} color={colors.text} />
             </>
           ) : (
-            <Text style={styles.subscribeText}>Subscribe</Text>
+            <Text style={styles.subscribeText}>Follow</Text>
           )}
         </Pressable>
       </View>

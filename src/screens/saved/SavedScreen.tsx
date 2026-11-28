@@ -77,7 +77,7 @@ export function SavedScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <StackHeader title="Saved" onBack={() => goBackOrTab(navigation, 'Library')} />
+      <StackHeader title="Watch Later" onBack={() => goBackOrTab(navigation, 'Library')} />
 
       {!isSupabaseConfigured ? (
         <ScreenMessage

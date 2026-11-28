@@ -514,7 +514,7 @@ export function SearchResultsScreen({ route, navigation }: Props) {
                 size={20}
                 color={colors.text}
               />
-              <Text style={styles.followPillText}>{following ? 'Following' : 'Subscribe'}</Text>
+              <Text style={styles.followPillText}>{following ? 'Following' : 'Follow'}</Text>
               {following ? <MaterialIcons name="expand-more" size={18} color={colors.text} /> : null}
             </Pressable>
             <Pressable
