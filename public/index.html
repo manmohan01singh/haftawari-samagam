@@ -132,6 +132,57 @@
         font-weight: 700;
         letter-spacing: -0.3px;
       }
+      .app-splash-suffix {
+        font-size: 13px;
+        font-weight: 600;
+        color: #606060;
+        margin-left: 3px;
+        letter-spacing: 0;
+      }
+      .app-splash-glow {
+        position: absolute;
+        top: -185px;
+        left: -185px;
+        width: 470px;
+        height: 470px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(255, 32, 32, 0.28) 0%, rgba(255, 32, 32, 0.1) 55%, rgba(255, 32, 32, 0) 100%);
+        pointer-events: none;
+      }
+      .app-splash-hero {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 34px 16px 26px;
+      }
+      .app-splash-ik {
+        font-family: 'Langar', 'Noto Sans Gurmukhi', sans-serif;
+        font-size: 118px;
+        line-height: 1.15;
+        color: #e8112d;
+        animation: app-splash-breathe 2.2s ease-in-out infinite;
+      }
+      .app-splash-loading {
+        color: #606060;
+        font-size: 14px;
+        margin-top: 2px;
+      }
+      @keyframes app-splash-breathe {
+        0%, 100% { opacity: 0.55; transform: scale(0.97); }
+        50% { opacity: 1; transform: scale(1.03); }
+      }
+      @font-face {
+        font-family: 'Langar';
+        src: url('fonts/langar-gurmukhi.woff2') format('woff2');
+        font-display: swap;
+      }
+      @media (prefers-color-scheme: dark) {
+        .app-splash { background-color: #0f0f0f; color: #ffffff; }
+        .app-splash-suffix { color: #aaaaaa; }
+        .app-splash-loading { color: #aaaaaa; }
+        .app-splash-thumb, .app-splash-line { background-color: #262626; }
+        .app-splash-glow { background: radial-gradient(circle, rgba(255, 32, 32, 0.44) 0%, rgba(255, 32, 32, 0.17) 55%, rgba(255, 32, 32, 0) 100%); }
+      }
       .app-splash-card {
         padding-bottom: 16px;
       }
@@ -149,48 +200,27 @@
         background-color: #f2f2f2;
         margin-bottom: 6px;
       }
-      .app-splash-status {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 4px 16px 14px;
-        color: #606060;
-        font-size: 14px;
-      }
-      .app-splash-spinner {
-        width: 20px;
-        height: 20px;
-        border-radius: 50%;
-        border: 3px solid #e5e5e5;
-        border-top-color: #606060;
-        animation: app-splash-spin 0.9s linear infinite;
-        flex: none;
-      }
-      @keyframes app-splash-spin {
-        to {
-          transform: rotate(360deg);
-        }
-      }
     </style>
   </head>
 
   <body>
     <!-- Use static rendering with Expo Router to support running without JavaScript. -->
     <noscript>
-      Haftawari Samagam needs JavaScript to run. Please enable JavaScript in your browser and
+      YouTube Gurbani needs JavaScript to run. Please enable JavaScript in your browser and
       reload this page.
     </noscript>
     <!-- The root element for your Expo app. Its static splash content
          (below) is replaced by React on mount. -->
     <div id="root">
       <div class="app-splash" aria-hidden="true">
+        <div class="app-splash-glow"></div>
         <div class="app-splash-bar">
           <img class="app-splash-mark" src="brand-mark.png" alt="" />
-          <div class="app-splash-name">Haftawari Samagam</div>
+          <div class="app-splash-name">YouTube<span class="app-splash-suffix">Gurbani</span></div>
         </div>
-        <div class="app-splash-status">
-          <div class="app-splash-spinner"></div>
-          <div>Loading samagams…</div>
+        <div class="app-splash-hero">
+          <div class="app-splash-ik">&#x0A74;</div>
+          <div class="app-splash-loading">Loading…</div>
         </div>
         <div class="app-splash-card">
           <div class="app-splash-thumb"></div>

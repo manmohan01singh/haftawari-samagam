@@ -142,6 +142,17 @@ export function scoreTitle(query: string, title: string): TitleMatch {
     const sorted = [...perToken].sort((a, b) => a - b);
     const excludingWorst = sorted.slice(1).reduce((a, b) => a + b, 0) / (sorted.length - 1);
     score = Math.max(score, excludingWorst * 0.92);
+    // Long queries forgive TWO weak tokens (user report, 28 Nov 2026:
+    // "Jis da karta mittar Amritvela trust" — the last two words name
+    // the CHANNEL, not the video, and "da" is the user's spelling of
+    // the title's "ka"; three strikes killed a title whose every
+    // content word matched). Junk stays out: with only two real
+    // matches among five-plus tokens the kept mean is still low.
+    if (qTokens.length >= 5) {
+      const excludingTwoWorst =
+        sorted.slice(2).reduce((a, b) => a + b, 0) / (sorted.length - 2);
+      score = Math.max(score, excludingTwoWorst * 0.88);
+    }
   }
   // A query token that matches nothing at all should hurt badly — but
   // only when the overall match is not already strong (the case above).

@@ -7,7 +7,6 @@ import { useScrollToTop } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppHeader } from '../../components/layout/AppHeader';
-import { OrbBackground } from '../../components/layout/OrbBackground';
 import { IkOnkarMark } from '../../components/layout/IkOnkarMark';
 import { useWebPullToRefresh } from '../../components/gesture/WebPullToRefresh';
 import { ChipsRow } from '../../components/layout/ChipsRow';
@@ -685,7 +684,6 @@ export function HomeScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <OrbBackground />
       <View style={styles.headerBlock}>
         <AppHeader
           onSearchPress={() => navigation.navigate('Search')}

@@ -12,11 +12,12 @@ interface IkOnkarMarkProps {
  * The big red ੴ shown while a page is blank and loading (user,
  * 28 Nov 2026): when a search is running or a page has not filled
  * yet, a large Ik Onkar in red, gently breathing, holds the screen;
- * when the content arrives it gives way to the content (the results
- * container fades in — see SearchResultsScreen). Rendered in the
- * platform's own Gurmukhi face, which Android and browsers carry.
+ * when the content arrives it gives way to the content. Set in
+ * Langar, a hand-lettered Gurmukhi display face (user asked for a
+ * Punjabi hastlikhat look, 28 Nov 2026), loaded in App.tsx with the
+ * platform Gurmukhi face as fallback.
  */
-export function IkOnkarMark({ label, size = 84 }: IkOnkarMarkProps) {
+export function IkOnkarMark({ label, size = 120 }: IkOnkarMarkProps) {
   const { colors } = useTheme();
   const [pulse] = useState(() => new Animated.Value(0));
 
@@ -48,6 +49,6 @@ const styles = StyleSheet.create({
   wrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: 28 },
   // The app's own accent red — the mark the user asked for, in red,
   // large, in the platform Gurmukhi face.
-  mark: { color: '#E8112D', lineHeight: undefined },
+  mark: { fontFamily: 'Langar', color: '#E8112D', lineHeight: undefined },
   label: { fontSize: 15, marginTop: 10 },
 });

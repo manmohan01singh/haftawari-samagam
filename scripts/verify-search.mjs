@@ -122,6 +122,39 @@ function topTitle(query, titles = TITLES) {
   );
 }
 
+// 5c. Channel-name words + a spelling variant must not sink a match
+//     (user report, 28 Nov 2026): "Jis da karta mittar Amritvela trust"
+//     — "Amritvela trust" names the channel, and the title spells the
+//     function word "Ka" where the user typed "da". The title's every
+//     content word matches; the score must clear the threshold on the
+//     full query alone (the engine additionally strips channel words
+//     per channel, which only helps further).
+{
+  const { score } = scoreTitle(
+    'Jis da karta mittar Amritvela trust',
+    'Jis Ka Karta Mittar Hai | Amritvela Kirtan Darbar | Bhai Gurpreet Singh Ji',
+  );
+  check(
+    "'jis da karta mittar amritvela trust' matches 'Jis Ka Karta Mittar Hai'",
+    score >= 0.45,
+    `score=${score.toFixed(3)}`,
+  );
+}
+
+// 5d. Junk must still fail even with the two-worst forgiveness: only
+//     two real words hidden in a five-word junk query is not a match.
+{
+  const { score } = scoreTitle(
+    'karta purakh zqxwv plmno nbvtr',
+    'Vich Karta Purakh Khloa | Amritvela Live Kirtan Darbar',
+  );
+  check(
+    "junk padding around two real words still scores below threshold",
+    score < 0.45,
+    `score=${score.toFixed(3)}`,
+  );
+}
+
 // 6. Acronym: how the sangat refers to the channel ("bgsj" is literally
 //    the query in reference screenshot 03).
 {

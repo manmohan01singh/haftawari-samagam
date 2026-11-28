@@ -1,6 +1,5 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { OrbBackground } from '../../components/layout/OrbBackground';
 import {
   RefreshControl,
   SectionList,
@@ -270,7 +269,6 @@ export function SessionsListScreen({ navigation, route }: Props) {
 
   return (
     <View style={styles.screen}>
-      <OrbBackground />
       {topBar}
     <SectionList
       sections={sections}

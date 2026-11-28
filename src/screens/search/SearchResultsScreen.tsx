@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { OrbBackground } from '../../components/layout/OrbBackground';
 import { IkOnkarMark } from '../../components/layout/IkOnkarMark';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -521,7 +520,6 @@ export function SearchResultsScreen({ route, navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <OrbBackground />
 
       <View style={styles.centered}>
         <View style={[styles.bar, { paddingTop: spacing.xs + insets.top }]}>

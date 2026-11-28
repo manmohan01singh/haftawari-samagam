@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { OrbBackground } from '../../components/layout/OrbBackground';
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -418,7 +417,6 @@ export function SubscriptionsScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <OrbBackground />
       <AppHeader
         onSearchPress={() => navigation.navigate('Search')}
         onAccountPress={() => navigation.navigate('MainTabs', { screen: 'Library' })}

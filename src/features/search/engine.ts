@@ -224,7 +224,12 @@ async function runLegs(query: string, options: SearchOptions): Promise<LegsOutco
   const legs = await Promise.all(
     targets.map(async (identity) => {
       try {
-        const results = await searchUploadsFallbackFor(identity.id, query, options.signal);
+        const channelTerms = new Set<string>(
+          [identity.title, ...(identity.aliases ?? [])]
+            .flatMap((text) => tokenize(text))
+            .filter((token) => token.length >= 3),
+        );
+        const results = await searchUploadsFallbackFor(identity.id, query, options.signal, channelTerms);
         return { ok: true, channelId: identity.id, results };
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') throw error;

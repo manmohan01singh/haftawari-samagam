@@ -1,5 +1,4 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { OrbBackground } from '../../components/layout/OrbBackground';
 import {
   ActivityIndicator,
   Dimensions,
@@ -203,7 +202,6 @@ export function LibraryScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <OrbBackground />
       <View style={[styles.headerRow, { paddingTop: insets.top, height: layout.headerHeight + insets.top }]}>
         <Pressable
           style={styles.accountsPill}

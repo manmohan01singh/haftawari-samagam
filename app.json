@@ -45,7 +45,8 @@
           }
         }
       ],
-      "expo-video"
+      "expo-video",
+      "expo-font"
     ],
     "experiments": {
       "baseUrl": "/haftawari-samagam"

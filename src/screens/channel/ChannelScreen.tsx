@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { OrbBackground } from '../../components/layout/OrbBackground';
 import {
   FlatList,
   Linking,
@@ -492,7 +491,6 @@ export function ChannelScreen({ route, navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <OrbBackground />
       {ptr.indicator}
       <FlatList
         {...ptr.listProps}

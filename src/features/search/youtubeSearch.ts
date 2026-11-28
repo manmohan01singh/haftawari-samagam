@@ -40,6 +40,7 @@ import {
 } from '../../lib/youtubeKeys';
 import { OFFICIAL_CHANNEL, uploadsPlaylistId } from './config';
 import { DEFAULT_THRESHOLD, rankByTitle, scoreTitle } from './fuzzy';
+import { tokenize } from './normalize';
 import type { ChannelResult, VideoResult } from './types';
 import {
   YouTubeApiError,
@@ -507,9 +508,32 @@ export async function searchUploadsFallbackFor(
   channelId: string,
   queryText: string,
   signal?: AbortSignal,
+  channelTerms?: ReadonlySet<string>,
 ): Promise<VideoResult[]> {
   const uploads = await fetchRecentUploadsFor(channelId, signal);
-  const ranked = rankByTitle(queryText, uploads, (upload) => upload.title, DEFAULT_THRESHOLD);
+  let ranked = rankByTitle(queryText, uploads, (upload) => upload.title, DEFAULT_THRESHOLD);
+  // Channel-intent words ("...Amritvela trust") name the channel the
+  // user wants, not words in the video's title. When the caller passes
+  // this channel's own name/alias tokens, ALSO rank with those words
+  // stripped from the query and keep each video's better score — a
+  // title is no longer punished for lacking the channel's name.
+  if (channelTerms && channelTerms.size > 0) {
+    const stripped = tokenize(queryText).filter((token) => !channelTerms.has(token));
+    if (stripped.length >= 2 && stripped.length < tokenize(queryText).length) {
+      const strippedRanked = rankByTitle(
+        stripped.join(' '),
+        uploads,
+        (upload) => upload.title,
+        DEFAULT_THRESHOLD,
+      );
+      const byId = new Map(ranked.map((entry) => [entry.item.videoId, entry]));
+      for (const entry of strippedRanked) {
+        const existing = byId.get(entry.item.videoId);
+        if (!existing || entry.score > existing.score) byId.set(entry.item.videoId, entry);
+      }
+      ranked = [...byId.values()].sort((a, b) => b.score - a.score);
+    }
+  }
   if (ranked.length === 0) return [];
 
   const top = ranked.slice(0, 25);
