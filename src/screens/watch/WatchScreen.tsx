@@ -94,6 +94,11 @@ interface ResolvedWatch {
   row: Video | null;
   /** True only when the YouTube API itself reports this video live. */
   isLive: boolean;
+  /** YouTube's own like count for the video (API statistics), when
+   *  known — the Like button displays THIS number (fix round 6,
+   *  #13), with the sangat member's own like added on top when
+   *  they have tapped it. */
+  ytLikeCount?: number | null;
 }
 
 /**
@@ -411,6 +416,23 @@ export function WatchScreen({ route, navigation }: Props) {
     return () => clearTimeout(t);
   }, [isFocused, persistent, measureSlot]);
 
+  // Re-measure when the store's open() lands (fix round 6, mini
+  // restart): if the hand-off opens this item while no rect for it
+  // is on file — the slow-phone order where layout and the 400 ms
+  // retry both fired before the resolve finished — measure again
+  // immediately and once more as the layout settles, so the host
+  // covers the slot itself instead of the rescue player taking
+  // over (whose hand-back on minimise reads as a restart).
+  const storeItemKey = usePlaybackStore((s) => s.item?.key ?? null);
+  const storeRectKey = usePlaybackStore((s) => s.slotRect?.key ?? null);
+  useEffect(() => {
+    if (!isFocused || !persistent) return;
+    if (storeItemKey !== playerKey || storeRectKey === playerKey) return;
+    measureSlot();
+    const t = setTimeout(measureSlot, 300);
+    return () => clearTimeout(t);
+  }, [isFocused, persistent, storeItemKey, storeRectKey, playerKey, measureSlot]);
+
   const [savedState, setSavedState] = useState<{ rowId: string; saved: boolean } | null>(null);
   // Like (Phase 13): REAL state now — migration 0005's video_likes
   // table (one row per member per video, keyed by youtube_video_id).
@@ -535,7 +557,6 @@ export function WatchScreen({ route, navigation }: Props) {
                 } else if (m2.viewCount != null) {
                   parts.push(`▷ ${formatCount(m2.viewCount)} views`);
                 }
-                if (m2.likeCount != null) parts.push(`${formatCount(m2.likeCount)} likes on YouTube`);
                 parts.push(formatDateLine(m2.publishedAt));
                 return {
                   key: watchKey,
@@ -549,6 +570,7 @@ export function WatchScreen({ route, navigation }: Props) {
                     thumbnailUrl: m2.thumbnailUrl,
                     durationSeconds: m2.durationSeconds,
                     isLive: m2.liveBroadcastContent === 'live',
+                    ytLikeCount: m2.likeCount ?? prev.resolved.ytLikeCount ?? null,
                     metaLine: parts.filter(Boolean).join(' · '),
                   },
                 };
@@ -600,15 +622,13 @@ export function WatchScreen({ route, navigation }: Props) {
             // prefix ("▷ 3.3 lakh", "▷332 watching").
             metaParts.push(`▷ ${formatCount(meta.viewCount)} views`);
           }
-          // YouTube's own like count, labelled as YouTube's (fix
-          // round 5, #13): the Like BUTTON below carries the
-          // sangat's own count (real app data, often 0 on a new
-          // app) — shown side by side without labels the two read
-          // as one broken number. The meta line now states the
-          // YouTube figure plainly; the button stays the sangat's.
-          if (meta.likeCount != null) {
-            metaParts.push(`${formatCount(meta.likeCount)} likes on YouTube`);
-          }
+          // YouTube's like count is NOT printed in the meta line
+          // (fix round 6, #13): round 5 put it there labelled
+          // "likes on YouTube" while the button showed the sangat's
+          // 0 — Chat 2 read the side-by-side pair as one broken
+          // number, twice. The count now lives ONLY on the button,
+          // as on YouTube itself (see ytLikeCount on the resolved
+          // object + the display rule at the button).
           // ONE date format everywhere: formatDateLine (en-IN,
           // "30 Nov 2020") — the same helper the cards use.
           metaParts.push(formatDateLine(meta.publishedAt));
@@ -638,6 +658,7 @@ export function WatchScreen({ route, navigation }: Props) {
             metaLine: metaParts.filter(Boolean).join(' · '),
             thumbnailUrl: row?.thumbnail_url ?? meta?.thumbnailUrl ?? null,
             durationSeconds: meta?.durationSeconds ?? row?.duration_seconds ?? null,
+            ytLikeCount: meta?.likeCount ?? null,
             row,
             isLive,
           },
@@ -1446,7 +1467,22 @@ export function WatchScreen({ route, navigation }: Props) {
                     color={colors.text}
                   />
                   {likeStatus === 'ready' ? (
-                    <Text style={styles.likeCount}>{formatCount(likeCount)}</Text>
+                    <Text style={styles.likeCount}>
+                      {formatCount(
+                        // One number, YouTube's own (fix round 6,
+                        // #13): the button shows the video's real
+                        // YouTube like count when the API gave one,
+                        // plus 1 while the sangat member's own like
+                        // stands (their tap is recorded in the app
+                        // and fills the thumb — the +1 is their own
+                        // action made visible, exactly as a like
+                        // behaves). Without API data the button
+                        // falls back to the sangat's own count.
+                        resolved?.ytLikeCount != null
+                          ? resolved.ytLikeCount + (likedByMe ? 1 : 0)
+                          : likeCount,
+                      )}
+                    </Text>
                   ) : null}
                 </Pressable>
                 <View style={styles.likeDivider} />

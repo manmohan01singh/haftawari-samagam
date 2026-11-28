@@ -40,34 +40,40 @@ async function readSeededIds(): Promise<string[]> {
 }
 
 /**
- * Seed default follows for any of the given channels not yet seeded.
- * Best-effort: storage failures leave follow state as-is rather than
- * failing the calling screen.
+ * Default seeding REMOVED (fix round 6, #18 — the user's own
+ * "fix everything" order, 28 Nov 2026, after Chat 2 flagged it
+ * twice): a fresh guest who never tapped anything was told they
+ * already "Follow" every sangat channel, which is not honest.
+ * Channels now start UNFOLLOWED; only a real tap follows.
+ *
+ * This function is now the one-time CLEANUP for devices the old
+ * seeding already touched: every channel id in the seeded record
+ * whose follow key still holds the seeded '1' is reset to
+ * never-followed (key removed). An explicit unfollow ('0') is
+ * untouched, and the cleanup runs once (DONE flag) — a follow the
+ * user taps afterwards is theirs and stays.
  */
-export async function ensureDefaultFollows(channels: AppChannel[]): Promise<void> {
+const UNSOW_DONE_KEY = 'hs.removedDefaultFollows.v1';
+
+export async function ensureDefaultFollows(_channels: AppChannel[]): Promise<void> {
   try {
-    const targets = channels.filter((c) => c.youtubeChannelId);
-    if (targets.length === 0) return;
-    const seeded = new Set(await readSeededIds());
-    const fresh = targets.filter((c) => !seeded.has(c.youtubeChannelId));
-    if (fresh.length === 0) return;
-    const existing = await AsyncStorage.multiGet(fresh.map((c) => channelFollowKey(c.youtubeChannelId)));
-    const writes: [string, string][] = [];
-    for (const [key, value] of existing) {
-      if (value === null) writes.push([key, '1']);
+    if (await AsyncStorage.getItem(UNSOW_DONE_KEY)) return;
+    const seeded = await readSeededIds();
+    if (seeded.length > 0) {
+      const entries = await AsyncStorage.multiGet(seeded.map(channelFollowKey));
+      const toClear = entries.filter(([, v]) => v === '1').map(([k]) => k);
+      if (toClear.length > 0) await AsyncStorage.multiRemove(toClear);
     }
-    if (writes.length > 0) await AsyncStorage.multiSet(writes);
-    for (const c of fresh) seeded.add(c.youtubeChannelId);
-    await AsyncStorage.setItem(SEEDED_KEY, JSON.stringify([...seeded]));
+    await AsyncStorage.setItem(UNSOW_DONE_KEY, '1');
   } catch {
     // Best-effort only — a blocked/full store must not break a screen.
   }
 }
 
 /**
- * Seed defaults for the app's active channels (built-in registry ∪
- * admin DB rows, via the channels service's own cache). For screens
- * that show a single channel and don't otherwise load the panel.
+ * Runs the default-follow cleanup for the app's active channels
+ * (kept under its historical name — the screens that call it just
+ * need follow state settled before they read it).
  */
 export async function ensureDefaultFollowsSeeded(): Promise<void> {
   const channels = await fetchActiveChannels().catch(() => [] as AppChannel[]);

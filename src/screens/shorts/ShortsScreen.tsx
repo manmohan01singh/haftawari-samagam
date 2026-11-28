@@ -45,6 +45,9 @@ interface RailProps {
   onOpenFull: () => void;
   onSignIn: () => void;
   onRequireAuth: (action: string) => void;
+  /** The screen's double-tap-to-like reaches the ACTIVE short's
+   *  rail through this registration (fix round 6). */
+  registerLike: (fn: (() => void) | null) => void;
 }
 
 /**
@@ -54,7 +57,7 @@ interface RailProps {
  * Share sends the app's deep link, Open goes to the full Watch
  * page. Counts render only when the backend returned them.
  */
-function ShortRail({ item, onOpenFull, onSignIn, onRequireAuth }: RailProps) {
+function ShortRail({ item, onOpenFull, onSignIn, onRequireAuth, registerLike }: RailProps) {
   const { user } = useCurrentChatUser();
   const engagement = useVideoEngagement(
     item.meta.youtubeVideoId,
@@ -62,6 +65,20 @@ function ShortRail({ item, onOpenFull, onSignIn, onRequireAuth }: RailProps) {
     user ? { id: user.id, displayName: user.displayName } : null,
   );
   const [commentsOpen, setCommentsOpen] = useState(false);
+  // Double-tap-to-like (fix round 6, the user's own ask + YouTube
+  // Shorts parity): a double tap LIKES — it never unlikes — and a
+  // guest gets the same sign-in ask as the rail's Like button.
+  const { likedByMe, toggleLike } = engagement;
+  useEffect(() => {
+    registerLike(() => {
+      if (!user) {
+        onRequireAuth('like this samagam');
+        return;
+      }
+      if (!likedByMe) void toggleLike();
+    });
+    return () => registerLike(null);
+  }, [registerLike, user, likedByMe, toggleLike, onRequireAuth]);
   const { colors } = useTheme();
   const styles = useMemo(() => createRailStyles(colors), [colors]);
 
@@ -85,7 +102,21 @@ function ShortRail({ item, onOpenFull, onSignIn, onRequireAuth }: RailProps) {
           color="#FFFFFF"
         />
         <Text style={styles.railLabel}>
-          {engagement.likeStatus === 'ready' ? formatCount(engagement.likeCount) : 'Like'}
+          {engagement.likeStatus === 'ready'
+            ? formatCount(
+                // The video's real YouTube like count when known
+                // (fix round 6, #13 rule, same as Watch) + 1 while
+                // the member's own like stands; the sangat's own
+                // count is the fallback. A number renders from the
+                // first paint (from the meta) — never blank, never
+                // flickering between two different numbers (#53).
+                item.meta.likeCount != null
+                  ? item.meta.likeCount + (engagement.likedByMe ? 1 : 0)
+                  : engagement.likeCount,
+              )
+            : item.meta.likeCount != null
+              ? formatCount(item.meta.likeCount)
+              : 'Like'}
         </Text>
       </Pressable>
       <Pressable
@@ -249,7 +280,16 @@ export function ShortsScreen({ navigation }: Props) {
   }, [reloadKey]);
 
   const playActive = useCallback(() => {
-    playerRefs.current.get(activeIndexRef.current)?.play();
+    const ref = playerRefs.current.get(activeIndexRef.current);
+    if (!ref) return;
+    // Sound STAYS on across scrolls (fix round 6 — the user's own
+    // report: "har scroll te mute ho jandi hai"): a player that
+    // reported ready BEFORE the unlock (it sits in the mounted
+    // window, muted) never received the unmute, and activation
+    // only called play(). Activation now re-asserts the session's
+    // sound state every time a short becomes the active one.
+    if (soundOnRef.current) ref.setMuted(false);
+    ref.play();
   }, []);
 
   const unlockSound = useCallback(() => {
@@ -258,6 +298,76 @@ export function ShortsScreen({ navigation }: Props) {
     setSoundOn(true);
     playerRefs.current.get(activeIndexRef.current)?.setMuted(false);
   }, []);
+
+  // Double-tap to like (fix round 6 — the user's own ask, and
+  // YouTube Shorts' signature gesture): a double tap on the stage
+  // likes the active short through its rail (registered below)
+  // and bursts a heart; a single tap keeps its play/pause meaning,
+  // decided after a short wait for the second tap.
+  const railLikeRef = useRef<(() => void) | null>(null);
+  const registerLike = useCallback((fn: (() => void) | null) => {
+    railLikeRef.current = fn;
+  }, []);
+  const lastTapRef = useRef(0);
+  const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [heartBurst, setHeartBurst] = useState(0);
+  useEffect(() => {
+    if (!heartBurst) return;
+    const t = setTimeout(() => setHeartBurst(0), 650);
+    return () => clearTimeout(t);
+  }, [heartBurst]);
+  const handleStageTap = useCallback(
+    (index: number) => {
+      if (index !== activeIndexRef.current) return;
+      unlockSound();
+      const now = Date.now();
+      if (now - lastTapRef.current < 320) {
+        lastTapRef.current = 0;
+        if (tapTimerRef.current) {
+          clearTimeout(tapTimerRef.current);
+          tapTimerRef.current = null;
+        }
+        railLikeRef.current?.();
+        setHeartBurst(now);
+        return;
+      }
+      lastTapRef.current = now;
+      if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
+      tapTimerRef.current = setTimeout(() => {
+        tapTimerRef.current = null;
+        const idx = activeIndexRef.current;
+        if (userPausedRef.current) {
+          setUserPaused(false);
+          playerRefs.current.get(idx)?.play();
+        } else {
+          setUserPaused(true);
+          playerRefs.current.get(idx)?.pause();
+        }
+      }, 320);
+    },
+    [unlockSound],
+  );
+
+  // Progress bar (fix round 6, N-6 remainder — YouTube Shorts
+  // shows one): the active player's own clock, polled twice a
+  // second while it plays (the web handle reports real time; a
+  // platform without a clock simply shows no bar).
+  const [progress, setProgress] = useState(0);
+  useEffect(() => {
+    if (!isFocused) return;
+    const t = setInterval(() => {
+      const idx = activeIndexRef.current;
+      const seconds = playerRefs.current.get(idx)?.getCurrentTime() ?? null;
+      const duration = itemsRef.current?.[idx]?.item.meta.durationSeconds ?? null;
+      if (seconds != null && duration != null && duration > 0) {
+        setProgress(Math.min(1, Math.max(0, seconds / duration)));
+      }
+    }, 500);
+    return () => clearInterval(t);
+  }, [isFocused]);
+  useEffect(() => {
+    setProgress(0);
+  }, [activeIndex]);
 
   // Focus/active choreography: exactly one short plays — the
   // visible one, on the focused tab, unless the viewer paused it.
@@ -392,20 +502,15 @@ export function ShortsScreen({ navigation }: Props) {
               interaction the session runs unmuted. */}
           <Pressable
             style={StyleSheet.absoluteFill}
-            onPress={() => {
-              if (!isActive) return;
-              unlockSound();
-              if (userPaused) {
-                setUserPaused(false);
-                playerRefs.current.get(index)?.play();
-              } else {
-                setUserPaused(true);
-                playerRefs.current.get(index)?.pause();
-              }
-            }}
+            onPress={() => handleStageTap(index)}
             accessibilityRole="button"
             accessibilityLabel={userPaused ? 'Play' : 'Pause'}
           />
+          {isActive && heartBurst ? (
+            <View style={styles.heartBurst} pointerEvents="none">
+              <MaterialIcons name="favorite" size={92} color="rgba(255,255,255,0.95)" />
+            </View>
+          ) : null}
           {isActive && !soundOn && playingIndex === index ? (
             <Pressable
               style={styles.soundPill}
@@ -420,6 +525,11 @@ export function ShortsScreen({ navigation }: Props) {
           {isActive && userPaused ? (
             <View style={styles.pausedGlyph} pointerEvents="none">
               <MaterialIcons name="play-arrow" size={72} color="rgba(255,255,255,0.9)" />
+            </View>
+          ) : null}
+          {isActive && progress > 0 ? (
+            <View style={styles.progressTrack} pointerEvents="none">
+              <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` }]} />
             </View>
           ) : null}
 
@@ -466,6 +576,7 @@ export function ShortsScreen({ navigation }: Props) {
             {isActive ? (
               <ShortRail
                 item={item}
+                registerLike={registerLike}
                 onOpenFull={() => openRoot('Watch', { youtubeVideoId: item.meta.youtubeVideoId })}
                 onSignIn={() => openRoot('SignIn')}
                 onRequireAuth={(a) => setAuthAction(a)}
@@ -475,7 +586,7 @@ export function ShortsScreen({ navigation }: Props) {
         </View>
       );
     },
-    [activeIndex, itemH, userPaused, openRoot, styles, soundOn, playingIndex, unlockSound, autoplayEnabled],
+    [activeIndex, itemH, userPaused, openRoot, styles, soundOn, playingIndex, autoplayEnabled, handleStageTap, heartBurst, progress, registerLike],
   );
 
   return (
@@ -593,6 +704,24 @@ const createStyles = (colors: ThemeColors) =>
       justifyContent: 'center',
     },
     page: { width: '100%', backgroundColor: colors.playerBackground, overflow: 'hidden' },
+    heartBurst: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    progressTrack: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      height: 3,
+      backgroundColor: 'rgba(255,255,255,0.25)',
+    },
+    progressFill: { height: 3, backgroundColor: '#FF0033' },
     pausedGlyph: {
       position: 'absolute',
       top: 0,

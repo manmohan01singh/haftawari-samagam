@@ -47,7 +47,7 @@ export function spreadByChannel(items: ShortItem[]): ShortItem[] {
   return out;
 }
 
-export async function fetchShorts(limit = 60): Promise<ShortItem[]> {
+export async function fetchShorts(limit = 90): Promise<ShortItem[]> {
   const channels = await fetchActiveChannels();
   const perChannel = await Promise.all(
     channels
@@ -57,12 +57,17 @@ export async function fetchShorts(limit = 60): Promise<ShortItem[]> {
           const playlistId = uploadsPlaylistIdFor(ch.youtubeChannelId);
           const first = await getUploadsPageCached(playlistId);
           let videos = first.videos;
-          if (first.nextPageToken) {
+          // THREE pages per channel (fix round 6 — the user asked
+          // for MORE Shorts): ~150 uploads scanned per channel
+          // through the same SWR cache the app already keeps.
+          let token = first.nextPageToken;
+          for (let page = 0; page < 2 && token; page++) {
             try {
-              const second = await getUploadsPageCached(playlistId, first.nextPageToken);
-              videos = [...videos, ...second.videos];
+              const next = await getUploadsPageCached(playlistId, token);
+              videos = [...videos, ...next.videos];
+              token = next.nextPageToken;
             } catch {
-              // Page 1 alone is a fine pool for this channel.
+              break; // Fewer pages is a fine pool for this channel.
             }
           }
           return videos
@@ -95,24 +100,23 @@ export async function fetchShorts(limit = 60): Promise<ShortItem[]> {
     title: it.meta.title,
     durationSeconds: it.meta.durationSeconds,
   }));
-  // Cross-channel pass (fix round 5.1, #23): the same clip is
-  // often carried by TWO sangat channels under the identical title
-  // (the Takhat Sahib evening kirtan showed at 836 and 5.4K views
-  // from two sources) — channel-keyed dedupe can never pair those.
-  // For the Shorts pool, an identical hard title with a compatible
-  // duration (within ±15 s, or either side unknown) is the same
-  // clip to a viewer, whichever channel carries it. Dated series
-  // titles differ by their date text, so episodes stay distinct.
-  const titleSeen = new Map<string, number | null>();
+  // Cross-channel pass (fix round 5.1, #23; TITLE-ONLY in fix
+  // round 6): the same clip is often carried by TWO sangat
+  // channels under the identical title (the Takhat Sahib evening
+  // kirtan showed twice — same channel AND across channels, at
+  // different durations) — channel-keyed dedupe can never pair
+  // those, and the ±15 s duration tolerance still let the pair
+  // through when the copies were cut differently. For the Shorts
+  // pool an identical hard title is the same clip to a viewer,
+  // full stop: the first copy wins, every later one drops. Dated
+  // series titles differ by their date text, so episodes stay
+  // distinct.
+  const titleSeen = new Set<string>();
   const crossDeduped = all.filter((it) => {
     const key = normaliseTitleHard(it.meta.title);
     if (!key) return true;
-    const prevDuration = titleSeen.get(key);
-    if (prevDuration !== undefined) {
-      const d = it.meta.durationSeconds;
-      if (prevDuration == null || d == null || Math.abs(prevDuration - d) <= 15) return false;
-    }
-    titleSeen.set(key, it.meta.durationSeconds);
+    if (titleSeen.has(key)) return false;
+    titleSeen.add(key);
     return true;
   });
   return spreadByChannel(crossDeduped).slice(0, limit);

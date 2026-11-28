@@ -25,6 +25,56 @@
  * belong to their screen, so they keep their in-screen player.
  */
 import { create } from 'zustand';
+import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+/**
+ * Dock persistence (fix round 6, R5-7): a full page load used to
+ * silently delete the docked video — the store is memory-only, so
+ * arriving by URL (or any reload) vapourised it. The docked item
+ * (and its last position, written by the host every few seconds)
+ * now persists; on boot the dock is restored PAUSED at that
+ * position — the hand-back rule in PlaybackHost (a mount with a
+ * rescuePosition inherits `playing`) keeps it from auto-starting,
+ * and its onReady seeks to the saved spot. Close clears it.
+ */
+const DOCK_STORE_KEY = 'haftawari.dock.v1';
+
+interface PersistedDock {
+  item: PlaybackItem;
+  seconds: number | null;
+}
+
+function readPersistedDockSync(): PersistedDock | null {
+  if (Platform.OS !== 'web') return null;
+  try {
+    const raw = window.localStorage.getItem(DOCK_STORE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PersistedDock;
+    if (!parsed.item?.key || parsed.item.kind !== 'youtube' || !parsed.item.youtubeVideoId) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function persistDock(item: PlaybackItem | null, seconds: number | null): void {
+  if (item === null) {
+    AsyncStorage.removeItem(DOCK_STORE_KEY).catch(() => undefined);
+    return;
+  }
+  AsyncStorage.setItem(DOCK_STORE_KEY, JSON.stringify({ item, seconds })).catch(() => undefined);
+}
+
+/** The host calls this while the dock plays, so a reload restores
+ *  roughly where the listener left off (not from 0). */
+export function persistDockPosition(seconds: number): void {
+  const raw = readPersistedDockSync();
+  if (!raw) return;
+  persistDock(raw.item, Math.floor(seconds));
+}
+
+const restoredDock = readPersistedDockSync();
 
 export interface PlaybackItem {
   /** Stable identity of the playing video (player key). */
@@ -106,8 +156,8 @@ interface PlaybackState {
 }
 
 export const usePlaybackStore = create<PlaybackState>((set) => ({
-  item: null,
-  mode: 'closed',
+  item: restoredDock?.item ?? null,
+  mode: restoredDock ? 'mini' : 'closed',
   playing: false,
   slotRect: null,
   routeName: null,
@@ -116,7 +166,10 @@ export const usePlaybackStore = create<PlaybackState>((set) => ({
   setCoveredKey: (coveredKey) => set({ coveredKey }),
   suppressedKey: null,
   setSuppressedKey: (suppressedKey) => set({ suppressedKey }),
-  rescuePosition: null,
+  rescuePosition:
+    restoredDock && restoredDock.seconds != null && restoredDock.seconds > 1
+      ? { key: restoredDock.item.key, seconds: restoredDock.seconds }
+      : null,
   setRescuePosition: (rescuePosition) => set({ rescuePosition }),
   dockVisible: false,
   setDockVisible: (dockVisible) => set({ dockVisible }),
@@ -132,15 +185,30 @@ export const usePlaybackStore = create<PlaybackState>((set) => ({
         // its own tap / API state) — `playing` is corrected by the
         // players' state events as soon as they report.
         playing: same ? s.playing : false,
-        slotRect: same ? s.slotRect : null,
+        // Keep a rect that was already measured FOR THIS ITEM
+        // (fix round 6, mini restart): the Watch slot measures on
+        // layout/focus, which on a slow phone happens BEFORE the
+        // resolve finishes and open() runs — nulling that rect
+        // left the host parked forever, the rescue player took
+        // over, and minimising then restarted the video in a
+        // fresh host player. A rect keyed to this item is this
+        // item's slot, whenever it was measured.
+        slotRect: same || s.slotRect?.key === item.key ? s.slotRect : null,
         coveredKey: same ? s.coveredKey : null,
         rescuePosition: same ? s.rescuePosition : null,
       };
     }),
-  minimize: () => set((s) => (s.item ? { mode: 'mini' } : s)),
+  minimize: () =>
+    set((s) => {
+      if (!s.item) return s;
+      if (s.item.kind === 'youtube') persistDock(s.item, null);
+      return { mode: 'mini' };
+    }),
   expand: () => set((s) => (s.item ? { mode: 'full' } : s)),
-  close: () =>
-    set({ item: null, mode: 'closed', playing: false, slotRect: null, coveredKey: null, suppressedKey: null, rescuePosition: null }),
+  close: () => {
+    persistDock(null, null);
+    set({ item: null, mode: 'closed', playing: false, slotRect: null, coveredKey: null, suppressedKey: null, rescuePosition: null });
+  },
   setPlaying: (playing) => set({ playing }),
   setSlotRect: (slotRect) => set({ slotRect }),
   setRouteName: (routeName) => set({ routeName }),

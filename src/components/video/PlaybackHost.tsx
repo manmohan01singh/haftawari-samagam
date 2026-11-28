@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { YouTubePlayer, type YouTubePlayerHandle } from './YouTubePlayer';
 import { HostedWatchPlayer, type HostedPlayerHandle } from './HostedWatchPlayer';
-import { usePlaybackStore } from '../../features/playback/playbackStore';
+import { persistDockPosition, usePlaybackStore } from '../../features/playback/playbackStore';
 import { usePreferencesStore } from '../../features/settings/preferencesStore';
 import { useAuth } from '../../features/auth';
 import { recordLocalWatch } from '../../features/library/localHistory';
@@ -116,6 +116,18 @@ export function PlaybackHost({
   React.useEffect(() => {
     if (routeName !== 'Watch' && suppressedKey) setSuppressedKey(null);
   }, [routeName, suppressedKey, setSuppressedKey]);
+
+  // Dock position writer (fix round 6, R5-7): while the dock
+  // plays, note the position every 5 s so a full page load can
+  // restore the dock where the listener actually was.
+  React.useEffect(() => {
+    if (mode !== 'mini' || item?.kind !== 'youtube' || !playing) return;
+    const t = setInterval(() => {
+      const seconds = ytRef.current?.getCurrentTime();
+      if (seconds != null && seconds > 1) persistDockPosition(seconds);
+    }, 5000);
+    return () => clearInterval(t);
+  }, [mode, item?.kind, item?.key, playing]);
   useEffect(() => {
     if (usePlaybackStore.getState().dockVisible !== miniCardVisible) {
       setDockVisible(miniCardVisible);
@@ -489,7 +501,12 @@ const createStyles = (colors: ThemeColors) =>
     // Mini-card stage: the embed keeps its full 200×200 viewport
     // inside the 200×113 card window (top-anchored; the card clips
     // the black void). Every other mode: fill the placement box.
-    miniStage: { width: 200, height: 200 },
+    // The stage IS the 16:9 picture box (fix round 6, "mini
+    // player square ban janda"): it used to be a 200×200 stage
+    // the window cropped — on the user's phone the uncropped
+    // square showed through during loads. The player wrap is
+    // 200×112.5; a 200×113 stage leaves nothing square to show.
+    miniStage: { width: 200, height: 113 },
     miniTitleShade: { position: 'absolute', top: 0, left: 0, right: 0, height: 32 },
     miniTitleShadeTop: { height: 16, backgroundColor: 'rgba(0,0,0,0.92)' },
     miniTitleShadeBottom: { height: 16, backgroundColor: 'rgba(0,0,0,0.55)' },
