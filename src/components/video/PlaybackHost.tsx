@@ -70,20 +70,28 @@ export function PlaybackHost({
   // button would promise control it cannot deliver.
   const [hostedReadyKey, setHostedReadyKey] = useState<string | null>(null);
 
-  if (!item || mode === 'closed') return null;
-
+  // HOOKS FIRST, always (regression fix, 28 Nov 2026): the Batch A
+  // parked-pause effect was placed after an early
+  // `if (!item) return null`, so the first video open rendered MORE
+  // hooks than the initial empty render — React threw, the host's
+  // error boundary (fallback null, no auto-retry) swallowed it, and
+  // the player was dead for the whole session: recorded videos sat
+  // on the slot poster forever with no iframe in the DOM at all.
+  // Every hook now runs unconditionally; the empty return lives
+  // below them, and the derived values are null-safe.
   const isWatchRoute = routeName === 'Watch';
   const fullVisible =
     mode === 'full' &&
     isWatchRoute &&
     watchKind === 'plain' &&
     slotRect != null &&
+    item != null &&
     slotRect.key === item.key;
   const barHidden =
     (routeName != null && (BAR_HIDDEN_ROUTES.has(routeName) || routeName.startsWith('Admin'))) ||
     (isWatchRoute && watchKind === 'session');
-  const miniCardVisible = mode === 'mini' && item.kind === 'youtube' && !barHidden;
-  const hostedMiniVisible = mode === 'mini' && item.kind === 'hosted' && !barHidden;
+  const miniCardVisible = mode === 'mini' && item?.kind === 'youtube' && !barHidden;
+  const hostedMiniVisible = mode === 'mini' && item?.kind === 'hosted' && !barHidden;
   const playerVisible = fullVisible || miniCardVisible || hostedMiniVisible;
 
   // NEVER hidden-but-playing (Chat 2 fault 19, 28 Nov 2026 — the
@@ -104,9 +112,14 @@ export function PlaybackHost({
   // for 900 ms before the pause lands, which no real transition
   // takes.
   const visibleRef = useRef(playerVisible);
-  visibleRef.current = playerVisible;
+  const itemKind = item?.kind ?? null;
   React.useEffect(() => {
-    if (playerVisible) return;
+    // Keep the ref at the latest visibility inside the effect —
+    // writing a ref during render is both a lint error and, in
+    // concurrent rendering, a correctness smell. The 900 ms timer
+    // below reads it when it fires, long after this sync ran.
+    visibleRef.current = playerVisible;
+    if (!item || playerVisible) return;
     const pauseNow = () => {
       if (item.kind === 'youtube') ytRef.current?.pause();
       else hostedRef.current?.pause();
@@ -125,8 +138,12 @@ export function PlaybackHost({
       if (!visibleRef.current) pauseNow();
     }, 900);
     return () => clearTimeout(t);
-  }, [playerVisible, mode, item.kind, setPlaying, barHidden, isWatchRoute]);
+  }, [playerVisible, mode, item, itemKind, setPlaying, barHidden, isWatchRoute]);
   const bottomOffset = layout.bottomNavHeight + Math.max(insets.bottom, 12) + 8;
+
+  // The empty return — AFTER every hook above (see the hooks-first
+  // note at the top of this component).
+  if (!item || mode === 'closed') return null;
 
   const togglePlay = () => {
     if (item.kind === 'youtube') {
