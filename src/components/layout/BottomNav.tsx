@@ -2,6 +2,7 @@ import React, { memo, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import Svg, { Path, Rect } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { layout, useTheme, type ThemeColors } from '../../theme';
 import { BarBlurBackground } from './BarBlurBackground';
@@ -24,8 +25,8 @@ export interface BottomNavItem {
    * Do NOT switch icon libraries for this.
    */
   activeIcon?: string;
-  /** 'create' renders the circled-+ glyph in reference proportions (the slot opens the official channel in this app — destination unchanged, glyph matched to ref in round 2); 'avatar' renders the profile slot. */
-  kind?: 'icon' | 'create' | 'avatar';
+  /** 'create' renders the circled-+ glyph in reference proportions (the slot opens the official channel in this app — destination unchanged, glyph matched to ref in round 2); 'avatar' renders the profile slot; 'shorts' renders the Shorts glyph (a rounded frame with a play triangle — no icon font carries YouTube's Shorts mark, so it is drawn as SVG). */
+  kind?: 'icon' | 'create' | 'avatar' | 'shorts';
   avatarUrl?: string | null;
   avatarInitial?: string | null;
 }
@@ -98,6 +99,29 @@ export const BottomNav = memo(function BottomNav({ items, activeKey, onPress, ov
               <View style={styles.createCircle}>
                 <MaterialIcons name="add" size={20} color={colors.text} />
               </View>
+            ) : item.kind === 'shorts' ? (
+              <Svg width={24} height={24} viewBox="0 0 24 24">
+                {active ? (
+                  <>
+                    <Rect x={4} y={3} width={16} height={18} rx={5} fill={colors.text} />
+                    <Path d="M10.2 8.6v6.8L15.8 12z" fill={colors.background} />
+                  </>
+                ) : (
+                  <>
+                    <Rect
+                      x={4.9}
+                      y={3.9}
+                      width={14.2}
+                      height={16.2}
+                      rx={4.2}
+                      fill="none"
+                      stroke={colors.textSecondary}
+                      strokeWidth={1.8}
+                    />
+                    <Path d="M10.2 8.6v6.8L15.8 12z" fill={colors.textSecondary} />
+                  </>
+                )}
+              </Svg>
             ) : item.kind === 'avatar' ? (
               item.avatarUrl ? (
                 <NavAvatarImage

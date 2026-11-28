@@ -104,6 +104,7 @@ function createWebLinking(): LinkingOptions<RootStackParamList> {
         MainTabs: {
           screens: {
             Home: '',
+            Shorts: 'shorts',
             Subscriptions: 'subscriptions',
             Library: 'you',
           },

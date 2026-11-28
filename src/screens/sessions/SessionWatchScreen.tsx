@@ -127,7 +127,10 @@ export function SessionWatchScreen({ route, navigation }: Props) {
   // so the iframe/WebView source never changes after first render —
   // ongoing sync is the drift-correction seek's job, not the src's.
   const [chatOpen, setChatOpen] = useState(false);
-  const [titleExpanded, setTitleExpanded] = useState(false);
+  // The description is NOT always open (user, 28 Nov 2026): it
+  // opens only when the title is tapped; otherwise the live chat
+  // owns the space below the player.
+  const [descOpen, setDescOpen] = useState(false);
   const { toast, showToast } = useToast();
 
   // Share (Phase 13): the link is THIS app's deep link for this
@@ -242,19 +245,26 @@ export function SessionWatchScreen({ route, navigation }: Props) {
     };
   }, [sessionId, refreshJoinedCount]);
 
-  // ── Presence: REAL count of signed-in viewers in this session room ──
+  // ── Presence: REAL count of EVERYONE in this session room ──────
   // Deps are the stable userId/displayName, NOT the user object
   // (perf3): AuthContext rebuilds that object on profile sync/retry,
   // and depending on it tore down + re-created the realtime channel
   // (websocket churn + count flicker) on every rebuild.
+  // Guests count too (user, 28 Nov 2026): opening the Samagam is
+  // what puts you in the watching count — nobody should have to tap
+  // Join first. A guest tracks under an ephemeral per-visit id; a
+  // member under their real user id (the effect re-runs and swaps
+  // the key if they sign in mid-visit, so the count never doubles).
   const presenceUserId = user?.userId;
   const presenceDisplayName = user?.displayName;
+  const [guestPresenceId] = useState(
+    () => `guest-${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`,
+  );
   useEffect(() => {
-    if (!presenceUserId) return;
     const channel = joinPresence(
       sessionId,
       {
-        userId: presenceUserId,
+        userId: presenceUserId ?? guestPresenceId,
         displayName: presenceDisplayName ?? '',
         onlineAt: new Date().toISOString(),
       },
@@ -265,7 +275,7 @@ export function SessionWatchScreen({ route, navigation }: Props) {
       presenceChannelRef.current = null;
       void leavePresence(channel);
     };
-  }, [sessionId, presenceUserId, presenceDisplayName]);
+  }, [sessionId, presenceUserId, presenceDisplayName, guestPresenceId]);
 
   // ── Keep my participant row fresh while joined ──────────────────────
   useEffect(() => {
@@ -275,6 +285,37 @@ export function SessionWatchScreen({ route, navigation }: Props) {
     }, 60_000);
     return () => clearInterval(heartbeat);
   }, [joined, sessionId, user]);
+
+  // ── Auto-join (user, 28 Nov 2026) ────────────────────────────────
+  // Opening the Samagam IS joining it: a signed-in viewer is added
+  // to the roster automatically, so the joined count moves and the
+  // chat composer is simply THERE — no Join tap standing between
+  // the sangat and the chat. The chat sheet keeps its own Join
+  // button purely as a fallback if this call ever fails.
+  const autoJoinTriedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!user || joined || status == null || status === 'completed' || status === 'cancelled') return;
+    const key = `${sessionId}:${user.userId}`;
+    if (autoJoinTriedRef.current === key) return;
+    autoJoinTriedRef.current = key;
+    let active = true;
+    void (async () => {
+      try {
+        await joinSession(sessionId, user.userId);
+        if (active) {
+          setJoined(true);
+          void refreshJoinedCount();
+        }
+      } catch {
+        // Silent by design: presence still counts the viewer, and
+        // the chat sheet's Join button remains as the manual path.
+        autoJoinTriedRef.current = null;
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [user, joined, status, sessionId, refreshJoinedCount]);
 
   // Viewer-scrubbed-back state (hosted live sessions): the viewer
   // may scrub back over the part already played; while they are
@@ -639,15 +680,16 @@ export function SessionWatchScreen({ route, navigation }: Props) {
         <View style={styles.backRow}>
           <BackButton onPress={() => goBackOrTab(navigation, 'Home')} />
         </View>
-        {/* Tap the title to expand it (audit B3 — same pattern as
-            Watch): session titles are long and a permanent 2-line
-            clamp left them unreadable. */}
+        {/* Tapping the title opens/closes the DESCRIPTION (user,
+            28 Nov 2026): the description is not always open — the
+            live chat owns the space below unless the viewer asks
+            for the description. The title itself stays clamped. */}
         <Pressable
-          onPress={() => setTitleExpanded((v) => !v)}
+          onPress={() => setDescOpen((v) => !v)}
           accessibilityRole="button"
-          accessibilityLabel={titleExpanded ? 'Show less' : 'Show full title'}
+          accessibilityLabel={descOpen ? 'Hide description' : 'Show description'}
         >
-          <Text style={styles.title} numberOfLines={titleExpanded ? undefined : 2}>
+          <Text style={styles.title} numberOfLines={2}>
             {title}
           </Text>
         </Pressable>
@@ -808,46 +850,18 @@ export function SessionWatchScreen({ route, navigation }: Props) {
                 <MaterialIcons name="replay" size={22} color={colors.text} />
               </Pressable>
             ) : null}
-            {user && !isCompleted && status !== 'cancelled' ? (
-              <Pressable
-                onPress={() => void onToggleJoin()}
-                disabled={joinBusy}
-                style={({ pressed }) => [
-                  joined ? styles.joinedPill : styles.joinPill,
-                  (pressed || joinBusy) && styles.pressed,
-                ]}
-                accessibilityRole="button"
-              >
-                <Text style={joined ? styles.joinedPillText : styles.joinPillText}>
-                  {joinBusy ? 'Working…' : joined ? 'Joined' : 'Join Samagam'}
-                </Text>
-              </Pressable>
-            ) : null}
+            {/* No Join pill in the band anymore (user, 28 Nov
+                2026): opening the Samagam auto-joins a signed-in
+                viewer, so there is no separate step to put here.
+                The band carries the actions that DO something —
+                Share / Sync / Watch again — like YouTube's row. */}
           </View>
         </View>
 
-        {/* Signed-out users get the Sign in block here (the signed-in
-            Join pill lives in the action row above). A completed or
-            cancelled session shows neither — joining is only
-            meaningful while upcoming / now playing. */}
-        {status === 'cancelled' || isCompleted || user ? null : (
-          <View style={styles.actionRow}>
-            <View>
-              <Pressable
-                onPress={() => navigation.navigate('SignIn')}
-                style={({ pressed }) => [styles.joinPill, pressed && styles.pressed]}
-                accessibilityRole="button"
-              >
-                <Text style={styles.joinPillText}>Sign in to join</Text>
-              </Pressable>
-              <Text style={styles.signInExplain}>
-                You can watch this Samagam without an account. Joining
-                (so sangat can see you are here) and chatting need you
-                to sign in first.
-              </Text>
-            </View>
-          </View>
-        )}
+        {/* No sign-in block here anymore either: watching needs no
+            account, presence counts guests automatically, and the
+            one thing that does need an account — chatting — carries
+            its own sign-in prompt inside the chat card/sheet. */}
         {joinError ? <Text style={styles.joinError}>{joinError}</Text> : null}
 
         {status === 'upcoming' ? (
@@ -893,8 +907,9 @@ export function SessionWatchScreen({ route, navigation }: Props) {
         </View>
 
         {/* Description BELOW the chat (user's standing preference:
-            comments/chat first, description after — same as Watch). */}
-        {video?.description ? (
+            comments/chat first, description after — same as Watch),
+            and only when the title was tapped open (descOpen). */}
+        {descOpen && video?.description ? (
           <View style={styles.descriptionBox}>
             {/* LinkedText, same as Watch (audit B7): links in the
                 description are tappable here too. */}

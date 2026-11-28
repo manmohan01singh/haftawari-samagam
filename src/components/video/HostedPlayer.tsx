@@ -7,11 +7,13 @@ import React, {
   useMemo,
   useRef,
   useState,
+  type ElementRef,
 } from 'react';
 import {
   ActivityIndicator,
   Modal,
   PanResponder,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -132,6 +134,48 @@ export const HostedPlayer = memo(
     const { colors } = useTheme();
     const styles = useMemo(() => createStyles(colors), [colors]);
     const viewRef = useRef<VideoView>(null);
+    // Fullscreen (web): expo-video's own fullscreen hands the
+    // <video> element to the browser, and Android Chrome then
+    // shows its NATIVE player — different controls, the full
+    // stream timeline during a live session, a zoomed fit (user's
+    // screenshots, 28 Nov 2026). Instead the WRAPPER (video + our
+    // chrome together) goes fullscreen, so the app's own player —
+    // live-edge-capped scrubber and all — is what fullscreen is.
+    const wrapRef = useRef<ElementRef<typeof View>>(null);
+    const [isFullscreen, setIsFullscreen] = useState(false);
+    useEffect(() => {
+      if (Platform.OS !== 'web') return;
+      type WebDoc = {
+        fullscreenElement?: unknown;
+        addEventListener?: (t: string, f: () => void) => void;
+        removeEventListener?: (t: string, f: () => void) => void;
+      };
+      const doc = (globalThis as { document?: WebDoc }).document;
+      if (!doc?.addEventListener) return;
+      const onFsChange = () => {
+        const el = wrapRef.current as unknown as object | null;
+        setIsFullscreen(!!doc.fullscreenElement && el != null && doc.fullscreenElement === el);
+      };
+      doc.addEventListener('fullscreenchange', onFsChange);
+      return () => doc.removeEventListener?.('fullscreenchange', onFsChange);
+    }, []);
+    const toggleFullscreen = useCallback(() => {
+      if (Platform.OS === 'web') {
+        type WebDoc = {
+          fullscreenElement?: unknown;
+          exitFullscreen?: () => Promise<void>;
+        };
+        type WebEl = { requestFullscreen?: () => Promise<void> };
+        const doc = (globalThis as { document?: WebDoc }).document;
+        const el = wrapRef.current as unknown as WebEl | null;
+        if (doc && el?.requestFullscreen) {
+          if (doc.fullscreenElement) void doc.exitFullscreen?.().catch(() => undefined);
+          else void el.requestFullscreen().catch(() => undefined);
+          return;
+        }
+      }
+      void viewRef.current?.enterFullscreen();
+    }, []);
     const readyHandledFor = useRef<string | null>(null);
     const durationReportedFor = useRef<string | null>(null);
     const callbacks = useRef({ onTimeUpdate, onReady, onDuration, onError, onRefreshUri, onPlayingChange, onUserSeek });
@@ -479,7 +523,7 @@ export const HostedPlayer = memo(
     }
 
     return (
-      <View style={styles.wrap}>
+      <View ref={wrapRef} style={[styles.wrap, isFullscreen && styles.wrapFullscreen]}>
         <VideoView
           ref={viewRef}
           player={player}
@@ -646,14 +690,14 @@ export const HostedPlayer = memo(
             <Pressable
               onPress={() => {
                 pokeControls();
-                void viewRef.current?.enterFullscreen();
+                toggleFullscreen();
               }}
               hitSlop={8}
               accessibilityRole="button"
               accessibilityLabel="Fullscreen"
               style={styles.controlButton}
             >
-              <MaterialIcons name="fullscreen" size={24} color="#FFFFFF" />
+              <MaterialIcons name={isFullscreen ? 'fullscreen-exit' : 'fullscreen'} size={24} color="#FFFFFF" />
             </Pressable>
           </View>
         ) : showScrubber ? (
@@ -789,6 +833,14 @@ const createStyles = (colors: ThemeColors) =>
       // sheet (user's phone screenshot, 27 Nov 2026 — the frame ran
       // to ~63% of the screen while the chrome ended at ~34%).
       overflow: 'hidden',
+    },
+    // Fullscreen: the wrap becomes the whole screen — drop the
+    // 16:9 aspect lock so the surface (contain) letterboxes inside
+    // the real screen shape, portrait sources included.
+    wrapFullscreen: {
+      aspectRatio: undefined,
+      width: '100%',
+      height: '100%',
     },
     // Pin the surface to the wrap's exact box instead of flex
     // sizing: a flex-sized replaced element can still grow to its

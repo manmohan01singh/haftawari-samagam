@@ -4,24 +4,19 @@ import type { NavigationProp } from '@react-navigation/native';
 import { BottomNav, type BottomNavItem } from '../components/layout/BottomNav';
 import { useAuth } from '../features/auth';
 import { HomeScreen } from '../screens/home';
+import { ShortsScreen } from '../screens/shorts';
 import { SubscriptionsScreen } from '../screens/subscriptions';
 import { LibraryScreen } from '../screens/library';
-import type { MainTabParamList, RootStackParamList } from './types';
+import type { MainTabParamList } from './types';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
-/** Pseudo-key for the centre slot — an action, not a tab route. QA43: it opens the official channel, so it renders a circled play glyph, not a misleading '+'. */
-const CREATE_KEY = '__create';
-
 /**
  * Main tabs under the app-owned BottomNav: 4 icon-only slots —
- * Home · Subscriptions · centre channel slot · profile avatar (the
- * Library/"You" tab). NO Shorts slot (user decision, 26 Nov 2026).
- *
- * The centre slot keeps the reference geometry (circled glyph) but
- * shows a play glyph instead of '+' (QA43): this app has no user
- * uploads, and the slot opens the official channel — the app's
- * content home. Its accessibility label is "Official channel".
+ * Home · Shorts · Subscriptions · profile avatar (the Library/"You"
+ * tab). The centre +/channel slot is GONE and Shorts are IN (user,
+ * 28 Nov 2026 — reversing the 26 Nov no-Shorts decision): Shorts
+ * shows only the app's own sangat channels' short videos.
  */
 export function MainTabs() {
   const { user, profile } = useAuth();
@@ -39,8 +34,8 @@ export function MainTabs() {
       const activeRoute = state.routes[state.index];
       const items: BottomNavItem[] = [
         { key: 'Home', label: 'Home', icon: activeRoute.name === 'Home' ? 'home' : 'home' },
+        { key: 'Shorts', label: 'Shorts', kind: 'shorts' },
         { key: 'Subscriptions', label: 'Subscriptions', icon: 'subscriptions' },
-        { key: CREATE_KEY, label: 'Official channel', kind: 'create' },
         { key: 'Library', label: 'You', kind: 'avatar', avatarUrl, avatarInitial: initial },
       ];
       return (
@@ -49,11 +44,6 @@ export function MainTabs() {
           items={items}
           activeKey={activeRoute.name}
           onPress={(key) => {
-            if (key === CREATE_KEY) {
-              const parent = nav.getParent<NavigationProp<RootStackParamList>>();
-              parent?.navigate('Channel', {});
-              return;
-            }
             nav.navigate(key as keyof MainTabParamList);
           }}
         />
@@ -76,6 +66,7 @@ export function MainTabs() {
       tabBar={renderTabBar}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
+      <Tab.Screen name="Shorts" component={ShortsScreen} />
       <Tab.Screen name="Subscriptions" component={SubscriptionsScreen} />
       <Tab.Screen name="Library" component={LibraryScreen} />
     </Tab.Navigator>

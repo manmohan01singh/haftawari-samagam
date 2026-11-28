@@ -7,6 +7,7 @@ import type { NavigatorScreenParams } from '@react-navigation/native';
  */
 export type MainTabParamList = {
   Home: undefined;
+  Shorts: undefined;
   Subscriptions: undefined;
   Library: undefined;
 };
