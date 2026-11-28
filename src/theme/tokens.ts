@@ -32,7 +32,7 @@ export const layout = {
   avatarMd: 40,
   avatarLg: 160,
   /** Mobile bottom navigation height (excluding safe-area inset). */
-  bottomNavHeight: 56,
+  bottomNavHeight: 64,
 } as const;
 
 export const radii = {

@@ -49,12 +49,12 @@ interface BottomNavProps {
 }
 
 /**
- * Bottom navigation (native-app reference §1 + the user's 26 Nov 2026
- * decision): 4 ICON-ONLY slots, no text labels — Home, Subscriptions,
- * circled +, profile avatar. There is deliberately NO Shorts slot:
- * the user decided the app has no Shorts anywhere. Bar is white with
- * a faint top hairline; the bar applies the bottom safe-area inset
- * itself (see below).
+ * Bottom navigation: 4 slots WITH visible text labels — Home,
+ * Shorts, Subscriptions, You (avatar). Labels were icon-only by the
+ * user's 26/27 Nov 2026 decision; the strict first-time-user fault
+ * hunt (Chat 2, 28 Nov 2026) found unlabeled icons unreadable, and
+ * the user reversed the decision the same day ("readability
+ * pehle"). Bar applies the bottom safe-area inset itself (below).
  */
 export const BottomNav = memo(function BottomNav({ items, activeKey, onPress, overlay }: BottomNavProps) {
   const { colors } = useTheme();
@@ -164,6 +164,12 @@ export const BottomNav = memo(function BottomNav({ items, activeKey, onPress, ov
                 color={active ? colors.text : colors.textSecondary}
               />
             )}
+            <Text
+              style={[styles.itemLabel, { color: active ? colors.text : colors.textSecondary }, active && styles.itemLabelActive]}
+              numberOfLines={1}
+            >
+              {item.label}
+            </Text>
           </Pressable>
         );
       })}
@@ -223,6 +229,8 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   // Pressed feedback (Phase 9): the bar previously gave NO visual
   // response to a tap. Opacity dip, matching StackHeader's back.
   itemPressed: { opacity: 0.6 },
+  itemLabel: { fontSize: 11, fontWeight: '500', marginTop: 2 },
+  itemLabelActive: { fontWeight: '700' },
   createCircle: {
     width: 28,
     height: 28,
