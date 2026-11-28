@@ -78,6 +78,16 @@ interface PlaybackState {
    */
   suppressedKey: string | null;
   setSuppressedKey: (key: string | null) => void;
+  /**
+   * Rescue hand-back position: when the Watch screen's rescue
+   * player unmounts, it leaves the position it had reached here;
+   * the host's fresh player for the same item seeks to it on
+   * ready instead of restarting the recording from 0 (the mini
+   * discontinuity Chat 2's runs exposed — a fresh instance also
+   * jumps a live stream to the live edge).
+   */
+  rescuePosition: { key: string; seconds: number } | null;
+  setRescuePosition: (position: { key: string; seconds: number } | null) => void;
   open: (item: PlaybackItem) => void;
   minimize: () => void;
   expand: () => void;
@@ -99,6 +109,8 @@ export const usePlaybackStore = create<PlaybackState>((set) => ({
   setCoveredKey: (coveredKey) => set({ coveredKey }),
   suppressedKey: null,
   setSuppressedKey: (suppressedKey) => set({ suppressedKey }),
+  rescuePosition: null,
+  setRescuePosition: (rescuePosition) => set({ rescuePosition }),
   open: (item) =>
     set((s) => {
       const same = s.item?.key === item.key && s.mode !== 'closed';
@@ -113,12 +125,13 @@ export const usePlaybackStore = create<PlaybackState>((set) => ({
         playing: same ? s.playing : false,
         slotRect: same ? s.slotRect : null,
         coveredKey: same ? s.coveredKey : null,
+        rescuePosition: same ? s.rescuePosition : null,
       };
     }),
   minimize: () => set((s) => (s.item ? { mode: 'mini' } : s)),
   expand: () => set((s) => (s.item ? { mode: 'full' } : s)),
   close: () =>
-    set({ item: null, mode: 'closed', playing: false, slotRect: null, coveredKey: null, suppressedKey: null }),
+    set({ item: null, mode: 'closed', playing: false, slotRect: null, coveredKey: null, suppressedKey: null, rescuePosition: null }),
   setPlaying: (playing) => set({ playing }),
   setSlotRect: (slotRect) => set({ slotRect }),
   setRouteName: (routeName) => set({ routeName }),

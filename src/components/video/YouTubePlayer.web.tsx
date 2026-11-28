@@ -17,6 +17,12 @@ export interface YouTubePlayerHandle {
   seekTo: (seconds: number) => void;
   /** Mute/unmute the embed (Shorts' muted-autoplay pattern). */
   setMuted: (muted: boolean) => void;
+  /** The last playback position the embed itself reported (via
+   *  infoDelivery), or null when it has reported none yet. Used
+   *  for the rescue-player hand-back: when the in-screen rescue
+   *  player unmounts, the persistent host seeks its fresh player
+   *  to this position instead of restarting the recording. */
+  getCurrentTime: () => number | null;
 }
 
 interface YouTubePlayerProps {
@@ -95,6 +101,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
     // now queue until onReady, then flush in order.
     const readyRef = useRef(false);
     const playingRef = useRef(false);
+    const currentTimeRef = useRef<number | null>(null);
     const queueRef = useRef<string[]>([]);
 
     const post = (payload: string) => {
@@ -121,6 +128,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
           command('setVolume', [100]);
         }
       },
+      getCurrentTime: () => currentTimeRef.current,
     }));
 
     // A new video (or a recovery remount) resets the command queue
@@ -128,6 +136,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
     useEffect(() => {
       readyRef.current = false;
       playingRef.current = false;
+      currentTimeRef.current = null;
       queueRef.current = [];
     }, [loadKey]);
 
@@ -149,7 +158,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
         // onReady lifted every player's facade.
         if (!frameRef.current?.contentWindow || event.source !== frameRef.current.contentWindow) return;
         if (typeof event.data !== 'string') return;
-        let parsed: { event?: string; info?: { playerState?: number } };
+        let parsed: { event?: string; info?: { playerState?: number; currentTime?: number } };
         try {
           parsed = JSON.parse(event.data) as typeof parsed;
         } catch {
@@ -163,12 +172,17 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
           for (const payload of queued) post(payload);
           callbacks.current.onReady?.();
         }
-        if (parsed.event === 'infoDelivery' && parsed.info && typeof parsed.info.playerState === 'number') {
-          if (parsed.info.playerState === 1) {
-            playingRef.current = true;
-            setStuckKey(null);
+        if (parsed.event === 'infoDelivery' && parsed.info) {
+          if (typeof parsed.info.currentTime === 'number') {
+            currentTimeRef.current = parsed.info.currentTime;
           }
-          callbacks.current.onPlayingChange?.(parsed.info.playerState === 1);
+          if (typeof parsed.info.playerState === 'number') {
+            if (parsed.info.playerState === 1) {
+              playingRef.current = true;
+              setStuckKey(null);
+            }
+            callbacks.current.onPlayingChange?.(parsed.info.playerState === 1);
+          }
         }
       };
       window.addEventListener('message', onMessage);

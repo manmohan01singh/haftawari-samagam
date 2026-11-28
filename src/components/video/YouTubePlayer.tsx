@@ -10,6 +10,10 @@ export interface YouTubePlayerHandle {
   seekTo: (seconds: number) => void;
   /** Mute/unmute the embed (Shorts' muted-autoplay pattern). */
   setMuted: (muted: boolean) => void;
+  /** Last embed-reported position, or null. Native reports no
+   *  state channel back, so this is always null there (the
+   *  rescue hand-back seek is a web-only path). */
+  getCurrentTime: () => number | null;
 }
 
 interface YouTubePlayerProps {
@@ -87,6 +91,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
           postCommand('setVolume', [100]);
         }
       },
+      getCurrentTime: () => null,
     }));
 
     function postCommand(func: string, args: unknown[] = []) {

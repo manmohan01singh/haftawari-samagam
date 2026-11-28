@@ -354,6 +354,19 @@ export function PlaybackHost({
               youtubeVideoId={item.youtubeVideoId}
               autoplay={autoplayEnabled}
               onPlayingChange={setPlaying}
+              onReady={() => {
+                // Rescue hand-back: if the Watch screen's rescue
+                // player left a position for this item, continue
+                // from there instead of restarting (fix round 4
+                // follow-up — the fresh instance otherwise begins
+                // at 0 / jumps a live stream to the edge).
+                const st = usePlaybackStore.getState();
+                const rp = st.rescuePosition;
+                if (rp && rp.key === item.key && rp.seconds > 1) {
+                  ytRef.current?.seekTo(rp.seconds);
+                }
+                if (rp) st.setRescuePosition(null);
+              }}
             />
           ) : mountPlayer && item.kind === 'hosted' && item.videoRowId ? (
             <HostedWatchPlayer

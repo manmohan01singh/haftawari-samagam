@@ -24,7 +24,7 @@ import { LinkedText } from '../../components/common/LinkedText';
 import { Toast, useToast } from '../../components/common/Toast';
 import { shareContent, shareFeedback } from '../../lib/share';
 import { FeedCard } from '../../components/video/FeedCard';
-import { YouTubePlayer } from '../../components/video/YouTubePlayer';
+import { YouTubePlayer, type YouTubePlayerHandle } from '../../components/video/YouTubePlayer';
 import { HostedWatchPlayer } from '../../components/video/HostedWatchPlayer';
 import {
   apiCardData,
@@ -319,8 +319,13 @@ export function WatchScreen({ route, navigation }: Props) {
   // instead of leaving a dead poster that ignores taps. The host
   // is told to suppress its own player for this item; leaving the
   // screen releases the suppression and the host takes over (mini)
-  // with a fresh player.
+  // with a fresh player — SEE the hand-back below: the rescue
+  // leaves its reached position in the store and the host's fresh
+  // player seeks to it on ready, so minimising never restarts a
+  // recording from 0 (and a live stream keeps its place as far as
+  // the embed allows).
   const [rescueKey, setRescueKey] = useState<string | null>(null);
+  const rescueRef = useRef<YouTubePlayerHandle>(null);
   const rescueActive = rescueKey != null && rescueKey === playerKey;
   useEffect(() => {
     if (!persistent || !isFocused || !resolved || !playerKey) return;
@@ -331,12 +336,18 @@ export function WatchScreen({ route, navigation }: Props) {
         st.setSuppressedKey(playerKey);
         setRescueKey(playerKey);
       }
-    }, 3000);
+    }, 4500);
     return () => clearTimeout(t);
   }, [persistent, isFocused, resolved, playerKey]);
   useEffect(() => {
     return () => {
-      if (rescueKey) usePlaybackStore.getState().setSuppressedKey(null);
+      if (rescueKey) {
+        const seconds = rescueRef.current?.getCurrentTime() ?? null;
+        if (seconds !== null && seconds > 1) {
+          usePlaybackStore.getState().setRescuePosition({ key: rescueKey, seconds });
+        }
+        usePlaybackStore.getState().setSuppressedKey(null);
+      }
     };
   }, [rescueKey]);
 
@@ -1060,6 +1071,7 @@ export function WatchScreen({ route, navigation }: Props) {
         {persistent ? (
           rescueActive && resolved.youtubeVideoId ? (
             <YouTubePlayer
+              ref={rescueRef}
               youtubeVideoId={resolved.youtubeVideoId}
               autoplay={autoplayEnabled}
               onPlayingChange={(p) => usePlaybackStore.getState().setPlaying(p)}
