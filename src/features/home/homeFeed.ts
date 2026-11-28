@@ -604,7 +604,11 @@ export function createHomeFeedPager({ channels, filter }: HomeFeedPagerOptions):
       // burn 100-280 calls across extra rounds before first paint;
       // one round is ~2-4 s of parallel fetching, and scrolling
       // continues the hunt immediately).
-      if (isFirstCall && collected.length > 0) break;
+      // …unless nothing LIVE is in hand yet (user, 28 Nov 2026:
+      // 'latest live sab ton upar kyun nahi aa raha'): one more
+      // round gives a live broadcast the chance to lead the very
+      // first screen instead of landing in the second batch.
+      if (isFirstCall && collected.length > 0 && (rounds >= 2 || collected.some((i) => feedItemIsLive(i)))) break;
       if (collected.length > 0 && rounds >= MAX_ROUNDS_PER_CALL) break;
     }
     const catalogueDrained = catalogueEmitted >= catalogueRows.length;

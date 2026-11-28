@@ -261,6 +261,20 @@ export async function getTopicSearchPageCached(
  * most expensive call in the app — never call it per keystroke or in a
  * tight loop; Subscriptions staggers it across channels.
  */
+/**
+ * Forced live recheck (manual pull-to-refresh): skips the 10-minute
+ * read cache so a pull really re-asks YouTube what is live NOW,
+ * then writes the fresh answer back for everyone else.
+ */
+export async function getLiveFresh(channelId: string): Promise<YouTubeVideoMetadata[]> {
+  const key = `${PREFIX}live:${channelId}`;
+  return dedupe(key, async () => {
+    const items = await fetchChannelLiveAndUpcoming(channelId);
+    await writeCache(key, items);
+    return items;
+  });
+}
+
 export async function getLiveCached(channelId: string): Promise<YouTubeVideoMetadata[]> {
   const key = `${PREFIX}live:${channelId}`;
   const cached = await readCache<YouTubeVideoMetadata[]>(key, LIVE_TTL_MS);

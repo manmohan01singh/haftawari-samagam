@@ -20,15 +20,18 @@ import type { RootStackParamList } from '../../navigation/types';
  *   exactly as the in-screen player always did — but it is not
  *   inside the screen.
  * - mode 'mini', YouTube: Google's embed rules require a ≥200×200
- *   viewport, so the smallest honest mini is a floating 200×200
- *   card (bottom-right, rounded) with the REAL embed visible and
- *   playing inside it — the shape of YouTube's own mini player
- *   (user comparison, 28 Nov 2026: the old thumbnail bar did not
- *   read as a mini player at all). Overlay controls: tap the card
- *   to expand back to Watch, play/pause bottom-left, close
- *   top-right. On routes where the mini must not show (a session
- *   watch, admin, auth) the embed parks at 356×200 off-screen
- *   instead — still mounted, still playing, position preserved.
+ *   viewport, so the embed itself stays 200×200 — but measured on
+ *   the live app (28 Nov 2026) the 16:9 picture is TOP-anchored in
+ *   that viewport and the bottom ~43% is pure black void, which
+ *   the user rightly called broken ('mini player thalle black
+ *   black kyun hai'). The visible card is therefore a 200×113
+ *   window (overflow hidden) over the embed's top: exactly the
+ *   picture, no void, with the REAL embed still playing inside.
+ *   Overlay controls: tap the card to expand back to Watch,
+ *   play/pause bottom-left, close top-right. On routes where the
+ *   mini must not show (a session watch, admin, auth) the embed
+ *   parks at 356×200 off-screen instead — still mounted, still
+ *   playing, position preserved.
  * - mode 'mini', hosted: expo-video has no minimum size, so the
  *   real video shrinks into a small floating view (bottom-right)
  *   with expand/close — a true picture mini.
@@ -129,14 +132,15 @@ export function PlaybackHost({
       overflow: 'hidden',
     };
   } else if (miniCardVisible) {
-    // The YouTube mini card: exactly the embed's 200×200 minimum,
-    // floating bottom-right like YouTube's own mini player.
+    // The YouTube mini card: a 200×113 window over the 200×200
+    // embed (see the header note) — the picture fills the card,
+    // the black void below the picture is cropped away.
     playerStyle = {
       position: 'absolute',
       right: 8,
       bottom: bottomOffset + 8,
       width: 200,
-      height: 200,
+      height: 113,
       borderRadius: 12,
       overflow: 'hidden',
       backgroundColor: '#000000',
@@ -163,23 +167,25 @@ export function PlaybackHost({
   return (
     <>
       <View style={playerStyle} pointerEvents={fullVisible || (mode === 'mini' && item.kind === 'hosted') || miniCardVisible ? 'auto' : 'none'}>
-        {item.kind === 'youtube' && item.youtubeVideoId ? (
-          <YouTubePlayer
-            ref={ytRef}
-            youtubeVideoId={item.youtubeVideoId}
-            autoplay
-            onPlayingChange={setPlaying}
-          />
-        ) : item.kind === 'hosted' && item.videoRowId ? (
-          <HostedWatchPlayer
-            ref={hostedRef}
-            videoId={item.videoRowId}
-            thumbnailUrl={item.thumbnailUrl}
-            mini={mode === 'mini'}
-            onPlayingChange={setPlaying}
-            onReady={() => setHostedReadyKey(item.key)}
-          />
-        ) : null}
+        <View style={miniCardVisible ? styles.miniStage : styles.stageFill}>
+          {item.kind === 'youtube' && item.youtubeVideoId ? (
+            <YouTubePlayer
+              ref={ytRef}
+              youtubeVideoId={item.youtubeVideoId}
+              autoplay
+              onPlayingChange={setPlaying}
+            />
+          ) : item.kind === 'hosted' && item.videoRowId ? (
+            <HostedWatchPlayer
+              ref={hostedRef}
+              videoId={item.videoRowId}
+              thumbnailUrl={item.thumbnailUrl}
+              mini={mode === 'mini'}
+              onPlayingChange={setPlaying}
+              onReady={() => setHostedReadyKey(item.key)}
+            />
+          ) : null}
+        </View>
         {mode === 'mini' && item.kind === 'hosted' ? (
           // The floating mini itself is the expand target; touches
           // pass through the player surface to this layer.
@@ -254,6 +260,11 @@ export function PlaybackHost({
 
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
+    // Mini-card stage: the embed keeps its full 200×200 viewport
+    // inside the 200×113 card window (top-anchored; the card clips
+    // the black void). Every other mode: fill the placement box.
+    miniStage: { width: 200, height: 200 },
+    stageFill: { flex: 1 },
     miniCardClose: { position: 'absolute', top: 6, right: 6 },
     miniCardPlay: { position: 'absolute', left: 6, bottom: 6 },
     miniClose: {

@@ -34,7 +34,7 @@ import {
   isYouTubeConfigured,
   type YouTubeVideoMetadata,
 } from '../../lib/youtube';
-import { getLiveCached, invalidateUploadsFirstPages } from '../../features/channels/channelCache';
+import { getLiveCached, getLiveFresh, invalidateUploadsFirstPages } from '../../features/channels/channelCache';
 import { fetchSavedVideoIds, setVideoSaved } from '../../lib/videos';
 import { FEED_LIST_PERF } from '../../lib/listPerf';
 import { listSessionsWithVideos, uniqueTopic } from '../../features/sessions/sessionService';
@@ -201,18 +201,21 @@ export function HomeScreen({ navigation }: Props) {
   // channel. Archive rows have no live flag of their own.
   const [liveMap, setLiveMap] = useState<Map<string, YouTubeVideoMetadata>>(new Map());
 
-  useEffect(() => {
+  const refreshLive = useCallback(async (force: boolean) => {
     if (!isYouTubeConfigured) return;
-    let active = true;
-    getLiveCached(OFFICIAL_CHANNEL_ID)
-      .then((metas) => {
-        if (active) setLiveMap(new Map(metas.map((m) => [m.youtubeVideoId, m])));
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
+    try {
+      const metas = force
+        ? await getLiveFresh(OFFICIAL_CHANNEL_ID)
+        : await getLiveCached(OFFICIAL_CHANNEL_ID);
+      setLiveMap(new Map(metas.map((m) => [m.youtubeVideoId, m])));
+    } catch {
+      // A failed live check leaves the last known map in place.
+    }
   }, []);
+
+  useEffect(() => {
+    void refreshLive(false);
+  }, [refreshLive]);
 
   // NOW PLAYING Samagam session, if one is really running right now:
   // derived from the real sessions table + server clock (the same
@@ -408,9 +411,10 @@ export function HomeScreen({ navigation }: Props) {
         .map((c) => (c.youtubeChannelId ? uploadsPlaylistIdFor(c.youtubeChannelId) : null))
         .filter((x): x is string => !!x);
       await invalidateUploadsFirstPages(playlistIds).catch(() => undefined);
+      void refreshLive(true);
       await startFeed();
     })();
-  }, [startFeed, channels]);
+  }, [startFeed, channels, refreshLive]);
 
   // Web pull-to-refresh (gestures round): react-native-web's
   // RefreshControl is a no-op stub, so the FlatList's own

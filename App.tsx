@@ -89,11 +89,16 @@ function SplashGate() {
  * owns the screen. Route name comes from the playback store, which
  * App's container callbacks already keep current.
  */
-const ORB_HIDDEN_ROUTES = new Set(['Watch', 'SessionWatch', 'Shorts']);
+// The orb belongs ONLY on Home and the Profile (Library) page
+// (user, 28 Nov 2026): 'har ek page te nahi aani chahidi — sirf
+// homepage te te profile page te rahe.' An allowlist, so new
+// screens never inherit it by accident. routeName is null only
+// before the first navigation state lands (the splash covers it).
+const ORB_ROUTES = new Set(['Home', 'Library']);
 
 function OrbOverlay() {
   const routeName = usePlaybackStore((state) => state.routeName);
-  if (routeName !== null && ORB_HIDDEN_ROUTES.has(routeName)) return null;
+  if (routeName !== null && !ORB_ROUTES.has(routeName)) return null;
   return (
     <View pointerEvents="none" style={orbOverlayStyles.wrap}>
       <OrbBackground />
@@ -184,10 +189,12 @@ export default function App() {
     registerServiceWorker();
   }, []);
 
-  // Langar (hand-lettered Gurmukhi display face) for the Ik Onkar
-  // mark. Fire-and-forget: the mark falls back to the platform
-  // Gurmukhi face until the font arrives, and on web the @font-face
-  // in public/index.html usually wins the race anyway.
+  // Noto Serif Gurmukhi (a dignified serif Gurmukhi face) for the
+  // Ik Onkar mark — the user called the previous hand-lettered
+  // Langar rendering 'bekar' and asked for a proper Punjabi font
+  // (28 Nov 2026). Fire-and-forget: the mark falls back to the
+  // platform Gurmukhi face until the font arrives, and on web the
+  // @font-face in public/index.html usually wins the race anyway.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -196,7 +203,7 @@ export default function App() {
         if (!cancelled) {
           await Font.loadAsync({
             // eslint-disable-next-line @typescript-eslint/no-require-imports
-            Langar: require('./assets/fonts/Langar-Regular.ttf'),
+            NotoSerifGurmukhi: require('./assets/fonts/NotoSerifGurmukhi.ttf'),
           });
         }
       } catch {

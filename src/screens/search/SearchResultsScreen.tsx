@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { IkOnkarMark } from '../../components/layout/IkOnkarMark';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -553,7 +552,10 @@ export function SearchResultsScreen({ route, navigation }: Props) {
             {/* QA issues 4/9: a labelled searching state — the user
                 must be able to tell their tap registered and a search
                 is running, not stare at a blank page. */}
-            <IkOnkarMark label={`Searching for “${query}”…`} />
+            <View style={styles.searchingRow}>
+              <ActivityIndicator size="small" color={colors.accent} />
+              <Text style={styles.searchingLabel}>{`Searching for “${query}”…`}</Text>
+            </View>
             <SkeletonCard variant="shelf" />
             <SkeletonCard variant="shelf" />
             <SkeletonCard variant="shelf" />
@@ -581,7 +583,8 @@ export function SearchResultsScreen({ route, navigation }: Props) {
                 // channels were still being searched, then results
                 // arrived). Show the searching state instead.
                 <View style={styles.emptyWrap}>
-                  <IkOnkarMark label="Searching the channels…" />
+                  <ActivityIndicator size="small" color={colors.accent} />
+                  <Text style={styles.searchingLabel}>Searching the channels…</Text>
                 </View>
               ) : (
                 <View style={styles.emptyWrap}>
