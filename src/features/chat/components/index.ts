@@ -1,3 +1,4 @@
+export { LiveChatCard } from './LiveChatCard';
 export { SessionChat } from './SessionChat';
 export type { SessionChatProps } from './SessionChat';
 export { ChatPreviewCard } from './ChatPreviewCard';

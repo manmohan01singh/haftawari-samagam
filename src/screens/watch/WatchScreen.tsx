@@ -33,7 +33,7 @@ import {
   type CardVideoData,
 } from '../../components/video/cardData';
 import { useAuth } from '../../features/auth';
-import { ChatPreviewCard, SessionChat } from '../../features/chat/components';
+import { ChatPreviewCard, LiveChatCard, SessionChat } from '../../features/chat/components';
 import {
   CommentsPreviewRow,
   VideoCommentsSheet,
@@ -1423,6 +1423,18 @@ export function WatchScreen({ route, navigation }: Props) {
                 onSignInPress={() => setChatOpen(true)}
               />
             </View>
+          ) : null}
+
+          {/* Live chat for a YouTube LIVE broadcast (fault 42):
+              the sangat's own chat for this broadcast, above the
+              comments. Renders nothing until migration 0008 is
+              applied, and only for genuinely live broadcasts. */}
+          {resolved.isLive && resolved.youtubeVideoId ? (
+            <LiveChatCard
+              youtubeVideoId={resolved.youtubeVideoId}
+              user={chatUser ? { id: chatUser.id, displayName: chatUser.displayName } : null}
+              onSignIn={() => navigation.navigate('SignIn')}
+            />
           ) : null}
 
           {/* Comments (Phase 13) sit ABOVE the description (user
