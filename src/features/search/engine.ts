@@ -149,11 +149,18 @@ async function runLegs(query: string, options: SearchOptions): Promise<LegsOutco
   // Channel card: the BEST-matching active channel wins the single
   // ref-3 card slot. Matching is local (zero quota); only the winner's
   // card data costs a (cached) channels.list call.
-  let bestMatch: { channelId: string; score: number; kind: NonNullable<SearchResults['channel']>['matchKind'] } | null = null;
+  let bestMatch: { channelId: string; score: number; kind: NonNullable<SearchResults['channel']>['matchKind']; viaName: boolean } | null = null;
   for (const identity of channels) {
     const match = matchChannel(query, identity);
-    if (match && (!bestMatch || match.score > bestMatch.score)) {
-      bestMatch = { channelId: identity.id, score: match.score, kind: match.kind };
+    if (!match) continue;
+    // A NAME match on any channel beats an ALIAS match on any other
+    // (see matchChannel) — raw score only breaks ties within a class.
+    const wins =
+      !bestMatch ||
+      (match.viaName && !bestMatch.viaName) ||
+      (match.viaName === bestMatch.viaName && match.score > bestMatch.score);
+    if (wins) {
+      bestMatch = { channelId: identity.id, score: match.score, kind: match.kind, viaName: match.viaName };
     }
   }
   const channelPromise = bestMatch
@@ -234,11 +241,42 @@ async function runLegs(query: string, options: SearchOptions): Promise<LegsOutco
   const [local, channel] = await Promise.all([localPromise, channelPromise]);
   return {
     channel,
-    videos: mergeRanked(local, youtubeVideos, options.limit ?? 25),
+    videos: capPerChannel(mergeRanked(local, youtubeVideos, options.limit ?? 25), options.limit ?? 25),
     youtubeSkipped: allFailed,
     youtubeError: firstError,
     youtubeFallback: false,
   };
+}
+
+/**
+ * Flood control (user, 28 Nov 2026): one prolific channel's matches
+ * must not fill the whole results page — for "amritvela" the
+ * official channel alone produced 25+ high-scoring matches and the
+ * Amritvela Trust's own videos never surfaced. At most ~40% of the
+ * page comes from a single channel in the first pass; overflow
+ * results fill any slots left over, in ranked order. Results with
+ * no channel identity (local catalogue rows) are never capped.
+ */
+function capPerChannel(results: VideoResult[], limit: number): VideoResult[] {
+  const cap = Math.max(3, Math.floor(limit * 0.4));
+  const counts = new Map<string, number>();
+  const kept: VideoResult[] = [];
+  const overflow: VideoResult[] = [];
+  for (const result of results) {
+    const channelId = result.channelId;
+    if (!channelId) {
+      kept.push(result);
+      continue;
+    }
+    const n = counts.get(channelId) ?? 0;
+    if (n < cap) {
+      counts.set(channelId, n + 1);
+      kept.push(result);
+    } else {
+      overflow.push(result);
+    }
+  }
+  return [...kept, ...overflow].slice(0, limit);
 }
 
 /**

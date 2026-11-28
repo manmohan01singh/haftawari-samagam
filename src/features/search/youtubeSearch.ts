@@ -246,7 +246,7 @@ export interface ChannelIdentity {
 export function matchChannel(
   queryText: string,
   channel: ChannelIdentity,
-): { score: number; kind: ChannelResult['matchKind'] } | null {
+): { score: number; kind: ChannelResult['matchKind']; viaName: boolean } | null {
   // The channel card needs a stronger signal than a video result:
   // a stray word like "singh" must not summon it.
   const bestOf = (candidates: readonly string[]) => {
@@ -260,11 +260,14 @@ export function matchChannel(
   // A channel's own NAME outranks another channel's alias (user,
   // 28 Nov 2026): "amritvela" is a programme alias of the official
   // channel, but the card for that search must be the channel
-  // actually NAMED Amritvela — an alias match only wins when no
-  // channel's title/handle matches at all.
+  // actually NAMED Amritvela. `viaName` tells the engine's card
+  // selection to prefer this match over ANY alias match, whatever
+  // the raw scores say (an exact alias scores 1.0; a longer real
+  // name scores a hair less — the name still wins).
   const byName = bestOf([channel.title, channel.handle.replace(/^@/, '')]);
-  if (byName) return byName;
-  return bestOf(channel.aliases);
+  if (byName) return { ...byName, viaName: true };
+  const byAlias = bestOf(channel.aliases);
+  return byAlias ? { ...byAlias, viaName: false } : null;
 }
 
 /** Back-compat wrapper: match against the original official channel. */
