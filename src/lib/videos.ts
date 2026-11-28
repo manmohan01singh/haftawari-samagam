@@ -45,6 +45,19 @@ export async function fetchVideoByRowId(rowId: string): Promise<Video | null> {
   return (data as Video | null) ?? null;
 }
 
+/** A published catalogue row by its YouTube id, if the app has one. */
+export async function fetchVideoByYoutubeId(youtubeVideoId: string): Promise<Video | null> {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from('videos')
+    .select('*')
+    .eq('youtube_video_id', youtubeVideoId)
+    .eq('publish_state', 'published')
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data as Video | null) ?? null;
+}
+
 /** Other published recordings for the watch page's Up Next list. */
 export async function fetchUpNext(excludeRowId: string | null, limit = 15): Promise<Video[]> {
   const client = requireSupabase();

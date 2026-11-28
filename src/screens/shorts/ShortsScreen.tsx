@@ -254,13 +254,17 @@ export function ShortsScreen({ navigation }: Props) {
 
   // Focus/active choreography: exactly one short plays — the
   // visible one, on the focused tab, unless the viewer paused it.
+  // The Autoplay preference gates this too (fix round 4, B1): with
+  // autoplay OFF the effect used to command play() anyway, making
+  // the Settings toggle a no-op — a Short may then start only from
+  // the viewer's own tap.
   useEffect(() => {
     if (!isFocused) {
       playerRefs.current.get(activeIndexRef.current)?.pause();
       return;
     }
-    if (!userPaused) playActive();
-  }, [isFocused, activeIndex, userPaused, playActive]);
+    if (!userPaused && autoplayEnabled) playActive();
+  }, [isFocused, activeIndex, userPaused, playActive, autoplayEnabled]);
 
   const onViewableItemsChanged = useCallback(({ viewableItems }: ViewableInfo) => {
     const first = viewableItems[0];
@@ -334,7 +338,7 @@ export function ShortsScreen({ navigation }: Props) {
                 autoplay={isActive && autoplayEnabled}
                 muted={!soundOn}
                 onReady={() => {
-                  if (index === activeIndexRef.current && focusedRef.current && !userPausedRef.current) {
+                  if (index === activeIndexRef.current && focusedRef.current && !userPausedRef.current && autoplayEnabled) {
                     playerRefs.current.get(index)?.play();
                     if (soundOnRef.current) playerRefs.current.get(index)?.setMuted(false);
                   }

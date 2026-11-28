@@ -42,8 +42,9 @@ import { useCurrentChatUser } from '../../features/chat/useSessionChat';
 import { joinPresence, leavePresence } from '../../features/presence/presenceService';
 import { useChannelFollow, useOfficialChannel } from '../../features/channel';
 import { uploadsPlaylistIdFor } from '../../features/channels/channelsService';
-import { getChannelInfoCached, getUploadsPageCached } from '../../features/channels/channelCache';
+import { getChannelInfoCached, getLiveCached, getUploadsPageCached } from '../../features/channels/channelCache';
 import { usePlaybackStore, type PlaybackItem } from '../../features/playback/playbackStore';
+import { usePreferencesStore } from '../../features/settings/preferencesStore';
 import { AddToPlaylistSheet } from '../../features/library';
 import { formatCount } from '../../lib/format';
 import { FEED_LIST_PERF } from '../../lib/listPerf';
@@ -60,6 +61,7 @@ import {
   fetchSavedVideoIds,
   fetchUpNext,
   fetchVideoByRowId,
+  fetchVideoByYoutubeId,
   recordWatchHistory,
   setVideoSaved,
 } from '../../lib/videos';
@@ -110,6 +112,7 @@ export function WatchScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { videoRowId, youtubeVideoId, sessionId } = route.params;
   const { user } = useAuth();
+  const autoplayEnabled = usePreferencesStore((s) => s.autoplay);
   const officialChannel = useOfficialChannel();
   // The resolved video is stored keyed by its route params; loading and
   // error are derived from whether the stored entry matches the current
@@ -300,6 +303,33 @@ export function WatchScreen({ route, navigation }: Props) {
     st.minimize();
   }, [sessionId, isFocused]);
 
+  // RESCUE PLAYER (fix round 4, Chat 2 #44/#10): if the root host
+  // has not visibly covered this slot within 3 s of the hand-off —
+  // whatever the cause — mount a plain in-screen player here
+  // instead of leaving a dead poster that ignores taps. The host
+  // is told to suppress its own player for this item; leaving the
+  // screen releases the suppression and the host takes over (mini)
+  // with a fresh player.
+  const [rescueKey, setRescueKey] = useState<string | null>(null);
+  const rescueActive = rescueKey != null && rescueKey === playerKey;
+  useEffect(() => {
+    if (!persistent || !isFocused || !resolved || !playerKey) return;
+    if (resolved.source !== 'youtube' || !resolved.youtubeVideoId) return;
+    const t = setTimeout(() => {
+      const st = usePlaybackStore.getState();
+      if (st.item?.key === playerKey && st.coveredKey !== playerKey) {
+        st.setSuppressedKey(playerKey);
+        setRescueKey(playerKey);
+      }
+    }, 3000);
+    return () => clearTimeout(t);
+  }, [persistent, isFocused, resolved, playerKey]);
+  useEffect(() => {
+    return () => {
+      if (rescueKey) usePlaybackStore.getState().setSuppressedKey(null);
+    };
+  }, [rescueKey]);
+
   // Leaving a plain watch (back, tab switch, deep link) minimizes
   // the persistent player instead of killing it. The bar's X is the
   // only full stop.
@@ -373,9 +403,17 @@ export function WatchScreen({ route, navigation }: Props) {
       try {
         let row: Video | null = null;
         let meta: YouTubeVideoMetadata | null = null;
+        // FALLBACK CHAIN (fix round 4, Chat 2 #44/#10): a failed
+        // lookup must never kill playback. Row by id first (a
+        // network failure is NOT "not found"), then the catalogue
+        // by YouTube id (our own database — no API quota involved),
+        // then the YouTube API, then a bare-id resolution: the
+        // embed needs ONLY the id, metadata is decoration.
         if (videoRowId && isSupabaseConfigured) {
-          row = await fetchVideoByRowId(videoRowId);
-          if (!row) throw new Error('This recording could not be found.');
+          row = await fetchVideoByRowId(videoRowId).catch(() => null);
+        }
+        if (!row && youtubeVideoId && isSupabaseConfigured) {
+          row = await fetchVideoByYoutubeId(youtubeVideoId).catch(() => null);
         }
         // Hosted rows (migration 0005) have no YouTube id and never
         // touch the YouTube API: everything shown comes from the row
@@ -405,12 +443,67 @@ export function WatchScreen({ route, navigation }: Props) {
         if (!ytId) throw new Error('This recording could not be found.');
         // QA issue 55: ALWAYS enrich from the YouTube API when it is
         // reachable — even for archive rows — so the sheet's meta
-        // line carries the real likes / watching / views / hashtags
-        // of screenshot 06 instead of a bare date. Failure to enrich
-        // is not fatal for archive rows (the row itself is the data);
-        // it IS fatal when there is no row at all.
+        // line carries the real views / watching / hashtags instead
+        // of a bare date. Failure to enrich is not fatal — not for
+        // archive rows (the row itself is the data) and not for
+        // bare-id opens either (fix round 4: quota exhaustion made
+        // shared-link watches unplayable — a static poster with no
+        // controls and no error that helped anyone).
         meta = await fetchVideoMetadata(ytId).catch(() => null);
-        if (!row && !meta) throw new Error('This recording could not be found on YouTube.');
+        if (!row && !meta) {
+          if (!active) return;
+          setWatchState({
+            key: watchKey,
+            resolved: {
+              youtubeVideoId: ytId,
+              source: 'youtube',
+              title: '',
+              description: '',
+              channelId: null,
+              channelTitle: '',
+              metaLine: '',
+              thumbnailUrl: null,
+              durationSeconds: null,
+              row: null,
+              isLive: false,
+            },
+            error: null,
+          });
+          // One quiet retry a few seconds later fills in the title
+          // and details if the API answers then.
+          setTimeout(() => {
+            void (async () => {
+              const m2 = await fetchVideoMetadata(ytId).catch(() => null);
+              if (!active || !m2) return;
+              setWatchState((prev) => {
+                if (prev.key !== watchKey || !prev.resolved || prev.resolved.youtubeVideoId !== ytId) return prev;
+                const parts: string[] = [];
+                if (m2.liveBroadcastContent === 'live') {
+                  if (m2.concurrentViewers != null) parts.push(`${formatCount(m2.concurrentViewers)} watching`);
+                } else if (m2.viewCount != null) {
+                  parts.push(`▷ ${formatCount(m2.viewCount)} views`);
+                }
+                parts.push(formatDateLine(m2.publishedAt));
+                return {
+                  key: watchKey,
+                  error: null,
+                  resolved: {
+                    ...prev.resolved,
+                    title: m2.title,
+                    description: m2.description,
+                    channelId: m2.channelId,
+                    channelTitle: m2.channelTitle,
+                    thumbnailUrl: m2.thumbnailUrl,
+                    durationSeconds: m2.durationSeconds,
+                    isLive: m2.liveBroadcastContent === 'live',
+                    metaLine: parts.filter(Boolean).join(' · '),
+                  },
+                };
+              });
+            })();
+          }, 6000);
+          return;
+        }
         if (!active) return;
         const isLive = meta?.liveBroadcastContent === 'live';
         const metaParts: string[] = [];
@@ -433,8 +526,21 @@ export function WatchScreen({ route, navigation }: Props) {
           // the button. Views + date stay (no second views number
           // exists on the screen to contradict them).
           if (isLive) {
-            if (meta.concurrentViewers != null) {
-              metaParts.push(`${formatCount(meta.concurrentViewers)} watching`);
+            // One snapshot, one number (fix round 4, Chat 2 #5):
+            // Home and the Channel page read the watching count
+            // from the shared 10-minute live cache, so the Watch
+            // page prefers that same snapshot for this video when
+            // it has one — two pages open at the same moment must
+            // not show two different counts. The fresh API value is
+            // only the fallback when the cache has never seen it.
+            let watching = meta.concurrentViewers;
+            if (meta.channelId) {
+              const cachedLive = await getLiveCached(meta.channelId).catch(() => null);
+              const snap = cachedLive?.find((v) => v.youtubeVideoId === ytId);
+              if (snap?.concurrentViewers != null) watching = snap.concurrentViewers;
+            }
+            if (watching != null) {
+              metaParts.push(`${formatCount(watching)} watching`);
             }
           } else if (meta.viewCount != null) {
             // Reference: view counts in metadata lines carry the ▷
@@ -679,6 +785,11 @@ export function WatchScreen({ route, navigation }: Props) {
   // both stores are written once.
   const playAccumRef = useRef<{ key: string; ms: number }>({ key: '', ms: 0 });
   useEffect(() => {
+    // PLAIN watches are recorded by PlaybackHost's accumulator (fix
+    // round 4): it keeps counting while the mini player plays after
+    // this screen is gone — this screen's copy only serves SESSION
+    // watches, whose player lives here.
+    if (persistent) return;
     if (!resolved || !storePlaying) return;
     const ytId = resolved.youtubeVideoId;
     const rowId = resolved.row?.id ?? null;
@@ -921,21 +1032,29 @@ export function WatchScreen({ route, navigation }: Props) {
         style={[styles.playerBox, mini && styles.playerBoxMini]}
       >
         {persistent ? (
-          <>
-            {resolved.thumbnailUrl ? (
-              <Image
-                source={{ uri: resolved.thumbnailUrl }}
-                style={styles.playerThumb}
-                contentFit="cover"
-                cachePolicy="memory-disk"
-              />
-            ) : (
-              <View style={styles.playerThumb} />
-            )}
-            <View style={styles.playerSpinner}>
-              <ActivityIndicator color="#FFFFFF" />
-            </View>
-          </>
+          rescueActive && resolved.youtubeVideoId ? (
+            <YouTubePlayer
+              youtubeVideoId={resolved.youtubeVideoId}
+              autoplay={autoplayEnabled}
+              onPlayingChange={(p) => usePlaybackStore.getState().setPlaying(p)}
+            />
+          ) : (
+            <>
+              {resolved.thumbnailUrl ? (
+                <Image
+                  source={{ uri: resolved.thumbnailUrl }}
+                  style={styles.playerThumb}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                />
+              ) : (
+                <View style={styles.playerThumb} />
+              )}
+              <View style={styles.playerSpinner}>
+                <ActivityIndicator color="#FFFFFF" />
+              </View>
+            </>
+          )
         ) : playerReady ? (
           resolved.source === 'hosted' && resolved.row ? (
             <HostedWatchPlayer videoId={resolved.row.id} thumbnailUrl={resolved.thumbnailUrl} title={resolved.title} />
@@ -1200,7 +1319,7 @@ export function WatchScreen({ route, navigation }: Props) {
                     size={22}
                     color={colors.text}
                   />
-                  {likeStatus === 'ready' && likeCount > 0 ? (
+                  {likeStatus === 'ready' ? (
                     <Text style={styles.likeCount}>{formatCount(likeCount)}</Text>
                   ) : null}
                 </Pressable>

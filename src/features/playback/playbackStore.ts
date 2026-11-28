@@ -62,6 +62,22 @@ interface PlaybackState {
    * own player when a session watch is pushed over a plain watch.
    */
   watchKind: 'plain' | 'session';
+  /**
+   * The item key the host is actually rendering visibly right now
+   * (set by PlaybackHost when its player is on screen in the Watch
+   * slot). The Watch screen watches this: if its hand-off is not
+   * covered within a few seconds it mounts a rescue player in its
+   * own slot rather than leaving a dead poster.
+   */
+  coveredKey: string | null;
+  setCoveredKey: (key: string | null) => void;
+  /**
+   * The item key whose playback the Watch screen's rescue player
+   * has taken over: the host must neither mount its own player for
+   * it nor park-pause it while the rescue player is on screen.
+   */
+  suppressedKey: string | null;
+  setSuppressedKey: (key: string | null) => void;
   open: (item: PlaybackItem) => void;
   minimize: () => void;
   expand: () => void;
@@ -79,6 +95,10 @@ export const usePlaybackStore = create<PlaybackState>((set) => ({
   slotRect: null,
   routeName: null,
   watchKind: 'plain',
+  coveredKey: null,
+  setCoveredKey: (coveredKey) => set({ coveredKey }),
+  suppressedKey: null,
+  setSuppressedKey: (suppressedKey) => set({ suppressedKey }),
   open: (item) =>
     set((s) => {
       const same = s.item?.key === item.key && s.mode !== 'closed';
@@ -92,11 +112,13 @@ export const usePlaybackStore = create<PlaybackState>((set) => ({
         // players' state events as soon as they report.
         playing: same ? s.playing : false,
         slotRect: same ? s.slotRect : null,
+        coveredKey: same ? s.coveredKey : null,
       };
     }),
   minimize: () => set((s) => (s.item ? { mode: 'mini' } : s)),
   expand: () => set((s) => (s.item ? { mode: 'full' } : s)),
-  close: () => set({ item: null, mode: 'closed', playing: false, slotRect: null }),
+  close: () =>
+    set({ item: null, mode: 'closed', playing: false, slotRect: null, coveredKey: null, suppressedKey: null }),
   setPlaying: (playing) => set({ playing }),
   setSlotRect: (slotRect) => set({ slotRect }),
   setRouteName: (routeName) => set({ routeName }),

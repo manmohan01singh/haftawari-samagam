@@ -1,5 +1,5 @@
-import React, { useMemo, useRef, useState, type RefObject } from 'react';
-import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { NavigationContainerRef } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,7 +8,10 @@ import { YouTubePlayer, type YouTubePlayerHandle } from './YouTubePlayer';
 import { HostedWatchPlayer, type HostedPlayerHandle } from './HostedWatchPlayer';
 import { usePlaybackStore } from '../../features/playback/playbackStore';
 import { usePreferencesStore } from '../../features/settings/preferencesStore';
-import { layout, useTheme, type ThemeColors } from '../../theme';
+import { useAuth } from '../../features/auth';
+import { recordLocalWatch } from '../../features/library/localHistory';
+import { recordWatchHistory } from '../../lib/videos';
+import { layout, typography, useTheme, type ThemeColors } from '../../theme';
 import type { RootStackParamList } from '../../navigation/types';
 
 /**
@@ -28,11 +31,13 @@ import type { RootStackParamList } from '../../navigation/types';
  *   black kyun hai'). The visible card is therefore a 200×113
  *   window (overflow hidden) over the embed's top: exactly the
  *   picture, no void, with the REAL embed still playing inside.
- *   Overlay controls: tap the card to expand back to Watch,
- *   play/pause bottom-left, close top-right. On routes where the
- *   mini must not show (a session watch, admin, auth) the embed
- *   parks at 356×200 off-screen instead — still mounted, still
- *   playing, position preserved.
+ *   Since fix round 4 the window sits in a solid DOCK strip above
+ *   the bottom nav: title + channel beside the picture, play/pause
+ *   and close as real buttons in the strip, tap the picture or the
+ *   title to expand back to Watch. On routes where the mini must
+ *   not show (a session watch, admin, auth) the embed parks at
+ *   356×200 off-screen instead — and the park-pause effect pauses
+ *   it there; a parked player never plays invisibly.
  * - mode 'mini', hosted: expo-video has no minimum size, so the
  *   real video shrinks into a small floating view (bottom-right)
  *   with expand/close — a true picture mini.
@@ -63,6 +68,9 @@ export function PlaybackHost({
   const setPlaying = usePlaybackStore((s) => s.setPlaying);
   const expand = usePlaybackStore((s) => s.expand);
   const close = usePlaybackStore((s) => s.close);
+  const setCoveredKey = usePlaybackStore((s) => s.setCoveredKey);
+  const suppressedKey = usePlaybackStore((s) => s.suppressedKey);
+  const { user } = useAuth();
 
   const ytRef = useRef<YouTubePlayerHandle>(null);
   const hostedRef = useRef<HostedPlayerHandle>(null);
@@ -110,7 +118,62 @@ export function PlaybackHost({
   if (playerVisible && item && shownKey !== item.key) {
     setShownKey(item.key);
   }
-  const mountPlayer = item != null && (playerVisible || shownKey === item.key);
+  // A rescue player on the Watch screen has taken this item over:
+  // the host mounts nothing for it and never park-pauses it.
+  const suppressed = item != null && suppressedKey === item.key;
+  const mountPlayer = item != null && !suppressed && (playerVisible || shownKey === item.key);
+
+  // Report coverage: the Watch screen's rescue timer reads this —
+  // if the host is visibly rendering the item in the slot, the
+  // hand-off worked and no rescue is needed.
+  useEffect(() => {
+    if (item && fullVisible && mountPlayer) setCoveredKey(item.key);
+  }, [item, fullVisible, mountPlayer, setCoveredKey]);
+
+  // HISTORY (fix round 4, Chat 2 N3): the play-time accumulator
+  // lives HERE, not on the Watch screen — it keeps counting while
+  // the mini player plays after the Watch screen is gone, which is
+  // exactly the time the old screen-owned gate never saw. 5 s of
+  // real playing (buffering pauses the count, never resets it)
+  // writes the local history once, and the account history once
+  // when signed in and the video has a catalogue row.
+  const accumRef = useRef<{ key: string; ms: number }>({ key: '', ms: 0 });
+  const localDoneRef = useRef<string | null>(null);
+  const serverDoneRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!item || !playing) return;
+    const key = item.key;
+    if (accumRef.current.key !== key) accumRef.current = { key, ms: 0 };
+    const ytId = item.youtubeVideoId;
+    const rowId = item.videoRowId;
+    const localPending = ytId != null && localDoneRef.current !== key;
+    const serverPending = rowId != null && user != null && serverDoneRef.current !== key;
+    if (!localPending && !serverPending) return;
+    let last = Date.now();
+    const iv = setInterval(() => {
+      const now = Date.now();
+      accumRef.current.ms += now - last;
+      last = now;
+      if (accumRef.current.ms < 5000) return;
+      clearInterval(iv);
+      if (ytId && localDoneRef.current !== key) {
+        localDoneRef.current = key;
+        void recordLocalWatch({
+          youtubeVideoId: ytId,
+          videoRowId: rowId,
+          channelTitle: item.channelLine || null,
+          title: item.title,
+          thumbnailUrl: item.thumbnailUrl,
+          durationSeconds: null,
+        }).catch(() => undefined);
+      }
+      if (rowId && user && serverDoneRef.current !== key) {
+        serverDoneRef.current = key;
+        void recordWatchHistory(user.id, rowId, item.channelLine || null).catch(() => undefined);
+      }
+    }, 500);
+    return () => clearInterval(iv);
+  }, [item, playing, user]);
 
   // NEVER hidden-but-playing (Chat 2 fault 19, 28 Nov 2026 — the
   // worst-five): when the player is parked off-screen (a route
@@ -138,6 +201,9 @@ export function PlaybackHost({
     // below reads it when it fires, long after this sync ran.
     visibleRef.current = playerVisible;
     if (!item || playerVisible) return;
+    // A rescue player owns this item on the Watch screen — visible
+    // there, so nothing here may pause it.
+    if (suppressed) return;
     const pauseNow = () => {
       if (item.kind === 'youtube') ytRef.current?.pause();
       else hostedRef.current?.pause();
@@ -156,7 +222,7 @@ export function PlaybackHost({
       if (!visibleRef.current) pauseNow();
     }, 900);
     return () => clearTimeout(t);
-  }, [playerVisible, mode, item, itemKind, setPlaying, barHidden, isWatchRoute]);
+  }, [playerVisible, mode, item, itemKind, setPlaying, barHidden, isWatchRoute, suppressed]);
   const bottomOffset = layout.bottomNavHeight + Math.max(insets.bottom, 12) + 8;
 
   // The empty return — AFTER every hook above (see the hooks-first
@@ -210,23 +276,22 @@ export function PlaybackHost({
       overflow: 'hidden',
     };
   } else if (miniCardVisible) {
-    // The YouTube mini card: a 200×113 window over the 200×200
-    // embed (see the header note) — the picture fills the card,
-    // the black void below the picture is cropped away.
+    // The YouTube mini sits in the left of the mini DOCK (fix
+    // round 4, Chat 2 #20): a 200×113 window over the 200×200 embed
+    // (see the header note) — the picture fills the window, the
+    // black void below the picture is cropped away. The dock beside
+    // it carries the title and the play/pause + close controls, so
+    // nothing sits on the picture and the strip is docked above the
+    // bottom nav instead of floating over the feed.
     playerStyle = {
       position: 'absolute',
-      right: 8,
-      bottom: bottomOffset + 8,
+      left: 8,
+      bottom: bottomOffset,
       width: 200,
       height: 113,
-      borderRadius: 12,
+      borderRadius: 8,
       overflow: 'hidden',
       backgroundColor: '#000000',
-      shadowColor: '#000000',
-      shadowOpacity: 0.35,
-      shadowRadius: 10,
-      shadowOffset: { width: 0, height: 4 },
-      elevation: 8,
     };
   } else {
     // Parked: YouTube embed keeps its ≥200-tall viewport (356×200
@@ -244,6 +309,42 @@ export function PlaybackHost({
 
   return (
     <>
+      {miniCardVisible ? (
+        <View style={[styles.miniDock, { bottom: bottomOffset - 8 }]}>
+          <View style={styles.miniDockSpacer} />
+          <Pressable
+            style={styles.miniDockText}
+            onPress={expandToWatch}
+            accessibilityRole="button"
+            accessibilityLabel="Expand player"
+          >
+            <Text style={styles.miniDockTitle} numberOfLines={2}>
+              {item.title}
+            </Text>
+            <Text style={styles.miniDockChannel} numberOfLines={1}>
+              {item.channelLine}
+            </Text>
+          </Pressable>
+          <Pressable
+            style={styles.miniDockBtn}
+            onPress={togglePlay}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={playing ? 'Pause' : 'Play'}
+          >
+            <MaterialIcons name={playing ? 'pause' : 'play-arrow'} size={28} color={colors.text} />
+          </Pressable>
+          <Pressable
+            style={styles.miniDockBtn}
+            onPress={close}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Close player"
+          >
+            <MaterialIcons name="close" size={24} color={colors.text} />
+          </Pressable>
+        </View>
+      ) : null}
       <View style={playerStyle} pointerEvents={playerVisible ? 'auto' : 'none'}>
         <View style={miniCardVisible ? styles.miniStage : styles.stageFill}>
           {mountPlayer && item.kind === 'youtube' && item.youtubeVideoId ? (
@@ -278,36 +379,15 @@ export function PlaybackHost({
           />
         ) : null}
         {miniCardVisible ? (
-          // The card body expands; the two corner buttons ride
-          // above it (rendered after = on top). The embed under the
-          // overlay never sees mini-mode taps, same bargain as the
-          // hosted mini.
-          <>
-            <Pressable
-              style={StyleSheet.absoluteFill}
-              onPress={expandToWatch}
-              accessibilityRole="button"
-              accessibilityLabel="Expand player"
-            />
-            <Pressable
-              style={[styles.miniClose, styles.miniCardClose]}
-              onPress={close}
-              hitSlop={12}
-              accessibilityRole="button"
-              accessibilityLabel="Close player"
-            >
-              <MaterialIcons name="close" size={16} color="#FFFFFF" />
-            </Pressable>
-            <Pressable
-              style={[styles.miniClose, styles.miniCardPlay]}
-              onPress={togglePlay}
-              hitSlop={12}
-              accessibilityRole="button"
-              accessibilityLabel={playing ? 'Pause' : 'Play'}
-            >
-              <MaterialIcons name={playing ? 'pause' : 'play-arrow'} size={16} color="#FFFFFF" />
-            </Pressable>
-          </>
+          // The card body expands (the dock beside it carries the
+          // title and the transport/close controls — nothing rides
+          // on the picture any more, fix round 4 #20).
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={expandToWatch}
+            accessibilityRole="button"
+            accessibilityLabel="Expand player"
+          />
         ) : null}
       </View>
 
@@ -346,8 +426,32 @@ const createStyles = (colors: ThemeColors) =>
     // the black void). Every other mode: fill the placement box.
     miniStage: { width: 200, height: 200 },
     stageFill: { flex: 1 },
-    miniCardClose: { position: 'absolute', top: 6, right: 6 },
-    miniCardPlay: { position: 'absolute', left: 6, bottom: 6 },
+    // The mini dock (fix round 4 #20): a solid strip docked above
+    // the bottom nav — spacer where the player window sits, then
+    // the title/channel, then real buttons beside the picture.
+    miniDock: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      height: 129,
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 8,
+      gap: 10,
+      backgroundColor: colors.surface,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.border,
+      shadowColor: '#000000',
+      shadowOpacity: 0.18,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: -2 },
+      elevation: 10,
+    },
+    miniDockSpacer: { width: 200, height: 113 },
+    miniDockText: { flex: 1, justifyContent: 'center' },
+    miniDockTitle: { ...typography.cardTitle, color: colors.text },
+    miniDockChannel: { ...typography.metadata, color: colors.textSecondary, marginTop: 2 },
+    miniDockBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
     miniClose: {
       position: 'absolute',
       width: 24,
