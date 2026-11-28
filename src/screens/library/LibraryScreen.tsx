@@ -25,13 +25,14 @@ import type { MainTabParamList } from '../../navigation/types';
 import {
   useCurrentUser,
   useHistory,
+  useLikedItems,
   usePlaylistSummaries,
   useProfile,
   useSavedItems,
 } from '../../features/library/hooks';
 import { createPlaylist, removeHistoryEntry } from '../../features/library/libraryService';
 import { resumeRatio } from '../../features/library/format';
-import type { HistoryItem, PlaylistSummary } from '../../features/library/types';
+import type { HistoryItem, LikedItem, PlaylistSummary } from '../../features/library/types';
 import type { LibraryRootStackParamList } from '../../features/library/screenTypes';
 import { CreatePlaylistSheet } from '../../features/library/components/CreatePlaylistSheet';
 import { listThumbnailUrl } from '../../components/video/cardData';
@@ -72,6 +73,7 @@ export function LibraryScreen({ navigation }: Props) {
   const { profile } = useProfile(user?.id ?? null);
   const history = useHistory(user?.id ?? null);
   const saved = useSavedItems(user?.id ?? null);
+  const liked = useLikedItems(user?.id ?? null);
   const summaries = usePlaylistSummaries(user?.id ?? null);
   // Device-local history for signed-out users (QA 78): the History
   // shelf below shows real on-device entries instead of a bare
@@ -81,6 +83,7 @@ export function LibraryScreen({ navigation }: Props) {
   const reloadLocal = local.reload;
   const reloadHistory = history.reload;
   const reloadSaved = saved.reload;
+  const reloadLiked = liked.reload;
   const reloadSummaries = summaries.reload;
   // Phase 11 (user order): the Library tab stays mounted, so without
   // this its History shelf / Saved count / playlist rows went stale
@@ -94,17 +97,19 @@ export function LibraryScreen({ navigation }: Props) {
       reloadLocal();
       reloadHistory();
       reloadSaved();
+      reloadLiked();
       reloadSummaries();
-    }, [reloadLocal, reloadHistory, reloadSaved, reloadSummaries]),
+    }, [reloadLocal, reloadHistory, reloadSaved, reloadLiked, reloadSummaries]),
   );
 
-  const refreshing = history.refreshing || saved.refreshing || summaries.refreshing;
+  const refreshing = history.refreshing || saved.refreshing || summaries.refreshing || liked.refreshing;
   const onRefresh = useCallback(() => {
     history.refresh();
     saved.refresh();
     summaries.refresh();
+    liked.refresh();
     local.reload();
-  }, [history, saved, summaries, local]);
+  }, [history, saved, summaries, liked, local]);
 
   // Web pull-to-refresh (audit A1): RefreshControl above is a no-op
   // stub in the PWA; the shared hook restores the gesture on web
@@ -331,7 +336,7 @@ export function LibraryScreen({ navigation }: Props) {
         {/* Load failures used to be silently shown as empty sections
             ("No playlists yet" when the fetch had actually failed).
             Surface one honest banner with a retry instead. */}
-        {user && (history.error || saved.error || summaries.error) ? (
+        {user && (history.error || saved.error || summaries.error || liked.error) ? (
           <View style={styles.errorBanner}>
             <Text style={styles.errorBannerText}>
               Some of your library could not be loaded. Check your connection and try again.
@@ -433,6 +438,70 @@ export function LibraryScreen({ navigation }: Props) {
               : 'Recordings you watch on this device will appear here.'}
           </Text>
         )}
+
+        {/* Liked videos (fault 28): everything the signed-in user
+            has liked, most recent first — the Library finally has a
+            way back to them. Signed-in only: liking requires an
+            account (the app asks guests to sign in), so there is no
+            guest version of this list to show. */}
+        {user && liked.data.length > 0 ? (
+          <>
+            <View style={styles.sectionHeadingRow}>
+              <Text style={styles.sectionHeading}>Liked videos</Text>
+            </View>
+            <FlatList
+              horizontal
+              data={liked.data.slice(0, 10)}
+              keyExtractor={(item: LikedItem) => item.key}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.historyContent}
+              {...H_LIST_PERF}
+              renderItem={({ item }: { item: LikedItem }) => (
+                <View style={styles.historyCard}>
+                  <Pressable
+                    onPress={() =>
+                      navigation.navigate(
+                        'Watch',
+                        item.videoRowId
+                          ? { videoRowId: item.videoRowId }
+                          : { youtubeVideoId: item.youtubeVideoId ?? undefined },
+                      )
+                    }
+                    accessibilityRole="button"
+                    accessibilityLabel={item.title}
+                  >
+                    <View style={styles.historyThumbWrap}>
+                      {item.thumbnailUrl ? (
+                        <Image
+                          source={{ uri: item.thumbnailUrl }}
+                          style={styles.historyThumb}
+                          contentFit="cover"
+                          cachePolicy="memory-disk"
+                          recyclingKey={item.key}
+                        />
+                      ) : (
+                        <View style={[styles.historyThumb, styles.thumbEmpty]} />
+                      )}
+                    </View>
+                  </Pressable>
+                  <Text style={styles.historyTitle} numberOfLines={2}>
+                    {item.title}
+                  </Text>
+                  {item.channelTitle ? (
+                    <Text style={styles.historyChannel} numberOfLines={1}>
+                      {item.channelTitle}
+                    </Text>
+                  ) : null}
+                </View>
+              )}
+            />
+          </>
+        ) : user && liked.loading ? (
+          <View style={[styles.sectionLoading, styles.sectionLoadingPadded]}>
+            <ActivityIndicator size="small" color={colors.textSecondary} />
+            <Text style={styles.sectionLoadingText}>Loading liked videos…</Text>
+          </View>
+        ) : null}
 
         {/* Library chips (reference §4 filter chips, wired to real sections) */}
         <Text style={[styles.sectionHeading, styles.libraryHeading]}>Library</Text>

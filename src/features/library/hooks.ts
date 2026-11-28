@@ -17,9 +17,10 @@ import {
   fetchPlaylistDetail,
   fetchPlaylistSummaries,
   fetchProfile,
+  fetchLikedItems,
   fetchSavedItems,
 } from './libraryService';
-import type { HistoryItem, PlaylistDetail, PlaylistSummary, SavedItem } from './types';
+import type { HistoryItem, LikedItem, PlaylistDetail, PlaylistSummary, SavedItem } from './types';
 
 /** The signed-in Supabase user (or null), kept in sync with auth state. */
 export function useCurrentUser(): { user: User | null; loading: boolean } {
@@ -124,6 +125,13 @@ export function useHistory(userId: string | null): ListResource<HistoryItem> {
   return useListResource(
     userId && isSupabaseConfigured ? () => fetchHistory(userId) : null,
     `history:${userId ?? 'none'}`,
+  );
+}
+
+export function useLikedItems(userId: string | null): ListResource<LikedItem> {
+  return useListResource(
+    userId && isSupabaseConfigured ? () => fetchLikedItems(userId) : null,
+    `liked:${userId ?? 'none'}`,
   );
 }
 

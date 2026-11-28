@@ -17,6 +17,7 @@ import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 
 import { YouTubePlayer, type YouTubePlayerHandle } from '../../components/video/YouTubePlayer';
 import { fetchShorts, type ShortItem } from '../../features/shorts/shortsFeed';
+import { usePreferencesStore } from '../../features/settings/preferencesStore';
 import { useCurrentChatUser } from '../../features/chat/useSessionChat';
 import { useVideoEngagement } from '../../features/watch/useVideoEngagement';
 import { VideoCommentsSheet } from '../../features/watch/components/VideoCommentsSheet';
@@ -181,6 +182,7 @@ export function ShortsScreen({ navigation }: Props) {
   // anywhere unlocks sound for the rest of the session. The poster
   // facade covers the player until it reports actually playing, so
   // a blocked start shows the thumbnail — never a black screen.
+  const autoplayEnabled = usePreferencesStore((s) => s.autoplay);
   const [soundOn, setSoundOn] = useState(false);
   const soundOnRef = useRef(false);
   const [playingIndex, setPlayingIndex] = useState(-1);
@@ -329,7 +331,7 @@ export function ShortsScreen({ navigation }: Props) {
                 youtubeVideoId={item.meta.youtubeVideoId}
                 fill
                 loop
-                autoplay={isActive}
+                autoplay={isActive && autoplayEnabled}
                 muted={!soundOn}
                 onReady={() => {
                   if (index === activeIndexRef.current && focusedRef.current && !userPausedRef.current) {
@@ -450,7 +452,7 @@ export function ShortsScreen({ navigation }: Props) {
         </View>
       );
     },
-    [activeIndex, itemH, userPaused, openRoot, styles, soundOn, playingIndex, unlockSound],
+    [activeIndex, itemH, userPaused, openRoot, styles, soundOn, playingIndex, unlockSound, autoplayEnabled],
   );
 
   return (

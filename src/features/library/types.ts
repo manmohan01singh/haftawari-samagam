@@ -23,6 +23,22 @@ export interface SavedItem {
   video: Video;
 }
 
+/**
+ * One of the user's video_likes rows resolved to display data
+ * (fault 28): the like's key is a YouTube id or `hosted:<row id>`;
+ * display data comes from the catalogue row when one exists, else
+ * from the YouTube API metadata for that id.
+ */
+export interface LikedItem {
+  key: string;
+  likedAt: string;
+  youtubeVideoId: string | null;
+  videoRowId: string | null;
+  title: string;
+  thumbnailUrl: string | null;
+  channelTitle: string | null;
+}
+
 /** A playlist plus the real aggregates the library rows display. */
 export interface PlaylistSummary {
   playlist: Playlist;

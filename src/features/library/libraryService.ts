@@ -8,9 +8,11 @@
  */
 import { requireSupabase } from '../../lib/supabase';
 import { isUuid } from '../../lib/uuid';
-import type { Playlist, Profile, Video } from '../../types/database';
+import { fetchVideosMetadata } from '../../lib/youtube';
+import type { Playlist, Profile, Video, VideoLike } from '../../types/database';
 import type {
   HistoryItem,
+  LikedItem,
   PlaylistDetail,
   PlaylistDetailItem,
   PlaylistMembership,
@@ -110,6 +112,109 @@ export async function fetchSavedItems(userId: string, limit = 100): Promise<Save
   return rows
     .filter((r): r is SavedItem['entry'] & { video: Video } => Boolean(r.video))
     .map((r) => ({ entry: r, video: r.video }));
+}
+
+/**
+ * The user's liked recordings, most recent first (fault 28 — the
+ * Library had no way back to anything you liked). Likes are keyed
+ * by YouTube id or `hosted:<videos row id>`; display data resolves
+ * from the catalogue row when one exists, otherwise from one
+ * batched YouTube metadata call. Likes that resolve to nothing
+ * (deleted recording) are skipped, never faked.
+ */
+export async function fetchLikedItems(userId: string, limit = 50): Promise<LikedItem[]> {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from('video_likes')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  const likes = (data ?? []) as VideoLike[];
+  if (likes.length === 0) return [];
+
+  const ytIds = [
+    ...new Set(likes.map((l) => l.youtube_video_id).filter((k) => !k.startsWith('hosted:'))),
+  ];
+  const rowIds = [
+    ...new Set(
+      likes
+        .map((l) => l.video_id ?? (l.youtube_video_id.startsWith('hosted:') ? l.youtube_video_id.slice(7) : null))
+        .filter((v): v is string => Boolean(v)),
+    ),
+  ];
+  const rowByYt = new Map<string, Video>();
+  const rowById = new Map<string, Video>();
+  const absorb = (rows: Video[]) => {
+    for (const v of rows) {
+      rowById.set(v.id, v);
+      if (v.youtube_video_id) rowByYt.set(v.youtube_video_id, v);
+    }
+  };
+  if (ytIds.length > 0) {
+    const { data: rows } = await client.from('videos').select('*').in('youtube_video_id', ytIds);
+    absorb((rows ?? []) as Video[]);
+  }
+  if (rowIds.length > 0) {
+    const { data: rows } = await client.from('videos').select('*').in('id', rowIds);
+    absorb((rows ?? []) as Video[]);
+  }
+  const metaById = new Map<string, { title: string; thumbnailUrl: string | null; channelTitle: string }>();
+  const missing = ytIds.filter((id) => !rowByYt.has(id));
+  if (missing.length > 0) {
+    try {
+      const metas = await fetchVideosMetadata(missing);
+      for (const m of metas) {
+        metaById.set(m.youtubeVideoId, {
+          title: m.title,
+          thumbnailUrl: m.thumbnailUrl,
+          channelTitle: m.channelTitle,
+        });
+      }
+    } catch {
+      // Quota/network: unresolved likes are skipped below.
+    }
+  }
+
+  const out: LikedItem[] = [];
+  for (const like of likes) {
+    const key = like.youtube_video_id;
+    const hosted = key.startsWith('hosted:');
+    const rowId = like.video_id ?? (hosted ? key.slice(7) : null);
+    const row = (rowId ? rowById.get(rowId) : undefined) ?? (!hosted ? rowByYt.get(key) : undefined);
+    if (row) {
+      out.push({
+        key,
+        likedAt: like.created_at,
+        youtubeVideoId: row.youtube_video_id,
+        videoRowId: hosted ? row.id : null,
+        title: row.title,
+        // Same list-thumbnail rule as the cards: mqdefault derived
+        // from the YouTube id when there is one, else the stored URL.
+        thumbnailUrl: row.youtube_video_id
+          ? `https://i.ytimg.com/vi/${row.youtube_video_id}/mqdefault.jpg`
+          : row.thumbnail_url,
+        channelTitle: null,
+      });
+      continue;
+    }
+    if (!hosted) {
+      const meta = metaById.get(key);
+      if (meta) {
+        out.push({
+          key,
+          likedAt: like.created_at,
+          youtubeVideoId: key,
+          videoRowId: null,
+          title: meta.title,
+          thumbnailUrl: meta.thumbnailUrl,
+          channelTitle: meta.channelTitle,
+        });
+      }
+    }
+  }
+  return out;
 }
 
 /** Unsave a recording (deletes the user's own saved_videos row). */

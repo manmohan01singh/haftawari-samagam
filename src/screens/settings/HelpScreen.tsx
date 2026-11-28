@@ -27,16 +27,18 @@ export function HelpScreen({ navigation }: Props) {
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.sectionTitle}>Samagam Sessions</Text>
         <Text style={styles.body}>
-          Sessions are scheduled group playbacks of a recording. Each one is labelled
-          UPCOMING, NOW PLAYING or COMPLETED. Open a session at its scheduled time and
+          Sessions are scheduled group playbacks of a recording. When a samagam is
+          scheduled, it appears under Sessions labelled UPCOMING, then NOW PLAYING
+          while it plays, then COMPLETED. Open a session at its scheduled time and
           it plays in sync with the sangat — the live chat and the joined count on
           that page are the app&apos;s own.
         </Text>
 
         <Text style={styles.sectionTitle}>Watching recordings</Text>
         <Text style={styles.body}>
-          Playback uses the official YouTube player. Recordings hosted for a session
-          are for signed-in members — sign in to watch them.
+          Playback uses the official YouTube player. A copy hosted for a session
+          needs you to be signed in; the same recording on YouTube is open to
+          everyone, and a finished session&apos;s page will offer it.
         </Text>
 
         <Text style={styles.sectionTitle}>Your account</Text>
@@ -49,9 +51,10 @@ export function HelpScreen({ navigation }: Props) {
 
         <Text style={styles.sectionTitle}>Saving &amp; playlists</Text>
         <Text style={styles.body}>
-          Tap Save on a recording to keep it in Saved, and make playlists of your own
-          from the Library. While signed out, what you watched stays on this device
-          only.
+          To keep a recording, open its &#8943; menu (on a card, or on the watch
+          page) and tap Save — it waits for you under Saved in the Library. You
+          can also add recordings to playlists of your own from the same menu.
+          While signed out, what you watched stays on this device only.
         </Text>
 
         <Text style={styles.sectionTitle}>Comments</Text>
@@ -61,16 +64,21 @@ export function HelpScreen({ navigation }: Props) {
           still quiet; sign in to share the first comment.
         </Text>
 
-        <Text style={styles.sectionTitle}>Appearance</Text>
+        <Text style={styles.sectionTitle}>Appearance &amp; playback</Text>
         <Text style={styles.body}>
           Theme in Settings switches between System default, Light and Dark, and
-          applies straight away.
+          applies straight away. Autoplay, also in Settings, decides whether a
+          recording or Short starts on its own when opened — Samagam Sessions
+          always start together at their scheduled time.
         </Text>
 
         <Text style={styles.sectionTitle}>Search</Text>
         <Text style={styles.body}>
-          Search looks through the published recordings. When YouTube&apos;s daily limit
-          for this app is reached, only the published archive is shown until it resets.
+          Search looks through the sangat channels in this app — their recordings
+          in the published archive and their latest uploads on YouTube. When
+          YouTube&apos;s daily limit for this app is reached, results come from
+          the channels&apos; latest uploads and the archive until the limit resets,
+          and the results page says so.
         </Text>
       </ScrollView>
 

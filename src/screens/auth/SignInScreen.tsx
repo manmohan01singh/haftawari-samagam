@@ -285,6 +285,20 @@ export function SignInScreen({ navigation }: Props) {
               New here? <Text style={styles.switchStrong}>Create an account</Text>
             </Text>
           </Pressable>
+          {/* Terms/Privacy (N6): real pages, one line, honest
+              scope — using the app accepts the terms; the privacy
+              policy says what is stored and what never happens. */}
+          <Text style={styles.legalNote}>
+            By continuing you agree to the{' '}
+            <Text style={styles.switchStrong} onPress={() => navigation.navigate('Terms')}>
+              Terms of Use
+            </Text>{' '}
+            and acknowledge the{' '}
+            <Text style={styles.switchStrong} onPress={() => navigation.navigate('Privacy')}>
+              Privacy Policy
+            </Text>
+            .
+          </Text>
         </>
       )}
       </ScrollView>
@@ -344,5 +358,6 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   primaryButtonText: { fontSize: 16, fontWeight: '600', color: colors.subscribeText },
   switchRow: { alignItems: 'center', marginTop: spacing.xl, paddingVertical: spacing.md, minHeight: 44, justifyContent: 'center' },
   switchText: { ...typography.body, color: colors.textSecondary },
+  legalNote: { ...typography.metadata, color: colors.textSecondary, textAlign: 'center', marginTop: 14, lineHeight: 18 },
   switchStrong: { color: colors.text, fontWeight: '600' },
 });

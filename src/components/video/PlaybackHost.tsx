@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { YouTubePlayer, type YouTubePlayerHandle } from './YouTubePlayer';
 import { HostedWatchPlayer, type HostedPlayerHandle } from './HostedWatchPlayer';
 import { usePlaybackStore } from '../../features/playback/playbackStore';
+import { usePreferencesStore } from '../../features/settings/preferencesStore';
 import { layout, useTheme, type ThemeColors } from '../../theme';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -52,6 +53,7 @@ export function PlaybackHost({
   const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
 
+  const autoplayEnabled = usePreferencesStore((s) => s.autoplay);
   const item = usePlaybackStore((s) => s.item);
   const mode = usePlaybackStore((s) => s.mode);
   const playing = usePlaybackStore((s) => s.playing);
@@ -249,7 +251,7 @@ export function PlaybackHost({
               key={item.key}
               ref={ytRef}
               youtubeVideoId={item.youtubeVideoId}
-              autoplay
+              autoplay={autoplayEnabled}
               onPlayingChange={setPlaying}
             />
           ) : mountPlayer && item.kind === 'hosted' && item.videoRowId ? (
@@ -258,6 +260,7 @@ export function PlaybackHost({
               ref={hostedRef}
               videoId={item.videoRowId}
               thumbnailUrl={item.thumbnailUrl}
+              autoplay={autoplayEnabled}
               mini={mode === 'mini'}
               onPlayingChange={setPlaying}
               onReady={() => setHostedReadyKey(item.key)}

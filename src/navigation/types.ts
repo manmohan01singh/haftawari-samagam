@@ -52,6 +52,10 @@ export type RootStackParamList = {
   Settings: undefined;
   /** In-app help page (Settings → Help). */
   Help: undefined;
+  /** Terms of Use (N6: linked from sign-in/sign-up + Settings). */
+  Terms: undefined;
+  /** Privacy Policy (N6). */
+  Privacy: undefined;
   Account: undefined;
   /** Edit the signed-in user's own display name (profiles row). */
   EditProfile: undefined;

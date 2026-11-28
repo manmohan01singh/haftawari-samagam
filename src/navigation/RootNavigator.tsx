@@ -12,7 +12,7 @@ import { SavedScreen } from '../screens/saved';
 import { PlaylistsScreen } from '../screens/playlists';
 import { SessionWatchScreen, SessionsListScreen } from '../screens/sessions';
 import { HistoryScreen } from '../screens/history';
-import { SettingsScreen, HelpScreen } from '../screens/settings';
+import { SettingsScreen, HelpScreen, TermsScreen, PrivacyScreen } from '../screens/settings';
 import { AccountScreen, EditProfileScreen } from '../screens/account';
 import type { RootStackParamList } from './types';
 
@@ -76,6 +76,8 @@ export function RootNavigator() {
       <Stack.Screen name="History" component={HistoryScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen name="Help" component={HelpScreen} />
+      <Stack.Screen name="Terms" component={TermsScreen} />
+      <Stack.Screen name="Privacy" component={PrivacyScreen} />
       <Stack.Screen name="Account" component={AccountScreen} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       <Stack.Screen name="SignIn" component={SignInScreen} />

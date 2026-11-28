@@ -121,6 +121,8 @@ function createWebLinking(): LinkingOptions<RootStackParamList> {
         History: 'history',
         Settings: 'settings',
         Help: 'help',
+        Terms: 'terms',
+        Privacy: 'privacy',
         Account: 'account',
         // Gated screens need paths too: without one, a guest deep
         // entry (e.g. /account/edit-profile) matches no route and

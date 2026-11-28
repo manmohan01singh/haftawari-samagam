@@ -4,6 +4,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from 'react-native';
@@ -12,6 +13,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import appJson from '../../../app.json';
 import { branding } from '../../config/branding';
 import { useAuth } from '../../features/auth';
+import { usePreferencesStore } from '../../features/settings/preferencesStore';
 import { ConfirmModal } from '../../features/library/components/ConfirmModal';
 import { OFFICIAL_CHANNEL_ID } from '../../lib/youtube';
 import { goBackOrTab } from '../../navigation/safeBack';
@@ -82,6 +84,8 @@ export function SettingsScreen({ navigation }: Props) {
   const { user, profile, isAdmin, signOut } = useAuth();
   const { toast, showToast } = useToast();
   const { colors, preference, setPreference } = useTheme();
+  const autoplay = usePreferencesStore((s) => s.autoplay);
+  const setAutoplay = usePreferencesStore((s) => s.setAutoplay);
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [confirmingSignOut, setConfirmingSignOut] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -276,6 +280,25 @@ export function SettingsScreen({ navigation }: Props) {
               );
             })
           : null}
+        <Text style={styles.sectionLabel}>Playback</Text>
+        {/* Autoplay (fault 35): a preference that changes REAL
+            behaviour — it governs the Watch/mini players and
+            Shorts. Samagam Sessions are synced group playbacks and
+            always start at their offset, preference or not. */}
+        <View style={styles.row}>
+          <MaterialIcons name="play-circle-outline" size={24} color={colors.text} />
+          <View style={styles.profileLines}>
+            <Text style={styles.rowText}>Autoplay</Text>
+            <Text style={styles.profileMeta}>
+              Start recordings and Shorts automatically when opened
+            </Text>
+          </View>
+          <Switch
+            value={autoplay}
+            onValueChange={setAutoplay}
+            accessibilityLabel="Autoplay"
+          />
+        </View>
         <Text style={styles.sectionLabel}>Library</Text>
         {libraryRows.map((row) => (
           <Pressable
@@ -359,6 +382,22 @@ export function SettingsScreen({ navigation }: Props) {
           Playback uses the official YouTube player. Samagam Sessions are scheduled group
           playbacks of recordings, labelled UPCOMING, NOW PLAYING or COMPLETED.
         </Text>
+        <Pressable
+          style={styles.row}
+          onPress={() => navigation.navigate('Terms')}
+          accessibilityRole="button"
+        >
+          <MaterialIcons name="description" size={24} color={colors.text} />
+          <Text style={styles.rowText}>Terms of Use</Text>
+        </Pressable>
+        <Pressable
+          style={styles.row}
+          onPress={() => navigation.navigate('Privacy')}
+          accessibilityRole="button"
+        >
+          <MaterialIcons name="privacy-tip" size={24} color={colors.text} />
+          <Text style={styles.rowText}>Privacy Policy</Text>
+        </Pressable>
       </ScrollView>
 
       <StackTabBar navigation={navigation} activeTab="Library" />
