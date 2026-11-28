@@ -1014,10 +1014,20 @@ export function WatchScreen({ route, navigation }: Props) {
   const backRow = useMemo(
     () => (
       <View style={styles.backRow}>
-        <BackButton onPress={() => goBackOrTab(navigation, 'Home')} />
+        {/* A plain watch's Back minimizes FIRST (28 Nov 2026, round-3
+            verification): beforeRemove only fires when the screen is
+            actually removed, but a fresh deep-link boot has no
+            MainTabs under Watch, so goBackOrTab PUSHES the tabs over
+            this screen — it is never removed, the listener never
+            fires, and the player ends up parked and paused with no
+            mini card. minimizeAndLeave is idempotent for the normal
+            pop path (the listener minimizes again, a no-op). */}
+        <BackButton
+          onPress={persistent ? minimizeAndLeave : () => goBackOrTab(navigation, 'Home')}
+        />
       </View>
     ),
-    [navigation, styles],
+    [navigation, styles, persistent, minimizeAndLeave],
   );
 
   const header = useMemo(() => {
