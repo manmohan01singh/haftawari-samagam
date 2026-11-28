@@ -91,15 +91,41 @@ export function PlaybackHost({
   // where no mini may show, or a Back that left the store in 'full'
   // with no slot), it must be PAUSED. A YouTube iframe playing
   // invisibly is both a user trap (sound with no stop control) and
-  // a YouTube policy violation (background players, III.I.9). The
-  // listener fires on every visibility change; pausing an already
-  // paused player is a no-op.
+  // a YouTube policy violation (background players, III.I.9).
+  //
+  // TIMING (user report, 28 Nov 2026: "kuch vi play nahi ho
+  // reha"): the first version paused INSTANTLY — but opening a
+  // video passes through a brief not-visible window (the store
+  // opens the item while the route is still Home and the Watch
+  // slot has not measured yet), so the pause landed on every
+  // legitimate open and killed autoplay. Now: bar-hidden routes
+  // (SessionWatch/Admin/auth — the player can NEVER be visible
+  // there) pause immediately; any other invisibility must persist
+  // for 900 ms before the pause lands, which no real transition
+  // takes.
+  const visibleRef = useRef(playerVisible);
+  visibleRef.current = playerVisible;
   React.useEffect(() => {
     if (playerVisible) return;
-    if (item.kind === 'youtube') ytRef.current?.pause();
-    else hostedRef.current?.pause();
-    setPlaying(false);
-  }, [playerVisible, mode, item.kind, setPlaying]);
+    const pauseNow = () => {
+      if (item.kind === 'youtube') ytRef.current?.pause();
+      else hostedRef.current?.pause();
+      setPlaying(false);
+    };
+    if (barHidden) {
+      pauseNow();
+      return;
+    }
+    // On the Watch route the player belongs to that screen — its
+    // slot may still be measuring, and the screen's own unmount
+    // changes the route (which re-runs this effect). Never pause
+    // while Watch owns the screen.
+    if (isWatchRoute) return;
+    const t = setTimeout(() => {
+      if (!visibleRef.current) pauseNow();
+    }, 900);
+    return () => clearTimeout(t);
+  }, [playerVisible, mode, item.kind, setPlaying, barHidden, isWatchRoute]);
   const bottomOffset = layout.bottomNavHeight + Math.max(insets.bottom, 12) + 8;
 
   const togglePlay = () => {
