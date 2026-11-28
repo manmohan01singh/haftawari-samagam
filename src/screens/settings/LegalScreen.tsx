@@ -104,7 +104,7 @@ export function PrivacyScreen({ navigation }: PrivacyProps) {
         },
         {
           heading: 'What we never do',
-          body: 'We do not sell your data, we do not show third-party advertising based on it, and we do not track you across other apps or websites.',
+          body: 'We do not sell your data, we run no advertising of our own, and we do not track you across other apps or websites. The official YouTube player may show YouTube’s own ads before or during a recording — those are served and chosen by YouTube, exactly as on YouTube itself.',
         },
         {
           heading: 'Sessions and chat',

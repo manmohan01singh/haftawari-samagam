@@ -38,7 +38,8 @@ export function HelpScreen({ navigation }: Props) {
         <Text style={styles.body}>
           Playback uses the official YouTube player. A copy hosted for a session
           needs you to be signed in; the same recording on YouTube is open to
-          everyone, and a finished session&apos;s page will offer it.
+          everyone, and when a finished session&apos;s recording is also on
+          YouTube, its page offers that copy to everyone too.
         </Text>
 
         <Text style={styles.sectionTitle}>Your account</Text>
@@ -52,7 +53,7 @@ export function HelpScreen({ navigation }: Props) {
         <Text style={styles.sectionTitle}>Saving &amp; playlists</Text>
         <Text style={styles.body}>
           To keep a recording, open its &#8943; menu (on a card, or on the watch
-          page) and tap Save — it waits for you under Saved in the Library. You
+          page) and tap Save — it waits for you under Watch Later in the Library. You
           can also add recordings to playlists of your own from the same menu.
           While signed out, what you watched stays on this device only.
         </Text>

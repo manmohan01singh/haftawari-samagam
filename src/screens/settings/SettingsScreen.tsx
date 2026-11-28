@@ -44,6 +44,10 @@ interface SettingsRow {
 
 const APP_VERSION = (appJson as { expo?: { version?: string } }).expo?.version ?? '';
 
+/** Speed choices for hosted recordings — the same set the hosted
+ *  player's own settings sheet offers. */
+const SPEED_OPTIONS = [0.75, 1, 1.25, 1.5, 2];
+
 const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: 'system', label: 'System default' },
   { value: 'light', label: 'Light' },
@@ -86,6 +90,8 @@ export function SettingsScreen({ navigation }: Props) {
   const { colors, preference, setPreference } = useTheme();
   const autoplay = usePreferencesStore((s) => s.autoplay);
   const setAutoplay = usePreferencesStore((s) => s.setAutoplay);
+  const hostedSpeed = usePreferencesStore((s) => s.hostedSpeed);
+  const setHostedSpeed = usePreferencesStore((s) => s.setHostedSpeed);
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [confirmingSignOut, setConfirmingSignOut] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -299,6 +305,36 @@ export function SettingsScreen({ navigation }: Props) {
             accessibilityLabel="Autoplay"
           />
         </View>
+        {/* Hosted recordings speed (fix round 4, fault 35): a real
+            default for the sangat's own hosted player — the same
+            choice its in-player settings sheet offers, kept across
+            recordings. YouTube recordings keep YouTube's own speed
+            control; live sessions stay locked in sync. */}
+        <View style={styles.row}>
+          <MaterialIcons name="speed" size={24} color={colors.text} />
+          <View style={styles.profileLines}>
+            <Text style={styles.rowText}>Hosted recordings speed</Text>
+            <Text style={styles.profileMeta}>
+              Default speed for sangat-hosted recordings
+            </Text>
+          </View>
+        </View>
+        <View style={styles.speedChips}>
+          {SPEED_OPTIONS.map((rate) => (
+            <Pressable
+              key={rate}
+              style={[styles.speedChip, hostedSpeed === rate && styles.speedChipActive]}
+              onPress={() => setHostedSpeed(rate)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: hostedSpeed === rate }}
+              accessibilityLabel={`Speed ${rate} times`}
+            >
+              <Text style={[styles.speedChipText, hostedSpeed === rate && styles.speedChipTextActive]}>
+                {`${rate}×`}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
         <Text style={styles.sectionLabel}>Library</Text>
         {libraryRows.map((row) => (
           <Pressable
@@ -448,6 +484,24 @@ const createStyles = (colors: ThemeColors) =>
     profileLines: { flex: 1 },
     profileName: { fontSize: 16, fontWeight: '600', color: colors.text },
     profileMeta: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
+    speedChips: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.sm,
+      paddingHorizontal: spacing.lg,
+      paddingBottom: spacing.md,
+    },
+    speedChip: {
+      paddingHorizontal: 14,
+      paddingVertical: 7,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+    },
+    speedChipActive: { backgroundColor: colors.text, borderColor: colors.text },
+    speedChipText: { fontSize: 13, fontWeight: '600', color: colors.text },
+    speedChipTextActive: { color: colors.background },
     authButtons: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
     primaryButton: {
       backgroundColor: colors.subscribeBackground,

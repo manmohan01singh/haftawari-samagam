@@ -19,27 +19,45 @@ const STORAGE_KEY = 'haftawari.preferences.v1';
 
 interface PreferencesState {
   autoplay: boolean;
+  /**
+   * Default playback speed for HOSTED recordings (the sangat's own
+   * hosted player supports real rate control; the official YouTube
+   * embed's speed stays in its own settings, and live sessions
+   * lock the rate to stay in sync — neither is governed by this).
+   */
+  hostedSpeed: number;
   hydrated: boolean;
   setAutoplay: (value: boolean) => void;
+  setHostedSpeed: (value: number) => void;
   hydrate: () => Promise<void>;
+}
+
+function persist(state: { autoplay: boolean; hostedSpeed: number }): void {
+  void AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch(() => undefined);
 }
 
 export const usePreferencesStore = create<PreferencesState>((set, get) => ({
   autoplay: true,
+  hostedSpeed: 1,
   hydrated: false,
   setAutoplay: (value) => {
     set({ autoplay: value });
-    void AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ autoplay: value })).catch(
-      () => undefined,
-    );
+    persist({ autoplay: value, hostedSpeed: get().hostedSpeed });
+  },
+  setHostedSpeed: (value) => {
+    set({ hostedSpeed: value });
+    persist({ autoplay: get().autoplay, hostedSpeed: value });
   },
   hydrate: async () => {
     if (get().hydrated) return;
     try {
       const raw = await AsyncStorage.getItem(STORAGE_KEY);
       if (raw) {
-        const parsed = JSON.parse(raw) as { autoplay?: unknown };
+        const parsed = JSON.parse(raw) as { autoplay?: unknown; hostedSpeed?: unknown };
         if (typeof parsed.autoplay === 'boolean') set({ autoplay: parsed.autoplay });
+        if (typeof parsed.hostedSpeed === 'number' && parsed.hostedSpeed >= 0.25 && parsed.hostedSpeed <= 3) {
+          set({ hostedSpeed: parsed.hostedSpeed });
+        }
       }
     } catch {
       // Unreadable storage: the defaults stand.

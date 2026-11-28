@@ -5,8 +5,10 @@ import {
   Modal,
   PanResponder,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -113,6 +115,14 @@ export function WatchScreen({ route, navigation }: Props) {
   const { videoRowId, youtubeVideoId, sessionId } = route.params;
   const { user } = useAuth();
   const autoplayEnabled = usePreferencesStore((s) => s.autoplay);
+  // Desktop theatre (fix round 4, Chat 2 #12): on wide screens a
+  // plain watch becomes two columns — player + details on the
+  // left (capped at 1280 so the 16:9 box stays inside the
+  // viewport), Up Next as a rail on the right — instead of one
+  // narrow centred column with empty margins. Phones, session
+  // watches and the mini state keep the single column untouched.
+  const { width: windowWidth } = useWindowDimensions();
+  const wideTheatre = windowWidth >= 1280 && !route.params.sessionId;
   const officialChannel = useOfficialChannel();
   // The resolved video is stored keyed by its route params; loading and
   // error are derived from whether the stored entry matches the current
@@ -1032,7 +1042,7 @@ export function WatchScreen({ route, navigation }: Props) {
   // screenshot 06. Previously it lived inside ListHeaderComponent and
   // scrolled away with the sheet.
   const player = resolved ? (
-    <View style={[styles.playerWrap, mini && styles.playerWrapMini, !mini && { marginTop: insets.top }]}>
+    <View style={[styles.playerWrap, mini && styles.playerWrapMini, !mini && { marginTop: insets.top }, wideTheatre && !mini ? styles.playerWrapWide : null]}>
       {/* The player box is in the SAME tree position in both modes —
           only its style changes (full 16:9 ↔ 106px mini thumb). The
           YouTubePlayer element therefore never unmounts/remounts on
@@ -1565,38 +1575,73 @@ export function WatchScreen({ route, navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      {player}
-      <FlatList
-        style={[styles.list, mini && styles.listMini]}
-        contentContainerStyle={[styles.listContent, mini && styles.listContentMini]}
-        data={upNextItems}
-        renderItem={renderUpNext}
-        keyExtractor={keyExtractor}
-        ListHeaderComponent={
-          <View>
-            {header}
-            {/* QA issue 56: an explicit "Up Next" heading above the
-                compact rows (shown only when there are items). */}
-            {upNextItems.length > 0 ? <Text style={styles.upNextHeading}>Up Next</Text> : null}
+      {wideTheatre && !mini ? (
+        <View style={styles.theatreRow}>
+          <View style={styles.theatreMain}>
+            {player}
+            <ScrollView style={styles.theatreScroll} contentContainerStyle={styles.theatreScrollContent}>
+              {header}
+            </ScrollView>
           </View>
-        }
-        ListEmptyComponent={
-          <Text style={styles.upNextEmpty}>No other published recordings yet.</Text>
-        }
-        ListFooterComponent={
-          // Paging continues automatically via onEndReached (audit
-          // B5 — YouTube's Up Next never asks for a tap); the footer
-          // is just a spinner while the next page is in flight.
-          upNextItems.length > 0 && upNextLoadingMore ? (
-            <View style={styles.loadMoreRow}>
-              <ActivityIndicator color={colors.textSecondary} />
-            </View>
-          ) : undefined
-        }
-        onEndReached={loadMoreUpNext}
-        onEndReachedThreshold={0.5}
-        {...FEED_LIST_PERF}
-      />
+          <View style={styles.theatreRail}>
+            {upNextItems.length > 0 ? <Text style={styles.upNextHeading}>Up Next</Text> : null}
+            <FlatList
+              style={styles.list}
+              data={upNextItems}
+              renderItem={renderUpNext}
+              keyExtractor={keyExtractor}
+              ListEmptyComponent={
+                <Text style={styles.upNextEmpty}>No other published recordings yet.</Text>
+              }
+              ListFooterComponent={
+                upNextItems.length > 0 && upNextLoadingMore ? (
+                  <View style={styles.loadMoreRow}>
+                    <ActivityIndicator color={colors.textSecondary} />
+                  </View>
+                ) : undefined
+              }
+              onEndReached={loadMoreUpNext}
+              onEndReachedThreshold={0.5}
+              {...FEED_LIST_PERF}
+            />
+          </View>
+        </View>
+      ) : (
+        <>
+          {player}
+          <FlatList
+            style={[styles.list, mini && styles.listMini]}
+            contentContainerStyle={[styles.listContent, mini && styles.listContentMini]}
+            data={upNextItems}
+            renderItem={renderUpNext}
+            keyExtractor={keyExtractor}
+            ListHeaderComponent={
+              <View>
+                {header}
+                {/* QA issue 56: an explicit "Up Next" heading above the
+                compact rows (shown only when there are items). */}
+                {upNextItems.length > 0 ? <Text style={styles.upNextHeading}>Up Next</Text> : null}
+              </View>
+            }
+            ListEmptyComponent={
+              <Text style={styles.upNextEmpty}>No other published recordings yet.</Text>
+            }
+            ListFooterComponent={
+              // Paging continues automatically via onEndReached (audit
+              // B5 — YouTube's Up Next never asks for a tap); the footer
+              // is just a spinner while the next page is in flight.
+              upNextItems.length > 0 && upNextLoadingMore ? (
+                <View style={styles.loadMoreRow}>
+                  <ActivityIndicator color={colors.textSecondary} />
+                </View>
+              ) : undefined
+            }
+            onEndReached={loadMoreUpNext}
+            onEndReachedThreshold={0.5}
+            {...FEED_LIST_PERF}
+          />
+        </>
+      )}
       {/* ⋮ action menu (screenshot 06 •••): only actions that really
           work here — Share (system sheet), Save + Save to playlist
           (saved_videos / playlists backends, archive rows + signed-in
@@ -1749,6 +1794,21 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   // restyle the WRAP into a bottom bar while the box — and the
   // player inside it — only changes size, never remounts.
   playerBox: { width: '100%', aspectRatio: layout.thumbnailAspectRatio },
+  // Desktop theatre (fix round 4 #12).
+  playerWrapWide: { maxWidth: 1280 },
+  theatreRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 1720,
+    gap: spacing.lg,
+    paddingHorizontal: spacing.lg,
+  },
+  theatreMain: { flex: 1, maxWidth: 1280 },
+  theatreScroll: { flex: 1 },
+  theatreScrollContent: { paddingBottom: spacing.xl },
+  theatreRail: { width: 380, paddingTop: spacing.md },
   playerBoxMini: { width: 106, aspectRatio: layout.thumbnailAspectRatio, borderRadius: 6, overflow: 'hidden' },
   playerWrapMini: {
     position: 'absolute',

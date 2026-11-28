@@ -23,6 +23,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useEvent, useEventListener } from 'expo';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { layout, radii, spacing, useTheme, type ThemeColors } from '../../theme';
+import { usePreferencesStore } from '../../features/settings/preferencesStore';
 
 export interface HostedPlayerHandle {
   /** Seek to an absolute position (seconds). */
@@ -190,7 +191,14 @@ export const HostedPlayer = memo(
     const [initialStart] = useState(() => Math.max(0, Math.floor(startSeconds)));
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [scrubbing, setScrubbing] = useState<number | null>(null);
-    const [rateIndex, setRateIndex] = useState(0);
+    // Initial rate = the viewer's stored default (Settings →
+    // Playback → Hosted recordings speed; fix round 4 #35). Live
+    // sessions lock the rate and ignore it.
+    const [rateIndex, setRateIndex] = useState(() => {
+      const pref = usePreferencesStore.getState().hostedSpeed;
+      const idx = RATES.indexOf(pref);
+      return idx >= 0 ? idx : 0;
+    });
     const trackWidth = useRef(0);
     // YouTube-style control chrome (Phase C parity): the controls
     // auto-hide while playing, a tap toggles them, a double-tap on
@@ -446,10 +454,24 @@ export const HostedPlayer = memo(
         player.playbackRate = rate;
         const idx = RATES.indexOf(rate);
         if (idx >= 0) setRateIndex(idx);
+        // The chosen speed becomes the default for hosted
+        // recordings (unless this player is a rate-locked live
+        // session, whose choices are not the viewer's to keep).
+        if (!lockRate) usePreferencesStore.getState().setHostedSpeed(rate);
         setSheetOpen(false);
       },
-      [player],
+      [player, lockRate],
     );
+
+    // Apply the stored default rate once the player exists (mount
+    // only — later changes go through chooseRate above).
+    const initialRateAppliedRef = useRef(false);
+    useEffect(() => {
+      if (initialRateAppliedRef.current) return;
+      initialRateAppliedRef.current = true;
+      if (!lockRate && rateIndex > 0) player.playbackRate = RATES[rateIndex];
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [player]);
 
     // Manual retry from the error state (audit B1): re-mint the
     // signed URL through the same path the silent refresh uses and
