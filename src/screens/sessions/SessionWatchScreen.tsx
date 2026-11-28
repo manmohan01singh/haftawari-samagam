@@ -2,6 +2,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   AppState,
   Modal,
   Platform,
@@ -618,10 +619,18 @@ export function SessionWatchScreen({ route, navigation }: Props) {
     // not a lone spinner — the layout must not jump when data arrives.
     return (
       <View style={styles.root}>
-        <View style={styles.playerSkeleton}>
-          <Text style={styles.playerSkeletonLabel}>Loading Samagam…</Text>
+        {/* The skeleton mirrors the loaded layout (loading-state
+            audit, 28 Nov 2026): the player block sits in the same
+            black, centred, max-width playerArea as the real player
+            — uncapped, its 16:9 block outgrew wide viewports and
+            the label read as floating in a pale void. */}
+        <View style={styles.playerArea}>
+          <View style={styles.playerSkeleton}>
+            <ActivityIndicator color="#FFFFFF" />
+            <Text style={styles.playerSkeletonLabel}>Loading Samagam…</Text>
+          </View>
         </View>
-        <View style={styles.sheetSkeleton}>
+        <View style={[styles.sheetSkeleton, styles.sheetSkeletonCapped]}>
           <View style={[styles.skelLine, { width: '85%' }]} />
           <View style={[styles.skelLine, { width: '52%', marginTop: 8 }]} />
           <View style={[styles.skelPill, { marginTop: spacing.lg }]} />
@@ -1038,11 +1047,13 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   playerSkeleton: {
     width: '100%',
     aspectRatio: layout.thumbnailAspectRatio,
-    backgroundColor: colors.surfaceVariant,
+    backgroundColor: colors.playerBackground,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: spacing.md,
   },
-  playerSkeletonLabel: { ...typography.metadata, color: colors.textSecondary },
+  playerSkeletonLabel: { ...typography.metadata, color: '#FFFFFF' },
+  sheetSkeletonCapped: { width: '100%', maxWidth: 1060, alignSelf: 'center' },
   sheetSkeleton: {
     flex: 1,
     backgroundColor: colors.surface,

@@ -294,10 +294,16 @@ export function SessionsListScreen({ navigation, route }: Props) {
       <View style={styles.screen}>
         {topBar}
         <View style={styles.loadingPad}>
-          <Text style={styles.loadingLabel}>Loading sessions…</Text>
-          <SkeletonCard variant="shelf" />
-          <SkeletonCard variant="shelf" />
-          <SkeletonCard variant="shelf" />
+          {/* Same centred column as the loaded list (contentWide) —
+              the skeletons used to stretch to the full window width
+              on wide screens while the real cards sit in the column
+              (loading-state audit, 28 Nov 2026). */}
+          <View style={styles.contentWide}>
+            <Text style={styles.loadingLabel}>Loading sessions…</Text>
+            <SkeletonCard variant="shelf" />
+            <SkeletonCard variant="shelf" />
+            <SkeletonCard variant="shelf" />
+          </View>
         </View>
         <StackTabBar navigation={navigation} activeTab={null} />
       </View>
