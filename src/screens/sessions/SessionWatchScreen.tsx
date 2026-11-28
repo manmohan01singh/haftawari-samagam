@@ -83,6 +83,22 @@ const DRIFT_TOLERANCE_SECONDS = 5;
  */
 const HOSTED_DRIFT_TOLERANCE_SECONDS = 1.5;
 const HOSTED_DRIFT_CHECK_MS = 2_000;
+/**
+ * Live-edge lock for the YouTube embed (user finding, 28 Nov 2026:
+ * in a session the viewer could seek PAST the live edge, which a
+ * real live player never allows). The embed's own seek bar cannot
+ * be capped from outside, so the app enforces the cap itself: every
+ * second the reported position is compared with the session's live
+ * edge, and anything beyond edge + tolerance is seeked straight
+ * back to the edge — one check, no strikes, it is a hard cap, not
+ * drift. Seeking BEHIND the edge stays allowed (live DVR): once the
+ * viewer is further behind than the threshold they count as
+ * intentionally behind, drift correction leaves them alone, and the
+ * Sync pill is how they return to the edge.
+ */
+const EMBED_EDGE_CHECK_MS = 1_000;
+const EMBED_EDGE_TOLERANCE_SECONDS = 1.5;
+const EMBED_BEHIND_THRESHOLD_SECONDS = 3;
 
 /**
  * Synchronized Samagam watch screen.
@@ -441,6 +457,41 @@ export function SessionWatchScreen({ route, navigation }: Props) {
     // activeSeekTo dispatches on isHosted (in deps).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, playerReady, session, durationSeconds, isHosted, behindLive]);
+
+  // ── Live-edge lock (YouTube embed, NOW PLAYING) ────────────────────
+  // The hosted player caps its own scrubber at the live edge; the
+  // embed's cannot be capped, so the position is policed instead.
+  // NOW PLAYING only — the plain Watch screen never runs this.
+  useEffect(() => {
+    if (status !== 'now_playing' || !playerReady || isHosted) return;
+    const timer = setInterval(() => {
+      const reported = playerTimeRef.current;
+      if (reported == null) return;
+      const edge = deriveOffsetSeconds({
+        scheduledStartAt: session?.scheduled_start_at ?? '',
+        durationSeconds,
+        nowMs: serverClock.nowMs(),
+      });
+      if (reported > edge + EMBED_EDGE_TOLERANCE_SECONDS) {
+        // Past the live edge — impossible in a real live player.
+        // Snap straight back to the edge.
+        activeSeekTo(edge);
+        playerTimeRef.current = edge;
+        return;
+      }
+      // Intentionally behind (DVR): mark it so the drift correction
+      // above does not yank the viewer forward; the Sync pill (which
+      // force-seeks) is the way back. Back near the edge clears it.
+      if (!behindLiveRef.current && reported < edge - EMBED_BEHIND_THRESHOLD_SECONDS) {
+        setBehindLive(true);
+      } else if (behindLiveRef.current && reported >= edge - EMBED_BEHIND_THRESHOLD_SECONDS) {
+        setBehindLive(false);
+      }
+    }, EMBED_EDGE_CHECK_MS);
+    return () => clearInterval(timer);
+    // activeSeekTo dispatches on isHosted (in deps).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, playerReady, session, durationSeconds, isHosted]);
 
   // ── Hosted playback URL (signed, short-lived, members only) ───────
   useEffect(() => {
