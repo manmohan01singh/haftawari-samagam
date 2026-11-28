@@ -125,16 +125,25 @@ export function supabaseCardData(
   };
 }
 
-export function apiCardData(meta: YouTubeVideoMetadata, channelAvatarUrl: string | null): CardVideoData {
+export function apiCardData(
+  meta: YouTubeVideoMetadata,
+  channelAvatarUrl: string | null,
+  overrides?: { viewCount?: number | null; liveMeta?: YouTubeVideoMetadata | null },
+): CardVideoData {
   let metaLine: string;
   if (meta.liveBroadcastContent === 'live') {
-    metaLine =
-      meta.concurrentViewers != null ? `${formatCount(meta.concurrentViewers)} watching` : 'Live now';
+    // One live count everywhere (fix round 5, #5): the screen's
+    // refreshed live map wins over the count frozen into the feed
+    // item when it was gathered — the card and the Watch page read
+    // the same live source, refreshed on a timer.
+    const viewers = overrides?.liveMeta?.concurrentViewers ?? meta.concurrentViewers;
+    metaLine = viewers != null ? `${formatCount(viewers)} watching` : 'Live now';
   } else if (meta.liveBroadcastContent === 'upcoming') {
     metaLine = `Upcoming · ${formatDateLine(meta.publishedAt)}`;
   } else {
     const parts: string[] = [];
-    if (meta.viewCount != null) parts.push(`▷ ${formatCount(meta.viewCount)}`);
+    const views = overrides?.viewCount ?? meta.viewCount;
+    if (views != null) parts.push(`▷ ${formatCount(views)}`);
     const ago = timeAgo(meta.publishedAt);
     if (ago) parts.push(ago);
     metaLine = parts.join('\u00A0·\u00A0');

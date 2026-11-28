@@ -26,6 +26,7 @@ import {
   createHomeFeedPager,
   feedItemYoutubeId,
   resolveChipFilter,
+  sortFeedItems,
   type HomeFeedItem,
   type HomeFeedPager,
 } from '../../features/home/homeFeed';
@@ -54,6 +55,16 @@ type Props = CompositeScreenProps<
 
 const PAGE_SIZE = 25;
 const ALL_CHIP = 'All';
+
+/**
+ * Chip results cache, MODULE-level (fix round 5, #1): it used to
+ * live in a ref, so any remount of this screen (tab returns in the
+ * cloud browser, navigation resets) threw away every chip's items
+ * and the full "Gathering the sangat…" loader ran again — while
+ * the Back-route restore, which never remounted, looked instant.
+ * Module scope survives remounts for the whole app session.
+ */
+const SHARED_CHIP_CACHE = new Map<string, { items: HomeFeedItem[]; exhausted: boolean }>();
 
 /** "Today · 7:00 PM" / "Tomorrow · 4:00 PM" / "Sat, 5 Dec · 4:00 PM" — device-local. */
 function formatSessionStart(startAtMs: number): string {
@@ -209,7 +220,7 @@ export function HomeScreen({ navigation }: Props) {
   // Per-chip feed cache for keepPreviousData (fault 1/N2): the last
   // items each chip produced this session, so revisiting a chip is
   // instant and a chip change never blanks the screen.
-  const chipCacheRef = useRef(new Map<string, { items: HomeFeedItem[]; exhausted: boolean }>());
+  const chipCacheRef = useRef(SHARED_CHIP_CACHE);
   // Real live state from the YouTube API (QA 49/68): a map of
   // youtube_video_id → live/upcoming metadata for the official
   // channel. Archive rows have no live flag of their own.
@@ -218,18 +229,57 @@ export function HomeScreen({ navigation }: Props) {
   const refreshLive = useCallback(async (force: boolean) => {
     if (!isYouTubeConfigured) return;
     try {
-      const metas = force
-        ? await getLiveFresh(OFFICIAL_CHANNEL_ID)
-        : await getLiveCached(OFFICIAL_CHANNEL_ID);
-      setLiveMap(new Map(metas.map((m) => [m.youtubeVideoId, m])));
+      // EVERY registry channel, not only the official one (fix
+      // round 5, #5): SGPC's live card count froze at gather time
+      // while its Watch page showed the real number, because this
+      // map — the card counts' live source — only ever held the
+      // official channel's broadcasts.
+      const lists = await Promise.all(
+        channels.map((c) =>
+          (force ? getLiveFresh(c.youtubeChannelId) : getLiveCached(c.youtubeChannelId)).catch(
+            () => [] as YouTubeVideoMetadata[],
+          ),
+        ),
+      );
+      const merged = new Map<string, YouTubeVideoMetadata>();
+      for (const list of lists) {
+        for (const m of list) merged.set(m.youtubeVideoId, m);
+      }
+      if (merged.size > 0 || force) setLiveMap(merged);
     } catch {
       // A failed live check leaves the last known map in place.
     }
-  }, []);
+  }, [channels]);
 
   useEffect(() => {
     void refreshLive(false);
   }, [refreshLive]);
+
+  // Live counts keep breathing (fix round 5, #5): while Home is
+  // mounted, re-check the channels that currently have a live
+  // broadcast every 60 s so card counts track the Watch page's
+  // instead of freezing at first paint.
+  const liveMapRef = useRef(liveMap);
+  liveMapRef.current = liveMap;
+  useEffect(() => {
+    const t = setInterval(() => {
+      const channelIds = [...new Set([...liveMapRef.current.values()].map((m) => m.channelId))];
+      if (channelIds.length === 0) return;
+      void (async () => {
+        const lists = await Promise.all(
+          channelIds.map((id) => getLiveFresh(id).catch(() => [] as YouTubeVideoMetadata[])),
+        );
+        setLiveMap((prev) => {
+          const next = new Map(prev);
+          for (const list of lists) {
+            for (const m of list) next.set(m.youtubeVideoId, m);
+          }
+          return next;
+        });
+      })();
+    }, 60_000);
+    return () => clearInterval(t);
+  }, []);
 
   // NOW PLAYING Samagam session, if one is really running right now:
   // derived from the real sessions table + server clock (the same
@@ -371,6 +421,14 @@ export function HomeScreen({ navigation }: Props) {
       setItems(cached.items);
       setExhausted(cached.exhausted);
       setLoading(false);
+    } else {
+      // Chip discipline (fix round 5, #9): a chip with no cache
+      // must show its OWN loading state — never the previous chip's
+      // items under this chip's name. "Sakhi" appeared to show the
+      // full unfiltered feed because the All items stayed on screen
+      // while Sakhi's first page loaded.
+      setItems([]);
+      setExhausted(false);
     }
     const resolved = resolveChipFilter(selectedChip, channels);
     const pager = createHomeFeedPager({
@@ -381,8 +439,9 @@ export function HomeScreen({ navigation }: Props) {
     try {
       const first = await pager.next(PAGE_SIZE);
       if (generationRef.current !== generation) return;
-      chipCacheRef.current.set(selectedChip, { items: first.items, exhausted: first.exhausted });
-      setItems(first.items);
+      const sortedFirst = sortFeedItems(first.items);
+      chipCacheRef.current.set(selectedChip, { items: sortedFirst, exhausted: first.exhausted });
+      setItems(sortedFirst);
       setExhausted(first.exhausted);
     } catch {
       if (generationRef.current !== generation) return;
@@ -464,7 +523,10 @@ export function HomeScreen({ navigation }: Props) {
         if (generationRef.current !== generation) return;
         if (page.items.length > 0) {
           setItems((prev) => {
-            const next = [...prev, ...page.items];
+            // Whole-list sort on every append (N-5): the visible
+            // order is a pure function of the gathered set, so it
+            // cannot reshuffle between visits.
+            const next = sortFeedItems([...prev, ...page.items]);
             chipCacheRef.current.set(selectedChip, { items: next, exhausted: page.exhausted });
             return next;
           });
@@ -536,7 +598,10 @@ export function HomeScreen({ navigation }: Props) {
               item.video.youtube_video_id ? (liveMap.get(item.video.youtube_video_id) ?? null) : null,
               item.video.youtube_video_id ? (statsMap.get(item.video.youtube_video_id) ?? null) : null,
             )
-          : apiCardData(item.meta, avatarByChannelId.get(item.meta.channelId) ?? item.channel.avatarUrl),
+          : apiCardData(item.meta, avatarByChannelId.get(item.meta.channelId) ?? item.channel.avatarUrl, {
+              viewCount: statsMap.get(item.meta.youtubeVideoId) ?? null,
+              liveMeta: liveMap.get(item.meta.youtubeVideoId) ?? null,
+            }),
       );
     }
     return map;
@@ -546,8 +611,15 @@ export function HomeScreen({ navigation }: Props) {
     if (!isYouTubeConfigured) return;
     const missing: string[] = [];
     for (const item of items) {
-      if (item.kind !== 'catalogue') continue;
-      const id = item.video.youtube_video_id;
+      // Catalogue rows (no statistics of their own) AND upload
+      // items whose metadata arrived without a view count (fix
+      // round 5, #5 — some cards showed no count at all).
+      const id =
+        item.kind === 'catalogue'
+          ? item.video.youtube_video_id
+          : item.meta.viewCount == null
+            ? item.meta.youtubeVideoId
+            : null;
       if (id && !statsAskedRef.current.has(id)) {
         statsAskedRef.current.add(id);
         missing.push(id);

@@ -48,7 +48,7 @@
 import { uploadsPlaylistIdFor, type AppChannel } from '../channels/channelsService';
 import { getUploadsCached, getUploadsPageCached } from '../channels/channelCache';
 import { isSupabaseConfigured } from '../../lib/supabase';
-import { contentKeyFor } from '../../lib/contentDedupe';
+import { contentKeyFor, normaliseTitleHard } from '../../lib/contentDedupe';
 import { fetchPublishedVideos } from '../../lib/videos';
 import {
   OFFICIAL_CHANNEL_ID,
@@ -253,9 +253,23 @@ function latestFirst(items: HomeFeedItem[]): HomeFeedItem[] {
     const la = feedItemIsLive(a) ? 0 : 1;
     const lb = feedItemIsLive(b) ? 0 : 1;
     if (la !== lb) return la - lb;
-    return feedItemTimestamp(b) - feedItemTimestamp(a);
+    const dt = feedItemTimestamp(b) - feedItemTimestamp(a);
+    if (dt !== 0) return dt;
+    // Deterministic tiebreak (fix round 5, N-5): the same SET of
+    // items must always produce the same ORDER — batch-arrival
+    // order used to leak in through ties, so tapping All reshuffled
+    // the feed and returning via minimise restored a different one.
+    return a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
   });
 }
+
+/**
+ * The one ordering for the whole feed (exported for the screen):
+ * the screen re-sorts its FULL list with this on every append, so
+ * the visible order is a pure function of the items gathered —
+ * never of which batch they arrived in (N-5).
+ */
+export const sortFeedItems = latestFirst;
 
 // ── Pager ────────────────────────────────────────────────────────────
 
@@ -374,6 +388,15 @@ export function createHomeFeedPager({ channels, filter }: HomeFeedPagerOptions):
   // and always stays.
   const contentSeen = new Set<string>();
   const liveSeen = new Set<string>();
+  // Same-day same-title dedupe (fix round 5, #4): a broadcast and
+  // its same-day recording share a title but carry different
+  // durations, so the duration-keyed dedupe above can never pair
+  // them — the feed showed "Official SGPC LIVE … 28.11.2026" twice.
+  // Keyed by channel + hard-normalised title + published DAY; a
+  // later twin drops when either side is/was live or the titles
+  // are exactly equal. Daily series are safe: their titles repeat
+  // across DAYS, not within one.
+  const daySeen = new Map<string, { isLive: boolean; title: string }>();
 
   // ── Catalogue source ──────────────────────────────────────────────
   // Included for 'all' and topic filters, and for channel filters
@@ -422,6 +445,9 @@ export function createHomeFeedPager({ channels, filter }: HomeFeedPagerOptions):
   function takeCatalogue(): HomeFeedItem | null {
     while (catalogueEmitted < catalogueRows.length) {
       const row = catalogueRows[catalogueEmitted++];
+      // A card with no title is not a card (fix round 5, #4): an
+      // untitled row reads as a broken blank entry in the feed.
+      if (!row.title || row.title.trim().length === 0) continue;
       // Hosted rows have no YouTube id; dedupe them by row id instead.
       const dedupeKey = row.youtube_video_id ?? `row:${row.id}`;
       if (seen.has(dedupeKey)) continue;
@@ -574,6 +600,26 @@ export function createHomeFeedPager({ channels, filter }: HomeFeedPagerOptions):
       const ready = await fillBuffer(cursor);
       if (!ready) return null;
       const meta = cursor.buffer.shift()!;
+      // No title, no card (fix round 5, #4): an untitled item
+      // renders as a broken blank entry.
+      if (!meta.title || meta.title.trim().length === 0) {
+        drops++;
+        if (drops >= 6) return null;
+        continue;
+      }
+      // Same-day same-title twin (see daySeen above).
+      const dayKey = `${meta.channelId}|${normaliseTitleHard(meta.title)}|${(meta.publishedAt ?? '').slice(0, 10)}`;
+      const dayTwin = daySeen.get(dayKey);
+      if (
+        dayTwin &&
+        (meta.liveBroadcastContent === 'live' ||
+          dayTwin.isLive ||
+          dayTwin.title === meta.title.trim().toLowerCase())
+      ) {
+        drops++;
+        if (drops >= 6) return null;
+        continue;
+      }
       // Dedupe by YouTube id: a catalogue twin (the row renders
       // instead) or an item already emitted from another source.
       if (seen.has(meta.youtubeVideoId) || catalogueIds.has(meta.youtubeVideoId)) {
@@ -603,6 +649,12 @@ export function createHomeFeedPager({ channels, filter }: HomeFeedPagerOptions):
       }
       seen.add(meta.youtubeVideoId);
       if (contentKey != null) contentSeen.add(contentKey);
+      if (!daySeen.has(dayKey)) {
+        daySeen.set(dayKey, {
+          isLive: meta.liveBroadcastContent === 'live',
+          title: meta.title.trim().toLowerCase(),
+        });
+      }
       return { kind: 'upload', key: `yt-${meta.youtubeVideoId}`, meta, channel: cursor.channel };
     }
   }
@@ -677,12 +729,19 @@ export function createHomeFeedPager({ channels, filter }: HomeFeedPagerOptions):
       // 'latest live sab ton upar kyun nahi aa raha'): one more
       // round gives a live broadcast the chance to lead the very
       // first screen instead of landing in the second batch.
+      if (isFirstCall && collected.length >= 4) break;
       if (isFirstCall && collected.length > 0 && (rounds >= 2 || collected.some((i) => feedItemIsLive(i)))) break;
       if (collected.length > 0 && rounds >= MAX_ROUNDS_PER_CALL) break;
     }
     const catalogueDrained = catalogueEmitted >= catalogueRows.length;
+    // A channel that FAILED this call (quota/network) counts as
+    // drained for the marker (fix round 5, #8): it resets at the
+    // start of every next() call, so at return time `failed` means
+    // "produced nothing this call" — without it the end-of-feed
+    // marker could never appear while any key was dead, and the
+    // feed just dissolved into blank space.
     const exhausted =
-      catalogueDrained && cursors.every((c) => c.exhausted && c.buffer.length === 0);
+      catalogueDrained && cursors.every((c) => (c.exhausted || c.failed) && c.buffer.length === 0);
     // Latest first per batch (live broadcasts lead, then newest
     // published): the round-robin above only GATHERS across sources
     // so no channel dominates; the visible order is recency, the
