@@ -425,7 +425,13 @@ export function WatchScreen({ route, navigation }: Props) {
           // YouTube's count for the video; the Like BUTTON's count
           // is the sangat's own in this app. Unlabelled, the two
           // numbers contradicted each other on the same screen.
-          if (meta.likeCount != null) metaParts.push(`${formatCount(meta.likeCount)} likes on YouTube`);
+          // One-number rule (blueprint round 2, fault 13):
+          // YouTube's like count is NOT shown on Watch — beside the
+          // app's own Like button it always read as a contradiction
+          // ("1" vs "361 likes"), however it was labelled. The only
+          // like number on this screen is the sangat's own count on
+          // the button. Views + date stay (no second views number
+          // exists on the screen to contradict them).
           if (isLive) {
             if (meta.concurrentViewers != null) {
               metaParts.push(`${formatCount(meta.concurrentViewers)} watching`);
@@ -1138,26 +1144,33 @@ export function WatchScreen({ route, navigation }: Props) {
               to the round-3 honest toast. Dislike still holds no
               state — no backend, honest toast only. */}
           <View style={styles.actionRow}>
+            {/* Follow control — fixed anatomy in BOTH states
+                (blueprint round 2, faults 18/N11): bell + TEXT,
+                minWidth reserved, never icon-only. The old icon-only
+                bell pill (the reference's post-subscribe geometry)
+                left first-time users unable to tell what the button
+                was or what it did. The toast carries the one-line
+                explanation: following here is in-app only. */}
             <Pressable
               style={styles.channelPill}
               onPress={() => {
                 toggleFollow();
                 showToast(
                   following
-                    ? 'Removed from your followed channels on this device'
-                    : 'Following this channel on this device',
+                    ? 'Unfollowed — tap Follow again to undo'
+                    : "Following in this app — this doesn't subscribe you on YouTube",
                 );
               }}
               accessibilityRole="button"
-              accessibilityLabel={following ? 'Following this channel' : 'Follow this channel'}
+              accessibilityLabel={following ? 'Following this channel in this app' : 'Follow this channel in this app'}
               accessibilityState={{ selected: following }}
             >
               <MaterialIcons
                 name={following ? 'notifications' : 'notifications-none'}
-                size={20}
+                size={18}
                 color={colors.text}
               />
-              <MaterialIcons name="expand-more" size={18} color={colors.text} />
+              <Text style={styles.channelPillText}>{following ? 'Following' : 'Follow'}</Text>
             </Pressable>
             <View style={styles.actions}>
               {/* YouTube's segmented Like|Dislike pill (audit B2):
@@ -1524,14 +1537,6 @@ export function WatchScreen({ route, navigation }: Props) {
             accessibilityRole="button"
           />
           <View style={styles.chatSheetHost}>
-            <RequireAuthSheet
-              action={authAction}
-              onDismiss={() => setAuthAction(null)}
-              onSignIn={() => {
-                setAuthAction(null);
-                navigation.navigate('SignIn');
-              }}
-            />
             <VideoCommentsSheet
               engagement={engagement}
               user={
@@ -1561,6 +1566,20 @@ export function WatchScreen({ route, navigation }: Props) {
         userId={user?.id ?? null}
         videoId={playlistTargetId}
         onClose={() => setPlaylistTargetId(null)}
+      />
+      {/* Guest auth sheet at the SCREEN ROOT (blueprint round 2,
+          fault 14): it used to render inside the comments Modal, so
+          with comments closed a guest's Like tap set state that
+          nothing displayed — a perfectly dead button. Rule for the
+          codebase: a sheet whose trigger lives outside a Modal is
+          never rendered inside one. */}
+      <RequireAuthSheet
+        action={authAction}
+        onDismiss={() => setAuthAction(null)}
+        onSignIn={() => {
+          setAuthAction(null);
+          navigation.navigate('SignIn');
+        }}
       />
       <Toast message={toast} />
     </View>
@@ -1707,13 +1726,18 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   channelPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: 6,
     backgroundColor: colors.surfaceVariant,
     borderRadius: radii.pill,
-    // Screenshot 06 bell pill: ≈52×40dp, icon-only (bell + chevron).
+    // Fixed anatomy (faults 18/N11): room for bell + the longest
+    // label ("Following") in both states, so the control never
+    // changes shape or collapses to an unexplained icon.
+    minWidth: 108,
+    justifyContent: 'center',
     paddingHorizontal: spacing.md + 2,
     paddingVertical: 9,
   },
+  channelPillText: { fontSize: 13, fontWeight: '600', color: colors.text },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 20, flexShrink: 0 },
   // Like (Phase 13): thumb + the app's real like count on one tap
   // target; the count text inherits the row's 24px icon rhythm.

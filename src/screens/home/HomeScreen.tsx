@@ -12,6 +12,7 @@ import { useWebPullToRefresh } from '../../components/gesture/WebPullToRefresh';
 import { ChipsRow } from '../../components/layout/ChipsRow';
 import { Toast, useToast } from '../../components/common/Toast';
 import { AddToPlaylistSheet } from '../../features/library';
+import { RequireAuthSheet } from '../../components/common/RequireAuthSheet';
 import { shareContent, shareFeedback } from '../../lib/share';
 import { EmptyState } from '../../components/common/EmptyState';
 import { FeedCard } from '../../components/video/FeedCard';
@@ -75,6 +76,7 @@ interface HomeFeedCellProps {
   onShareItem: (item: HomeFeedItem) => void;
   onChannelPressItem: (item: HomeFeedItem) => void;
   onOpenPlaylistItem: (item: HomeFeedItem) => void;
+  onAuthNeededItem: (action: string) => void;
 }
 
 /**
@@ -93,13 +95,15 @@ const HomeFeedCell = memo(function HomeFeedCell({
   onShareItem,
   onChannelPressItem,
   onOpenPlaylistItem,
+  onAuthNeededItem,
 }: HomeFeedCellProps) {
-  // Kebab menu actions (QA 31/32): only real actions — share (system
-  // sheet via the share util) everywhere; save toggle and
-  // save-to-playlist only for catalogue rows and signed-in users
-  // (saved_videos / playlists are FKs to catalogue rows, so an
-  // API-only upload cannot be saved — the same gating Watch uses);
-  // uploads additionally get View Channel, matching Watch's row menu.
+  // Kebab menu actions: the SAME set on every card (blueprint
+  // round 2, fault 27). Save / Save-to-playlist exist for catalogue
+  // rows (saved_videos / playlists are FKs to catalogue rows, so an
+  // API-only upload cannot be saved — the same gating Watch uses).
+  // For GUESTS the actions no longer vanish (which collapsed the
+  // menu to Share + Cancel): they route through the screen-root
+  // auth sheet instead. Uploads get View Channel, matching Watch.
   const isCatalogue = item.kind === 'catalogue';
   const menuActions = useMemo(
     () => [
@@ -109,24 +113,23 @@ const HomeFeedCell = memo(function HomeFeedCell({
         icon: 'share',
         onPress: () => onShareItem(item),
       },
-      ...(canSave && isCatalogue
+      ...(isCatalogue
         ? [
             {
               key: 'save-toggle',
-              label: saved ? 'Remove from Saved' : 'Save to Saved',
+              label: saved ? 'Remove from Saved' : 'Save to Watch Later',
               icon: saved ? 'bookmark' : 'bookmark-border',
-              onPress: () => onToggleSaveItem(item),
+              onPress: () =>
+                canSave ? onToggleSaveItem(item) : onAuthNeededItem('save this samagam'),
             },
             {
               key: 'playlist',
               label: 'Save to playlist',
               icon: 'playlist-add',
-              onPress: () => onOpenPlaylistItem(item),
+              onPress: () =>
+                canSave ? onOpenPlaylistItem(item) : onAuthNeededItem('save this samagam to a playlist'),
             },
           ]
-        : []),
-      ...(isCatalogue
-        ? []
         : [
             {
               key: 'channel',
@@ -136,7 +139,7 @@ const HomeFeedCell = memo(function HomeFeedCell({
             },
           ]),
     ],
-    [canSave, isCatalogue, saved, item, onShareItem, onToggleSaveItem, onOpenPlaylistItem, onChannelPressItem],
+    [canSave, isCatalogue, saved, item, onShareItem, onToggleSaveItem, onOpenPlaylistItem, onChannelPressItem, onAuthNeededItem],
   );
   return (
     <FeedCard
@@ -190,6 +193,10 @@ export function HomeScreen({ navigation }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [exhausted, setExhausted] = useState(false);
   const [playlistVideoId, setPlaylistVideoId] = useState<string | null>(null);
+  // Guest menu actions (Save / playlist) explain themselves here
+  // instead of vanishing from the card menu (fault 27).
+  const [authAction, setAuthAction] = useState<string | null>(null);
+  const handleAuthNeeded = useCallback((action: string) => setAuthAction(action), []);
   const { toast, showToast } = useToast();
   const loadingRef = useRef(false);
   const pagerRef = useRef<HomeFeedPager | null>(null);
@@ -681,6 +688,7 @@ export function HomeScreen({ navigation }: Props) {
               onShareItem={handleShareItem}
               onChannelPressItem={handleChannelPressItem}
               onOpenPlaylistItem={handleOpenPlaylistItem}
+              onAuthNeededItem={handleAuthNeeded}
             />
           </View>
         );
@@ -702,6 +710,7 @@ export function HomeScreen({ navigation }: Props) {
               onShareItem={handleShareItem}
               onChannelPressItem={handleChannelPressItem}
               onOpenPlaylistItem={handleOpenPlaylistItem}
+              onAuthNeededItem={handleAuthNeeded}
             />
           {index === stripAfter ? feedStrip : null}
         </>
@@ -855,6 +864,14 @@ export function HomeScreen({ navigation }: Props) {
         userId={user?.id ?? null}
         videoId={playlistVideoId}
         onClose={() => setPlaylistVideoId(null)}
+      />
+      <RequireAuthSheet
+        action={authAction}
+        onDismiss={() => setAuthAction(null)}
+        onSignIn={() => {
+          setAuthAction(null);
+          navigation.navigate('SignIn');
+        }}
       />
       <Toast message={toast} />
     </View>
