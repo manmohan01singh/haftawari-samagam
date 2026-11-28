@@ -175,6 +175,15 @@ export function ShortsScreen({ navigation }: Props) {
   const [itemH, setItemH] = useState(0);
   const [activeIndex, setActiveIndex] = useState(0);
   const [userPaused, setUserPaused] = useState(false);
+  // Muted-autoplay pattern (blueprint round 2, fault 22): browsers
+  // block UNMUTED autoplay, so Shorts start muted (the embed plays
+  // immediately, no black 0:00 frame) and the first interaction
+  // anywhere unlocks sound for the rest of the session. The poster
+  // facade covers the player until it reports actually playing, so
+  // a blocked start shows the thumbnail — never a black screen.
+  const [soundOn, setSoundOn] = useState(false);
+  const soundOnRef = useRef(false);
+  const [playingIndex, setPlayingIndex] = useState(-1);
 
   const items = useMemo(() => {
     if (!pool) return null;
@@ -232,6 +241,13 @@ export function ShortsScreen({ navigation }: Props) {
 
   const playActive = useCallback(() => {
     playerRefs.current.get(activeIndexRef.current)?.play();
+  }, []);
+
+  const unlockSound = useCallback(() => {
+    if (soundOnRef.current) return;
+    soundOnRef.current = true;
+    setSoundOn(true);
+    playerRefs.current.get(activeIndexRef.current)?.setMuted(false);
   }, []);
 
   // Focus/active choreography: exactly one short plays — the
@@ -305,6 +321,7 @@ export function ShortsScreen({ navigation }: Props) {
           {mounted ? (
             <View style={StyleSheet.absoluteFill}>
               <YouTubePlayer
+                key={item.meta.youtubeVideoId}
                 ref={(h) => {
                   if (h) playerRefs.current.set(index, h);
                   else playerRefs.current.delete(index);
@@ -312,12 +329,32 @@ export function ShortsScreen({ navigation }: Props) {
                 youtubeVideoId={item.meta.youtubeVideoId}
                 fill
                 loop
+                autoplay={isActive}
+                muted={!soundOn}
                 onReady={() => {
                   if (index === activeIndexRef.current && focusedRef.current && !userPausedRef.current) {
                     playerRefs.current.get(index)?.play();
+                    if (soundOnRef.current) playerRefs.current.get(index)?.setMuted(false);
                   }
                 }}
+                onPlayingChange={(playing) => {
+                  if (playing && index === activeIndexRef.current) setPlayingIndex(index);
+                }}
               />
+              {/* Facade until this page is REALLY playing (fault
+                  22): the poster, not a black frame. Keyed player +
+                  this overlay living outside the rail's subtree is
+                  also the fault-24 separation: opening comments
+                  re-renders the rail only, never this player. */}
+              {isActive && playingIndex !== index && item.meta.thumbnailUrl ? (
+                <Image
+                  source={{ uri: item.meta.thumbnailUrl }}
+                  style={StyleSheet.absoluteFill}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                  pointerEvents="none"
+                />
+              ) : null}
             </View>
           ) : item.meta.thumbnailUrl ? (
             <Image
@@ -328,11 +365,14 @@ export function ShortsScreen({ navigation }: Props) {
             />
           ) : null}
 
-          {/* Tap layer: play/pause the active short. */}
+          {/* Tap layer: play/pause the active short. Any tap is
+              also the sound unlock (fault 22): after the first
+              interaction the session runs unmuted. */}
           <Pressable
             style={StyleSheet.absoluteFill}
             onPress={() => {
               if (!isActive) return;
+              unlockSound();
               if (userPaused) {
                 setUserPaused(false);
                 playerRefs.current.get(index)?.play();
@@ -344,6 +384,17 @@ export function ShortsScreen({ navigation }: Props) {
             accessibilityRole="button"
             accessibilityLabel={userPaused ? 'Play' : 'Pause'}
           />
+          {isActive && !soundOn && playingIndex === index ? (
+            <Pressable
+              style={styles.soundPill}
+              onPress={unlockSound}
+              accessibilityRole="button"
+              accessibilityLabel="Tap for sound"
+            >
+              <MaterialIcons name="volume-off" size={16} color="#FFFFFF" />
+              <Text style={styles.soundPillText}>Tap for sound</Text>
+            </Pressable>
+          ) : null}
           {isActive && userPaused ? (
             <View style={styles.pausedGlyph} pointerEvents="none">
               <MaterialIcons name="play-arrow" size={72} color="rgba(255,255,255,0.9)" />
@@ -399,7 +450,7 @@ export function ShortsScreen({ navigation }: Props) {
         </View>
       );
     },
-    [activeIndex, itemH, userPaused, openRoot, styles],
+    [activeIndex, itemH, userPaused, openRoot, styles, soundOn, playingIndex, unlockSound],
   );
 
   return (
@@ -526,6 +577,19 @@ const createStyles = (colors: ThemeColors) =>
       alignItems: 'center',
       justifyContent: 'center',
     },
+    soundPill: {
+      position: 'absolute',
+      top: 12,
+      left: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: 'rgba(0,0,0,0.65)',
+      borderRadius: 999,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+    },
+    soundPillText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600' },
     overlay: {
       position: 'absolute',
       left: 0,

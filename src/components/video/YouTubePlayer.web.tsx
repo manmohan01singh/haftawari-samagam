@@ -15,6 +15,8 @@ export interface YouTubePlayerHandle {
   play: () => void;
   pause: () => void;
   seekTo: (seconds: number) => void;
+  /** Mute/unmute the embed (Shorts' muted-autoplay pattern). */
+  setMuted: (muted: boolean) => void;
 }
 
 interface YouTubePlayerProps {
@@ -28,6 +30,9 @@ interface YouTubePlayerProps {
    * browser may still block sound-on autoplay; then the embed's own
    * play button shows, exactly as before — never worse. */
   autoplay?: boolean;
+  /** Start muted (the only autoplay browsers allow without a user
+   *  gesture — Shorts' first-play pattern). */
+  muted?: boolean;
   /** The embed's own API reported 'ready'. */
   onReady?: () => void;
   /**
@@ -61,7 +66,7 @@ const Iframe = 'iframe' as unknown as React.ElementType;
  * or its ads once playback is possible.
  */
 export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(
-  function YouTubePlayer({ youtubeVideoId, onReady, onPlayingChange, fill, loop, autoplay }, ref) {
+  function YouTubePlayer({ youtubeVideoId, onReady, onPlayingChange, fill, loop, autoplay, muted }, ref) {
     const { colors } = useTheme();
     const styles = useMemo(() => createStyles(colors), [colors]);
     // Load signals are tagged with the load key (video + mount
@@ -109,6 +114,13 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
       play: () => command('playVideo'),
       pause: () => command('pauseVideo'),
       seekTo: (seconds: number) => command('seekTo', [Math.max(0, Math.floor(seconds)), true]),
+      setMuted: (m: boolean) => {
+        if (m) command('mute');
+        else {
+          command('unMute');
+          command('setVolume', [100]);
+        }
+      },
     }));
 
     // A new video (or a recovery remount) resets the command queue
@@ -171,11 +183,18 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
       setMountNonce((n) => n + 1);
     };
 
+    // The mute flag is part of the embed URL, so it is captured
+    // ONCE at mount: if it changed with the prop, the iframe src
+    // would change and the video would restart. Later mute changes
+    // travel through the setMuted command instead. (Callers key
+    // the player per video, so each video gets its own mount.)
+    const [initialMuted] = useState(() => muted);
     const embedUrl =
       `https://www.youtube.com/embed/${encodeURIComponent(youtubeVideoId)}` +
       `?rel=0&playsinline=1&enablejsapi=1` +
       (loop ? `&loop=1&playlist=${encodeURIComponent(youtubeVideoId)}` : '') +
-      (autoplay ? '&autoplay=1' : '');
+      (autoplay ? '&autoplay=1' : '') +
+      (initialMuted ? '&mute=1' : '');
 
     const showFacade = !loaded || stuck;
     return (
