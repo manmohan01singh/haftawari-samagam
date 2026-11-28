@@ -1,5 +1,6 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { requireSupabase } from '../../lib/supabase';
+import { isUuid } from '../../lib/uuid';
 import type { Profile, SamagamSession, Video } from '../../types/database';
 import { deriveOffsetSeconds, deriveStatus } from './stateMachine';
 import type { SessionPlaybackPosition } from './types';
@@ -112,6 +113,9 @@ export async function listSessionsWithVideos(): Promise<SessionWithVideo[]> {
 export async function getSessionWithVideo(
   sessionId: string,
 ): Promise<SessionWithVideo | null> {
+  // A malformed id is not a session: return null (friendly "not found")
+  // instead of letting PostgREST's raw uuid-syntax error reach the UI.
+  if (!isUuid(sessionId)) return null;
   const supabase = requireSupabase();
   const { data, error } = await supabase
     .from('sessions')

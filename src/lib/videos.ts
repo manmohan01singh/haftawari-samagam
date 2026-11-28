@@ -5,6 +5,7 @@
  * owner-only, video writes are admin-only).
  */
 import { requireSupabase, supabase } from './supabase';
+import { isUuid } from './uuid';
 import type { Category, Video, WatchHistoryEntry } from '../types/database';
 
 /**
@@ -35,6 +36,9 @@ export async function fetchPublishedVideos(limit = 25, offset = 0): Promise<Vide
 }
 
 export async function fetchVideoByRowId(rowId: string): Promise<Video | null> {
+  // A malformed id is not a row: return null (friendly "not found")
+  // instead of letting PostgREST's raw uuid-syntax error reach the UI.
+  if (!isUuid(rowId)) return null;
   const client = requireSupabase();
   const { data, error } = await client.from('videos').select('*').eq('id', rowId).maybeSingle();
   if (error) throw new Error(error.message);

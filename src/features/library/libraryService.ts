@@ -7,6 +7,7 @@
  * readable by everyone). No function invents or seeds data.
  */
 import { requireSupabase } from '../../lib/supabase';
+import { isUuid } from '../../lib/uuid';
 import type { Playlist, Profile, Video } from '../../types/database';
 import type {
   HistoryItem,
@@ -214,6 +215,9 @@ export async function deletePlaylist(playlistId: string): Promise<void> {
 }
 
 export async function fetchPlaylistDetail(playlistId: string): Promise<PlaylistDetail | null> {
+  // A malformed id is not a playlist: return null (friendly "not found")
+  // instead of letting PostgREST's raw uuid-syntax error reach the UI.
+  if (!isUuid(playlistId)) return null;
   const client = requireSupabase();
   const { data: playlist, error } = await client
     .from('playlists')
