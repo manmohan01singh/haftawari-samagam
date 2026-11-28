@@ -35,7 +35,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Search'>;
  * catalogue and the official channel. Submitting records the query in
  * history and runs the full search on the results screen.
  */
-export function SearchScreen({ navigation }: Props) {
+export function SearchScreen({ navigation, route }: Props) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -52,6 +52,15 @@ export function SearchScreen({ navigation }: Props) {
     q: '',
     rows: [],
   });
+  // Shared search links (fix round 4, B4): /search?q=kirtan used
+  // to land on this empty input page and drop the query. A q param
+  // now forwards straight to the results for that query (replace,
+  // so Back does not return to an empty search box).
+  const sharedQ = route.params?.q?.trim() ?? '';
+  useEffect(() => {
+    if (sharedQ) navigation.replace('SearchResults', { query: sharedQ });
+  }, [sharedQ, navigation]);
+
   const [confirmClear, setConfirmClear] = useState(false); // ConfirmModal visibility
   // QA45: a single history remove can be undone — the removed entry is
   // held for 5s while the undo bar is visible.

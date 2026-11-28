@@ -29,7 +29,7 @@ import {
   type VideoResult,
 } from '../../features/search';
 import { formatCount } from '../../lib/format';
-import { OFFICIAL_CHANNEL_HANDLE, type YouTubeVideoMetadata } from '../../lib/youtube';
+import { OFFICIAL_CHANNEL_HANDLE, fetchVideosMetadata, type YouTubeVideoMetadata } from '../../lib/youtube';
 import { getUploadsCached, uploadsPlaylistIdFor } from '../../features/channels';
 import { nativeApp, radii, spacing, typography, useTheme, type ThemeColors } from '../../theme';
 import { goBackOrTab } from '../../navigation/safeBack';
@@ -53,7 +53,11 @@ type ResultFilter = 'all' | 'local' | 'youtube' | 'live';
 const REMOTE_PENDING_CAP_MS = 6_000;
 
 /** Map an engine VideoResult onto the shared card display shape. */
-function searchResultCardData(v: VideoResult, channelAvatarUrl: string | null): CardVideoData {
+function searchResultCardData(
+  v: VideoResult,
+  channelAvatarUrl: string | null,
+  viewCount?: number | null,
+): CardVideoData {
   return {
     key: v.videoRowId ? `sb-${v.videoRowId}` : `yt-${v.youtubeVideoId}`,
     title: v.title,
@@ -61,8 +65,18 @@ function searchResultCardData(v: VideoResult, channelAvatarUrl: string | null): 
     durationSeconds: v.liveBroadcastContent === 'live' ? null : v.durationSeconds,
     broadcastState: v.liveBroadcastContent,
     channelLine: v.channelTitle ?? OFFICIAL_CHANNEL_HANDLE,
+    // One card contract (fix round 4, Chat 2 #37): search cards
+    // showed a bare date while Home cards show views — the caller
+    // backfills real view counts (one batched statistics call) and
+    // the line becomes "▷ views · date"; unknown stays date-only.
     metaLine:
-      v.liveBroadcastContent === 'live' ? 'Live now' : formatDateLine(v.publishedAt),
+      v.liveBroadcastContent === 'live'
+        ? 'Live now'
+        : viewCount != null
+          ? formatDateLine(v.publishedAt)
+            ? `▷ ${formatCount(viewCount)} views · ${formatDateLine(v.publishedAt)}`
+            : `▷ ${formatCount(viewCount)} views`
+          : formatDateLine(v.publishedAt),
     channelAvatarUrl,
     youtubeVideoId: v.youtubeVideoId,
     channelId: v.channelId ?? OFFICIAL_CHANNEL_ID,
@@ -266,6 +280,27 @@ export function SearchResultsScreen({ route, navigation }: Props) {
   }, [channelMatches, matchedChannelId]);
 
   const allItems = useMemo<VideoResult[]>(() => data?.videos ?? [], [data]);
+  // View-count backfill (fix round 4, Chat 2 #37): search results
+  // carry no counts; one batched statistics call (≤50 ids) fills
+  // them in so search cards match the Home card contract.
+  const [statsMap, setStatsMap] = useState<Map<string, number>>(new Map());
+  const statsAskedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const missing = allItems
+      .map((v) => v.youtubeVideoId)
+      .filter((id): id is string => id != null && !statsAskedRef.current.has(id));
+    if (missing.length === 0) return;
+    missing.forEach((id) => statsAskedRef.current.add(id));
+    void fetchVideosMetadata(missing.slice(0, 50))
+      .then((metas) => {
+        setStatsMap((prev) => {
+          const next = new Map(prev);
+          for (const m of metas) if (m.viewCount != null) next.set(m.youtubeVideoId, m.viewCount);
+          return next;
+        });
+      })
+      .catch(() => undefined);
+  }, [allItems]);
   const counts = useMemo(
     () => ({
       all: allItems.length,
@@ -284,6 +319,16 @@ export function SearchResultsScreen({ route, navigation }: Props) {
           : allItems.filter((v) => v.source === filter),
     [allItems, filter],
   );
+  // Exact-match probe for the fuzzy-transparency note: does any
+  // result's title contain EVERY word the user typed?
+  const hasExactMatch = useMemo(() => {
+    const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
+    if (tokens.length === 0) return true;
+    return allItems.some((v) => {
+      const t = v.title.toLowerCase();
+      return tokens.every((tok) => t.includes(tok));
+    });
+  }, [allItems, query]);
 
   const refine = useCallback(() => {
     const q = draft.trim();
@@ -300,7 +345,11 @@ export function SearchResultsScreen({ route, navigation }: Props) {
         item.channelId && item.channelId === channelResult?.channelId
           ? channelResult.avatarUrl
           : (channel?.avatarUrl ?? null);
-      const cardData = searchResultCardData(item, avatar);
+      const cardData = searchResultCardData(
+        item,
+        avatar,
+        item.youtubeVideoId ? (statsMap.get(item.youtubeVideoId) ?? null) : null,
+      );
       return (
         <ShelfCard
           data={cardData}
@@ -325,7 +374,7 @@ export function SearchResultsScreen({ route, navigation }: Props) {
         />
       );
     },
-    [channel, channelResult, navigation, shareVideo],
+    [channel, channelResult, navigation, shareVideo, statsMap],
   );
 
   const keyExtractor = useCallback(
@@ -359,7 +408,17 @@ export function SearchResultsScreen({ route, navigation }: Props) {
           </Text>
         </Pressable>
       ) : null}
-      {remotePending && !remoteCapped ? (
+      {!didYouMean && allItems.length > 0 && !hasExactMatch ? (
+        // Fuzzy transparency (fix round 4, Chat 2 #39): a misspelt
+        // query ("kirtin") used to return the corrected term's
+        // results with no sign anything had been interpreted. When
+        // no result's title contains every typed word, say plainly
+        // that these are closest matches, not exact ones.
+        <Text style={styles.pendingNote}>
+          {`No exact matches for "${query}" — showing the closest matches.`}
+        </Text>
+      ) : null}
+      {remotePending && !remoteCapped && allItems.length === 0 ? (
         <Text style={styles.pendingNote}>Searching the channels…</Text>
       ) : !remotePending && data?.youtubeFallback && allItems.length > 0 ? (
         // Transparency, not an error (blueprint round 2, faults

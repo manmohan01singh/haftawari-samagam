@@ -29,7 +29,7 @@ export type RootStackParamList = {
   MainTabs: NavigatorScreenParams<MainTabParamList>;
   /** videoRowId = Supabase `videos` row id; youtubeVideoId = a YouTube id (API-sourced items). */
   Watch: { videoRowId?: string; youtubeVideoId?: string; sessionId?: string };
-  Search: undefined;
+  Search: { q?: string } | undefined;
   SearchResults: { query: string };
   /** Defaults to the official channel when no id is passed. */
   Channel: { channelId?: string; tab?: 'videos' | 'live' | 'about' };
