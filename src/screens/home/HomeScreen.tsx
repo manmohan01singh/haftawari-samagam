@@ -437,7 +437,18 @@ export function HomeScreen({ navigation }: Props) {
     });
     pagerRef.current = pager;
     try {
-      const first = await pager.next(PAGE_SIZE);
+      let first = await pager.next(PAGE_SIZE);
+      // Sparse-topic hunt (fix round 5.1, chips): a topic's first
+      // call can legitimately come back empty-handed while its
+      // matches sit deeper in the uploads — the scan cursors keep
+      // their place, so keep pulling (bounded) before settling
+      // instead of flashing "No videos match" over a live hunt.
+      let extraPulls = 0;
+      while (first.items.length === 0 && !first.exhausted && extraPulls < 3) {
+        extraPulls++;
+        const more = await pager.next(PAGE_SIZE);
+        first = { items: more.items, exhausted: more.exhausted };
+      }
       if (generationRef.current !== generation) return;
       const sortedFirst = sortFeedItems(first.items);
       chipCacheRef.current.set(selectedChip, { items: sortedFirst, exhausted: first.exhausted });

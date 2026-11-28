@@ -1,5 +1,5 @@
 import { isShortVideo, type YouTubeVideoMetadata } from '../../lib/youtube';
-import { dedupeByContentFuzzy } from '../../lib/contentDedupe';
+import { dedupeByContentFuzzy, normaliseTitleHard } from '../../lib/contentDedupe';
 import {
   fetchActiveChannels,
   getUploadsPageCached,
@@ -95,5 +95,25 @@ export async function fetchShorts(limit = 60): Promise<ShortItem[]> {
     title: it.meta.title,
     durationSeconds: it.meta.durationSeconds,
   }));
-  return spreadByChannel(all).slice(0, limit);
+  // Cross-channel pass (fix round 5.1, #23): the same clip is
+  // often carried by TWO sangat channels under the identical title
+  // (the Takhat Sahib evening kirtan showed at 836 and 5.4K views
+  // from two sources) — channel-keyed dedupe can never pair those.
+  // For the Shorts pool, an identical hard title with a compatible
+  // duration (within ±15 s, or either side unknown) is the same
+  // clip to a viewer, whichever channel carries it. Dated series
+  // titles differ by their date text, so episodes stay distinct.
+  const titleSeen = new Map<string, number | null>();
+  const crossDeduped = all.filter((it) => {
+    const key = normaliseTitleHard(it.meta.title);
+    if (!key) return true;
+    const prevDuration = titleSeen.get(key);
+    if (prevDuration !== undefined) {
+      const d = it.meta.durationSeconds;
+      if (prevDuration == null || d == null || Math.abs(prevDuration - d) <= 15) return false;
+    }
+    titleSeen.set(key, it.meta.durationSeconds);
+    return true;
+  });
+  return spreadByChannel(crossDeduped).slice(0, limit);
 }

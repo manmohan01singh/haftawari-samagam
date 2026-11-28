@@ -368,6 +368,10 @@ interface ChannelCursor {
    * channel chips still worked off page 1 / the uploads cache).
    */
   failed: boolean;
+  /** True once any uploads page has been absorbed (see the
+   *  exhausted rule in next()): a failed channel that never
+   *  absorbed has not been searched at all. */
+  absorbedAny: boolean;
 }
 
 export interface HomeFeedPager {
@@ -474,10 +478,12 @@ export function createHomeFeedPager({ channels, filter }: HomeFeedPagerOptions):
       filling: false,
       exhausted: !isYouTubeConfigured,
       failed: false,
+      absorbedAny: false,
     }));
 
   /** Filter + dedupe a raw uploads page into a cursor's buffer. */
   function absorb(cursor: ChannelCursor, videos: YouTubeVideoMetadata[]): void {
+    if (videos.length > 0) cursor.absorbedAny = true;
     for (const meta of videos) {
       if (!isFeedEligible(meta)) continue;
       if (filter.kind === 'topic' && !matchesTopic(meta.title, filter.keywords)) continue;
@@ -734,14 +740,17 @@ export function createHomeFeedPager({ channels, filter }: HomeFeedPagerOptions):
       if (collected.length > 0 && rounds >= MAX_ROUNDS_PER_CALL) break;
     }
     const catalogueDrained = catalogueEmitted >= catalogueRows.length;
-    // A channel that FAILED this call (quota/network) counts as
-    // drained for the marker (fix round 5, #8): it resets at the
-    // start of every next() call, so at return time `failed` means
-    // "produced nothing this call" — without it the end-of-feed
-    // marker could never appear while any key was dead, and the
-    // feed just dissolved into blank space.
+    // A channel that FAILED this call counts as drained for the
+    // marker ONLY once it has absorbed at least one page (fix
+    // round 5, #8 — refined in round 5.1 after the chips went
+    // empty): a channel whose very first fetch died has NOT been
+    // searched, and calling the feed exhausted there made topic
+    // chips show "No videos match" and blocked every retry. One
+    // that absorbed its cached page and then failed HAS offered
+    // what it can this session.
     const exhausted =
-      catalogueDrained && cursors.every((c) => (c.exhausted || c.failed) && c.buffer.length === 0);
+      catalogueDrained &&
+      cursors.every((c) => (c.exhausted || (c.failed && c.absorbedAny)) && c.buffer.length === 0);
     // Latest first per batch (live broadcasts lead, then newest
     // published): the round-robin above only GATHERS across sources
     // so no channel dominates; the visible order is recency, the
