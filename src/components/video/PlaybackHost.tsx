@@ -83,6 +83,23 @@ export function PlaybackHost({
     (routeName != null && (BAR_HIDDEN_ROUTES.has(routeName) || routeName.startsWith('Admin'))) ||
     (isWatchRoute && watchKind === 'session');
   const miniCardVisible = mode === 'mini' && item.kind === 'youtube' && !barHidden;
+  const hostedMiniVisible = mode === 'mini' && item.kind === 'hosted' && !barHidden;
+  const playerVisible = fullVisible || miniCardVisible || hostedMiniVisible;
+
+  // NEVER hidden-but-playing (Chat 2 fault 19, 28 Nov 2026 — the
+  // worst-five): when the player is parked off-screen (a route
+  // where no mini may show, or a Back that left the store in 'full'
+  // with no slot), it must be PAUSED. A YouTube iframe playing
+  // invisibly is both a user trap (sound with no stop control) and
+  // a YouTube policy violation (background players, III.I.9). The
+  // listener fires on every visibility change; pausing an already
+  // paused player is a no-op.
+  React.useEffect(() => {
+    if (playerVisible) return;
+    if (item.kind === 'youtube') ytRef.current?.pause();
+    else hostedRef.current?.pause();
+    setPlaying(false);
+  }, [playerVisible, mode, item.kind, setPlaying]);
   const bottomOffset = layout.bottomNavHeight + Math.max(insets.bottom, 12) + 8;
 
   const togglePlay = () => {
@@ -120,7 +137,7 @@ export function PlaybackHost({
       // renders may ever paint over the sheet below it.
       overflow: 'hidden',
     };
-  } else if (mode === 'mini' && item.kind === 'hosted') {
+  } else if (hostedMiniVisible) {
     // Floating mini: 168 wide, 16:9 → ~94.5 tall.
     playerStyle = {
       position: 'absolute',
@@ -166,7 +183,7 @@ export function PlaybackHost({
 
   return (
     <>
-      <View style={playerStyle} pointerEvents={fullVisible || (mode === 'mini' && item.kind === 'hosted') || miniCardVisible ? 'auto' : 'none'}>
+      <View style={playerStyle} pointerEvents={playerVisible ? 'auto' : 'none'}>
         <View style={miniCardVisible ? styles.miniStage : styles.stageFill}>
           {item.kind === 'youtube' && item.youtubeVideoId ? (
             <YouTubePlayer
@@ -186,7 +203,7 @@ export function PlaybackHost({
             />
           ) : null}
         </View>
-        {mode === 'mini' && item.kind === 'hosted' ? (
+        {hostedMiniVisible ? (
           // The floating mini itself is the expand target; touches
           // pass through the player surface to this layer.
           <Pressable
@@ -230,7 +247,7 @@ export function PlaybackHost({
         ) : null}
       </View>
 
-      {mode === 'mini' && item.kind === 'hosted' ? (
+      {hostedMiniVisible ? (
         <Pressable
           style={[styles.miniClose, { bottom: bottomOffset + 8 + 168 / layout.thumbnailAspectRatio - 30, right: 18 }]}
           onPress={close}
@@ -242,7 +259,7 @@ export function PlaybackHost({
         </Pressable>
       ) : null}
 
-      {mode === 'mini' && item.kind === 'hosted' && hostedReadyKey === item.key ? (
+      {hostedMiniVisible && hostedReadyKey === item.key ? (
         <Pressable
           style={[styles.miniClose, { bottom: bottomOffset + 14, right: 18 }]}
           onPress={togglePlay}

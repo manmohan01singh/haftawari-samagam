@@ -15,6 +15,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useIsFocused } from '@react-navigation/native';
 import { CardActionSheet } from '../../components/common/CardActionSheet';
+import { RequireAuthSheet } from '../../components/common/RequireAuthSheet';
 import { EmptyState } from '../../components/common/EmptyState';
 import { LinkedText } from '../../components/common/LinkedText';
 import { Toast, useToast } from '../../components/common/Toast';
@@ -330,6 +331,7 @@ export function WatchScreen({ route, navigation }: Props) {
   // round-3 rule (no filled-thumb claim without a backend) still
   // holds. Dislike remains that honest toast: there is no dislike
   // backend and YouTube shows no dislike count either.
+  const [authAction, setAuthAction] = useState<string | null>(null);
   const [commentsOpen, setCommentsOpen] = useState(false);
   // "Save to playlist" target row id (P10): the main ⋮ menu targets
   // the current video's row; an Up Next row's ⋮ menu targets THAT
@@ -396,7 +398,11 @@ export function WatchScreen({ route, navigation }: Props) {
           // pushed "watching" TWICE for live videos and put it before
           // likes — screenshot order is likes first, watching second,
           // each exactly once.
-          if (meta.likeCount != null) metaParts.push(`${formatCount(meta.likeCount)} likes`);
+          // Attributed (Chat 2 fault 13, 28 Nov 2026): this is
+          // YouTube's count for the video; the Like BUTTON's count
+          // is the sangat's own in this app. Unlabelled, the two
+          // numbers contradicted each other on the same screen.
+          if (meta.likeCount != null) metaParts.push(`${formatCount(meta.likeCount)} likes on YouTube`);
           if (isLive) {
             if (meta.concurrentViewers != null) {
               metaParts.push(`${formatCount(meta.concurrentViewers)} watching`);
@@ -614,26 +620,39 @@ export function WatchScreen({ route, navigation }: Props) {
   //    to render the entry.
   //  - SERVER: catalogue rows only, fired when the signed-in user
   //    is known (whenever auth resolves), once per row per mount.
+  //
+  // BOTH stores now record only after 5 seconds of REAL playing
+  // state (Chat 2 fault 19, 28 Nov 2026): previously a row was
+  // written on mount, so merely opening a Watch page — or an
+  // autoplay chain passing through — put videos in the user's
+  // History that they never actually watched.
+  const storePlaying = usePlaybackStore((st) => st.playing);
   useEffect(() => {
-    if (!resolved || !resolved.youtubeVideoId) return;
-    if (localHistoryRecordedFor.current === resolved.youtubeVideoId) return;
-    localHistoryRecordedFor.current = resolved.youtubeVideoId;
-    void recordLocalWatch({
-      youtubeVideoId: resolved.youtubeVideoId,
-      videoRowId: resolved.row?.id ?? null,
-      channelTitle: resolved.channelTitle || null,
-      title: resolved.title,
-      thumbnailUrl: resolved.thumbnailUrl,
-      durationSeconds: resolved.durationSeconds,
-    }).catch(() => undefined);
-  }, [resolved]);
-
-  useEffect(() => {
-    if (!resolved?.row || !user) return;
-    if (serverHistoryRecordedFor.current === resolved.row.id) return;
-    serverHistoryRecordedFor.current = resolved.row.id;
-    void recordWatchHistory(user.id, resolved.row.id, resolved.channelTitle || null).catch(() => undefined);
-  }, [user, resolved]);
+    if (!resolved || !storePlaying) return;
+    const ytId = resolved.youtubeVideoId;
+    const rowId = resolved.row?.id ?? null;
+    const localDone = ytId != null && localHistoryRecordedFor.current === ytId;
+    const serverDone = rowId != null && serverHistoryRecordedFor.current === rowId;
+    if (localDone && (serverDone || !user || !rowId)) return;
+    const t = setTimeout(() => {
+      if (ytId && localHistoryRecordedFor.current !== ytId) {
+        localHistoryRecordedFor.current = ytId;
+        void recordLocalWatch({
+          youtubeVideoId: ytId,
+          videoRowId: rowId,
+          channelTitle: resolved.channelTitle || null,
+          title: resolved.title,
+          thumbnailUrl: resolved.thumbnailUrl,
+          durationSeconds: resolved.durationSeconds,
+        }).catch(() => undefined);
+      }
+      if (rowId && user && serverHistoryRecordedFor.current !== rowId) {
+        serverHistoryRecordedFor.current = rowId;
+        void recordWatchHistory(user.id, rowId, resolved.channelTitle || null).catch(() => undefined);
+      }
+    }, 5000);
+    return () => clearTimeout(t);
+  }, [resolved, user, storePlaying]);
 
   // Lazy player mount: mark this video ready only after the navigation
   // transition settles (timer callback), so the screen opens smoothly
@@ -671,7 +690,7 @@ export function WatchScreen({ route, navigation }: Props) {
   const onToggleLike = useCallback(() => {
     if (!resolved) return;
     if (!user) {
-      navigation.navigate('SignIn');
+      setAuthAction('like this samagam');
       return;
     }
     if (likeStatus === 'unavailable') {
@@ -792,7 +811,7 @@ export function WatchScreen({ route, navigation }: Props) {
               icon: rowSaved ? 'bookmark' : 'bookmark-border',
               onPress: user
                 ? () => onToggleSaveUpNext(item.video)
-                : () => navigation.navigate('SignIn'),
+                : () => setAuthAction('save this samagam'),
             },
             {
               key: 'playlist',
@@ -800,7 +819,7 @@ export function WatchScreen({ route, navigation }: Props) {
               icon: 'playlist-add',
               onPress: user
                 ? () => setPlaylistTargetId(item.video.id)
-                : () => navigation.navigate('SignIn'),
+                : () => setAuthAction('save this samagam to a playlist'),
             },
             {
               key: 'channel',
@@ -1115,7 +1134,7 @@ export function WatchScreen({ route, navigation }: Props) {
               </Pressable>
               {resolved.row ? (
                 <Pressable
-                  onPress={user ? onToggleSave : () => navigation.navigate('SignIn')}
+                  onPress={user ? onToggleSave : () => setAuthAction('save this samagam')}
                   hitSlop={ICON_HIT_SLOP}
                   accessibilityLabel={saved ? 'Remove from saved' : 'Save'}
                   accessibilityRole="button"
@@ -1367,7 +1386,7 @@ export function WatchScreen({ route, navigation }: Props) {
                   key: 'save',
                   label: saved ? 'Remove from saved' : 'Save',
                   icon: saved ? 'bookmark' : 'bookmark-border',
-                  onPress: user ? onToggleSave : () => navigation.navigate('SignIn'),
+                  onPress: user ? onToggleSave : () => setAuthAction('save this samagam'),
                 },
                 {
                   key: 'playlist',
@@ -1375,7 +1394,7 @@ export function WatchScreen({ route, navigation }: Props) {
                   icon: 'playlist-add',
                   onPress: user
                     ? () => setPlaylistTargetId(resolved.row?.id ?? null)
-                    : () => navigation.navigate('SignIn'),
+                    : () => setAuthAction('save this samagam to a playlist'),
                 },
               ]
             : []),
@@ -1436,6 +1455,14 @@ export function WatchScreen({ route, navigation }: Props) {
             accessibilityRole="button"
           />
           <View style={styles.chatSheetHost}>
+            <RequireAuthSheet
+              action={authAction}
+              onDismiss={() => setAuthAction(null)}
+              onSignIn={() => {
+                setAuthAction(null);
+                navigation.navigate('SignIn');
+              }}
+            />
             <VideoCommentsSheet
               engagement={engagement}
               user={

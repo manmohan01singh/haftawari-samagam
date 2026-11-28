@@ -755,7 +755,12 @@ export function HomeScreen({ navigation }: Props) {
         />
       ) : loading ? (
         <View>
-          <IkOnkarMark />
+          {/* Skeleton-first loading (Chat 2 fault 1, 28 Nov 2026):
+              the structure of the feed is visible immediately, the
+              ੴ is small, and a caption says what is happening —
+              never a lone symbol on a blank screen. */}
+          <IkOnkarMark size={56} label="Gathering the sangat…" />
+          <SkeletonCard variant="feed" />
           <SkeletonCard variant="feed" />
           <SkeletonCard variant="feed" />
         </View>

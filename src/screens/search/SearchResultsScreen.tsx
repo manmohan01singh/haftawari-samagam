@@ -349,11 +349,11 @@ export function SearchResultsScreen({ route, navigation }: Props) {
       ) : null}
       {remotePending && !remoteCapped ? (
         <Text style={styles.pendingNote}>Searching the channels…</Text>
-      ) : !remotePending && data?.youtubeFallback ? (
+      ) : !remotePending && data?.youtubeFallback && !channelMatches ? (
         <Text style={styles.pendingNote}>
           Channel search is unavailable — showing matches from the channels&apos; latest uploads.
         </Text>
-      ) : !remotePending && youtubeSkipped ? (
+      ) : !remotePending && youtubeSkipped && !channelMatches ? (
         <View style={styles.skippedRow}>
           <Text style={[styles.skippedNote, styles.skippedText]}>
             {degradedBannerText(data?.youtubeError ?? null)}

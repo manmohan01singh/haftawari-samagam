@@ -165,11 +165,14 @@ export function SessionWatchScreen({ route, navigation }: Props) {
   // Unified seek/play dispatch: session sync talks to whichever
   // player is mounted for this video's source.
   const activeSeekTo = (seconds: number) => {
-    if (isHosted) hostedRef.current?.seekTo(seconds);
+    // Whichever player is actually mounted wins — this also covers
+    // the completed-session guest fallback, where a hosted video's
+    // YouTube embed is what is on screen.
+    if (hostedRef.current) hostedRef.current.seekTo(seconds);
     else embedRef.current?.seekTo(seconds);
   };
   const activePlay = () => {
-    if (isHosted) hostedRef.current?.play();
+    if (hostedRef.current) hostedRef.current.play();
     else embedRef.current?.play();
   };
 
@@ -602,6 +605,13 @@ export function SessionWatchScreen({ route, navigation }: Props) {
   // watch" note; the note below already carries the sign-in message,
   // so the dead button is hidden instead of retargeted.)
   const canControlPlayer = isHosted ? hostedUrl != null : video?.youtube_video_id != null;
+  // Dual-use fallback (Chat 2 fault 31, 28 Nov 2026): a COMPLETED
+  // hosted session whose recording also lives on YouTube plays the
+  // YouTube copy for a guest — the hosted mint is members-only, and
+  // a dead thumbnail with a sign-in note reads as a trap when the
+  // same recording plays freely elsewhere in the app.
+  const guestYoutubeFallback =
+    isCompleted && isHosted && !user && video?.youtube_video_id != null;
 
   return (
     <View style={styles.root}>
@@ -611,7 +621,7 @@ export function SessionWatchScreen({ route, navigation }: Props) {
             Watch, round-3). The back control lives in the sheet's
             header zone below — previously it was a dark circle over
             the player, the third back placement in the app. */}
-        {showEmbed && isHosted ? (
+        {showEmbed && isHosted && !guestYoutubeFallback ? (
           hostedUrl ? (
             <HostedPlayer
               key={`hosted-${video.id}-${isPlaying ? 'playing' : 'replay'}`}
@@ -737,13 +747,13 @@ export function SessionWatchScreen({ route, navigation }: Props) {
             {presenceCount != null ? (
               <View style={styles.countChip}>
                 <View style={styles.presenceDot} />
-                <Text style={styles.countChipText}>{presenceCount} here now</Text>
+                <Text style={styles.countChipText}>{`${presenceCount} here now`}</Text>
               </View>
             ) : null}
             {joinedCount != null ? (
               <View style={styles.countChip}>
                 <MaterialIcons name="group" size={15} color={colors.textSecondary} />
-                <Text style={styles.countChipText}>{joinedCount} joined</Text>
+                <Text style={styles.countChipText}>{`${joinedCount} joined`}</Text>
               </View>
             ) : null}
           </View>
@@ -889,7 +899,7 @@ export function SessionWatchScreen({ route, navigation }: Props) {
                 recording." in the player area, so "watch the full
                 recording above" contradicted it. Hosted playback is
                 members-only; YouTube recordings play for guests. */}
-            {isHosted && !user
+            {isHosted && !user && !guestYoutubeFallback
               ? 'This Samagam has ended. Sign in to watch the full recording.'
               : 'This Samagam has ended. You can watch the full recording above.'}
           </Text>
@@ -1010,7 +1020,12 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.textSecondary,
     marginTop: spacing.sm,
   },
-  playerArea: { backgroundColor: colors.playerBackground },
+  playerArea: {
+    backgroundColor: colors.playerBackground,
+    width: '100%',
+    maxWidth: 1060,
+    alignSelf: 'center',
+  },
   thumbnailWrap: { position: 'relative' },
   thumbnail: {
     width: '100%',

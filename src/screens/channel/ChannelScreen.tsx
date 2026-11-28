@@ -32,7 +32,7 @@ import {
   type YouTubeChannelInfo,
   type YouTubeVideoMetadata,
 } from '../../lib/youtube';
-import { getLiveCached, getUploadsPageCached } from '../../features/channels/channelCache';
+import { getLiveCached, getLiveFresh, getUploadsPageCached } from '../../features/channels/channelCache';
 import { apiCardData as baseApiCardData, formatDateLine } from '../../components/video/cardData';
 import { layout, nativeApp, radii, spacing, typography, useTheme, type ThemeColors } from '../../theme';
 import type { RootStackParamList } from '../../navigation/types';
@@ -191,7 +191,13 @@ export function ChannelScreen({ route, navigation }: Props) {
         active = false;
       };
     }
-    getLiveCached(channelId)
+    // A retry (liveNonce > 0) must FORCE a fresh check through
+    // getLiveFresh (Chat 2 fault 33, 28 Nov 2026): re-reading the
+    // shared 10-minute cache returned the same failed/empty answer
+    // instantly, which made "Try again" look dead — and let this
+    // page contradict Home, which reads the same cache when it is
+    // healthy.
+    (liveNonce > 0 ? getLiveFresh(channelId) : getLiveCached(channelId))
       .then((items) => {
         liveSearchCache.set(channelId, { at: Date.now(), items });
         if (active) {

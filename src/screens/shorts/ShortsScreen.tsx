@@ -1,8 +1,10 @@
+import { RequireAuthSheet } from '../../components/common/RequireAuthSheet';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -40,6 +42,7 @@ interface RailProps {
   item: ShortItem;
   onOpenFull: () => void;
   onSignIn: () => void;
+  onRequireAuth: (action: string) => void;
 }
 
 /**
@@ -49,7 +52,7 @@ interface RailProps {
  * Share sends the app's deep link, Open goes to the full Watch
  * page. Counts render only when the backend returned them.
  */
-function ShortRail({ item, onOpenFull, onSignIn }: RailProps) {
+function ShortRail({ item, onOpenFull, onSignIn, onRequireAuth }: RailProps) {
   const { user } = useCurrentChatUser();
   const engagement = useVideoEngagement(
     item.meta.youtubeVideoId,
@@ -66,7 +69,7 @@ function ShortRail({ item, onOpenFull, onSignIn }: RailProps) {
         style={styles.railButton}
         onPress={() => {
           if (!user) {
-            onSignIn();
+            onRequireAuth('like this samagam');
             return;
           }
           void engagement.toggleLike();
@@ -160,6 +163,7 @@ function ShortRail({ item, onOpenFull, onSignIn }: RailProps) {
  * invisibly). The pool loops, so the feed never runs out.
  */
 export function ShortsScreen({ navigation }: Props) {
+  const [authAction, setAuthAction] = useState<string | null>(null);
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const isFocused = useIsFocused();
@@ -188,8 +192,13 @@ export function ShortsScreen({ navigation }: Props) {
     }
     return out;
   }, [pool, cycles]);
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
 
   const playerRefs = useRef(new Map<number, YouTubePlayerHandle>());
+  const listRef = useRef<FlatList>(null);
+  const itemsRef = useRef<{ item: ShortItem; key: string }[] | null>(null);
   const activeIndexRef = useRef(0);
   const userPausedRef = useRef(false);
   const focusedRef = useRef(isFocused);
@@ -244,6 +253,37 @@ export function ShortsScreen({ navigation }: Props) {
     }
   }, []);
   const viewabilityConfig = VIEWABILITY_CONFIG;
+
+  // Desktop navigation (Chat 2 fault 21, 28 Nov 2026): on a
+  // computer there is no touch swipe, the mouse wheel lands inside
+  // the YouTube iframe, and the embed's own Next is disabled — so
+  // without app controls only the first Short was reachable. The
+  // chevron buttons (rendered by the return below) and these keys
+  // give desktop a real path; phones keep the swipe.
+  const goToShort = useCallback(
+    (index: number) => {
+      const count = itemsRef.current?.length ?? 0;
+      if (count === 0) return;
+      const next = Math.max(0, Math.min(count - 1, index));
+      listRef.current?.scrollToIndex({ index: next, animated: true });
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === 'j') {
+        e.preventDefault();
+        goToShort(activeIndexRef.current + 1);
+      } else if (e.key === 'ArrowUp' || e.key === 'PageUp' || e.key === 'k') {
+        e.preventDefault();
+        goToShort(activeIndexRef.current - 1);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [goToShort]);
 
   const openRoot = useCallback(
     (route: 'Watch' | 'Channel' | 'SignIn', params?: Record<string, string>) => {
@@ -352,6 +392,7 @@ export function ShortsScreen({ navigation }: Props) {
                 item={item}
                 onOpenFull={() => openRoot('Watch', { youtubeVideoId: item.meta.youtubeVideoId })}
                 onSignIn={() => openRoot('SignIn')}
+                onRequireAuth={(a) => setAuthAction(a)}
               />
             ) : null}
           </View>
@@ -390,6 +431,7 @@ export function ShortsScreen({ navigation }: Props) {
         </View>
       ) : itemH > 0 && items ? (
         <FlatList
+          ref={listRef}
           data={items}
           keyExtractor={(entry) => entry.key}
           renderItem={renderItem}
@@ -407,6 +449,34 @@ export function ShortsScreen({ navigation }: Props) {
           onEndReachedThreshold={3}
         />
       ) : null}
+      {items && items.length > 1 ? (
+        <View style={styles.navButtons} pointerEvents="box-none">
+          <Pressable
+            style={styles.navButton}
+            onPress={() => goToShort(activeIndex - 1)}
+            accessibilityRole="button"
+            accessibilityLabel="Previous Short"
+          >
+            <MaterialIcons name="keyboard-arrow-up" size={26} color="#FFFFFF" />
+          </Pressable>
+          <Pressable
+            style={styles.navButton}
+            onPress={() => goToShort(activeIndex + 1)}
+            accessibilityRole="button"
+            accessibilityLabel="Next Short"
+          >
+            <MaterialIcons name="keyboard-arrow-down" size={26} color="#FFFFFF" />
+          </Pressable>
+        </View>
+      ) : null}
+      <RequireAuthSheet
+        action={authAction}
+        onDismiss={() => setAuthAction(null)}
+        onSignIn={() => {
+          setAuthAction(null);
+          openRoot('SignIn');
+        }}
+      />
     </View>
   );
 }
@@ -431,6 +501,21 @@ const createRailStyles = (colors: ThemeColors) =>
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     root: { flex: 1, backgroundColor: colors.playerBackground },
+    navButtons: {
+      position: 'absolute',
+      left: 14,
+      top: '50%',
+      marginTop: -52,
+      gap: 10,
+    },
+    navButton: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: 'rgba(0,0,0,0.45)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     page: { width: '100%', backgroundColor: colors.playerBackground, overflow: 'hidden' },
     pausedGlyph: {
       position: 'absolute',
