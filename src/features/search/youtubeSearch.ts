@@ -39,6 +39,7 @@ import {
   orderedYouTubeApiKeys,
 } from '../../lib/youtubeKeys';
 import { OFFICIAL_CHANNEL, uploadsPlaylistId } from './config';
+import { getUploadsPageCached } from '../channels/channelCache';
 import { DEFAULT_THRESHOLD, rankByTitle, scoreTitle } from './fuzzy';
 import { tokenize } from './normalize';
 import type { ChannelResult, VideoResult } from './types';
@@ -540,7 +541,28 @@ export async function searchUploadsFallbackFor(
   signal?: AbortSignal,
   channelTerms?: ReadonlySet<string>,
 ): Promise<VideoResult[]> {
-  const uploads = await fetchRecentUploadsFor(channelId, signal);
+  let uploads: UploadItem[];
+  try {
+    uploads = await fetchRecentUploadsFor(channelId, signal);
+  } catch {
+    // Cache rescue (fix round 6, #37): the deep uploads fetch
+    // dying (quota/network) used to zero this channel's whole leg,
+    // collapsing search to the local archive. The app's SWR
+    // uploads cache (kept warm by Home/Channel) holds the first
+    // page — fuzzy-match over those titles instead of nothing.
+    try {
+      const page = await getUploadsPageCached(uploadsPlaylistId(channelId));
+      uploads = page.videos.map((v) => ({
+        videoId: v.youtubeVideoId,
+        title: v.title,
+        description: '',
+        publishedAt: v.publishedAt,
+        thumbnailUrl: v.thumbnailUrl,
+      }));
+    } catch {
+      uploads = [];
+    }
+  }
   let ranked = rankByTitle(queryText, uploads, (upload) => upload.title, DEFAULT_THRESHOLD);
   // Channel-intent words ("...Amritvela trust") name the channel the
   // user wants, not words in the video's title. When the caller passes

@@ -235,8 +235,12 @@ async function runLegs(query: string, options: SearchOptions): Promise<LegsOutco
         return { ok: true, channelId: identity.id, results };
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') throw error;
-        if (error instanceof YouTubeApiError && firstError === null) {
-          firstError = error.errorClass;
+        if (firstError === null) {
+          // Any failure classifies (fix round 6, R5-11): a raw
+          // network TypeError used to leave firstError null, and a
+          // fully-dead scan then surfaced as NO error at all — the
+          // results page silently showed only the local archive.
+          firstError = error instanceof YouTubeApiError ? error.errorClass : 'network';
         }
         return { ok: false, channelId: identity.id, results: [] as VideoResult[] };
       }

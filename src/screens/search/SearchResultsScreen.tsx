@@ -432,7 +432,7 @@ export function SearchResultsScreen({ route, navigation }: Props) {
         <Text style={styles.pendingNote}>
           {`Showing matches from the channels' latest uploads for "${query}".`}
         </Text>
-      ) : !remotePending && youtubeSkipped && !channelMatches && allItems.length > 0 ? (
+      ) : !remotePending && youtubeSkipped && allItems.length > 0 ? (
         <View style={styles.skippedRow}>
           <Text style={[styles.skippedNote, styles.skippedText]}>
             {degradedBannerText(data?.youtubeError ?? null)}
@@ -682,8 +682,8 @@ export function SearchResultsScreen({ route, navigation }: Props) {
                     title="No results found"
                     message={
                       youtubeSkipped
-                        ? `Nothing in the published archive matches "${query}", and channel results could not be loaded — see the note above. Tap Retry to try the channel again.`
-                        : `Nothing in the archive or the official channel matches "${query}". Check the spelling, try fewer words, or search for part of the shabad title.`
+                        ? `Nothing in the published archive matches "${query}", and the channel search could not be completed — the YouTube limit may be reached, or the connection failed. Tap Retry to try again.`
+                        : `Nothing in the archive or the sangat channels matches "${query}". Check the spelling, try fewer words, or search for part of the shabad title.`
                     }
                   />
                   {youtubeSkipped ? (
