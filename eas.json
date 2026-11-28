@@ -12,7 +12,8 @@
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://umbdfrjxcxootvshxveg.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_mHA7jCPuy2Uh1YgPjKY9mw_nLcxSU3E",
-        "EXPO_PUBLIC_YOUTUBE_API_KEY": "AIzaSyAI7JttshCnZHiDrN7HX3ag9nSwkPLlVr0"
+        "EXPO_PUBLIC_YOUTUBE_API_KEY": "AIzaSyC-qRrDR9UHufX5HCp-CDPbrMKGNQXbJfE",
+        "EXPO_PUBLIC_YOUTUBE_API_KEYS": "AIzaSyC-qRrDR9UHufX5HCp-CDPbrMKGNQXbJfE"
       }
     },
     "production": {
@@ -22,7 +23,8 @@
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://umbdfrjxcxootvshxveg.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_mHA7jCPuy2Uh1YgPjKY9mw_nLcxSU3E",
-        "EXPO_PUBLIC_YOUTUBE_API_KEY": "AIzaSyAI7JttshCnZHiDrN7HX3ag9nSwkPLlVr0"
+        "EXPO_PUBLIC_YOUTUBE_API_KEY": "AIzaSyC-qRrDR9UHufX5HCp-CDPbrMKGNQXbJfE",
+        "EXPO_PUBLIC_YOUTUBE_API_KEYS": "AIzaSyC-qRrDR9UHufX5HCp-CDPbrMKGNQXbJfE"
       }
     }
   }

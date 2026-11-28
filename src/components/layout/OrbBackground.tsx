@@ -15,10 +15,10 @@ import { useTheme } from '../../theme';
  */
 export const OrbBackground = memo(function OrbBackground() {
   const { isDark } = useTheme();
-  const core = isDark ? 0.34 : 0.16;
+  const core = isDark ? 0.44 : 0.24;
   return (
     <View pointerEvents="none" style={styles.wrap} accessibilityElementsHidden>
-      <Svg width={360} height={360}>
+      <Svg width={470} height={470}>
         <Defs>
           <RadialGradient id="orbGlow" cx="50%" cy="50%" r="50%">
             <Stop offset="0%" stopColor="#FF2020" stopOpacity={core} />
@@ -26,7 +26,7 @@ export const OrbBackground = memo(function OrbBackground() {
             <Stop offset="100%" stopColor="#FF2020" stopOpacity={0} />
           </RadialGradient>
         </Defs>
-        <Circle cx={180} cy={180} r={180} fill="url(#orbGlow)" />
+        <Circle cx={235} cy={235} r={235} fill="url(#orbGlow)" />
       </Svg>
     </View>
   );
@@ -35,10 +35,10 @@ export const OrbBackground = memo(function OrbBackground() {
 const styles = StyleSheet.create({
   wrap: {
     position: 'absolute',
-    top: -150,
-    left: -150,
-    width: 360,
-    height: 360,
+    top: -185,
+    left: -185,
+    width: 470,
+    height: 470,
     zIndex: 0,
   },
 });
