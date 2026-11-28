@@ -576,7 +576,17 @@ export function SearchResultsScreen({ route, navigation }: Props) {
             ListHeaderComponent={header}
             contentContainerStyle={styles.listPad}
             ListEmptyComponent={
-              channelMatches || allItems.length > 0 ? undefined : (
+              channelMatches || allItems.length > 0 ? undefined : remotePending ? (
+                // Stage 2 (the channel scan) is still running: NEVER
+                // declare "No results found" yet (user screenshot,
+                // 28 Nov 2026 — the empty state flashed while the
+                // channels were still being searched, then results
+                // arrived). Show the searching state instead.
+                <View style={styles.emptyWrap}>
+                  <ActivityIndicator color={colors.text} />
+                  <Text style={styles.searchingLabel}>Searching the channels…</Text>
+                </View>
+              ) : (
                 <View style={styles.emptyWrap}>
                   <MaterialIcons name="search-off" size={40} color={colors.textSecondary} />
                   <EmptyState

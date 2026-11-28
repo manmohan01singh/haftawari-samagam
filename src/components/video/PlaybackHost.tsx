@@ -167,6 +167,7 @@ export function PlaybackHost({
           <YouTubePlayer
             ref={ytRef}
             youtubeVideoId={item.youtubeVideoId}
+            autoplay
             onPlayingChange={setPlaying}
           />
         ) : item.kind === 'hosted' && item.videoRowId ? (

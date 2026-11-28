@@ -452,10 +452,13 @@ interface VideosFullDetailsResponse {
 }
 
 /**
- * One channel's latest ~200 uploads (4 playlistItems pages = 4
- * units), cached 6h per channel. This is the search engine's raw
- * material: real API data, newest first — NOT a query-matched set
- * on its own.
+ * One channel's latest ~500 uploads (10 playlistItems pages = 10
+ * units), cached 6h per channel. Deepened from ~200 (user report,
+ * 28 Nov 2026) so a shabad from a few months back is still findable;
+ * the 6h cache makes the extra units a one-off per channel per
+ * cache window, not a per-search cost. This is the search engine's
+ * raw material: real API data, newest first — NOT a query-matched
+ * set on its own.
  */
 async function fetchRecentUploadsFor(channelId: string, signal?: AbortSignal): Promise<UploadItem[]> {
   const cacheKey =
@@ -466,7 +469,7 @@ async function fetchRecentUploadsFor(channelId: string, signal?: AbortSignal): P
   const playlistId = uploadsPlaylistId(channelId);
   const uploads: UploadItem[] = [];
   let pageToken = '';
-  for (let page = 0; page < 4; page++) {
+  for (let page = 0; page < 10; page++) {
     const tokenPart = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '';
     const data = await apiGet<PlaylistSnippetResponse>(
       `playlistItems?part=snippet&playlistId=${playlistId}&maxResults=50${tokenPart}`,

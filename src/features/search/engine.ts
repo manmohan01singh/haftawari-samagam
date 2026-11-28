@@ -340,6 +340,12 @@ export async function searchAll(queryText: string, options: SearchOptions = {}):
     }
   }
 
+  // Never offer a correction above an EMPTY result page: "did you
+  // mean: karta pura vkhaniye" over "No results found" (user
+  // screenshot, 28 Nov 2026) reads as a wrong guess and erodes trust.
+  // The suggestion stays when the search itself found videos.
+  if (videos.length === 0) didYouMean = null;
+
   return { query, channel, videos, youtubeSkipped, youtubeError, youtubeFallback, didYouMean };
 }
 

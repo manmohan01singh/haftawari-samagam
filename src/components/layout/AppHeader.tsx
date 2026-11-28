@@ -144,13 +144,13 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   // sitting ~8dp from the brand mark; right-side icons 24dp.
   // letterSpacing -0.3 matches the web splash shell (public/index.html).
   wordmark: { fontSize: 20, fontWeight: '700', color: colors.text, letterSpacing: -0.5 },
+  // Inline with the wordmark, on the same baseline (user, 28 Nov
+  // 2026: not raised like a superscript — same line, just smaller).
   wordmarkSuffix: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '600',
     color: colors.textSecondary,
-    marginLeft: 4,
-    marginTop: 2,
-    alignSelf: 'flex-start',
+    marginLeft: -4,
   },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 22 },
   avatar: { width: 28, height: 28, borderRadius: 14 },

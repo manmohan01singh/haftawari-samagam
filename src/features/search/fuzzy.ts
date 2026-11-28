@@ -120,25 +120,33 @@ export function scoreTitle(query: string, title: string): TitleMatch {
   const tTokens = tokenize(title);
   if (qTokens.length === 0 || tTokens.length === 0) return { score: 0, kind: 'none' };
 
-  let sum = 0;
-  for (const qToken of qTokens) {
+  const perToken = qTokens.map((qToken) => {
     let best = 0;
     for (const tToken of tTokens) {
       const sim = tokenSimilarity(qToken, tToken);
       if (sim > best) best = sim;
       if (best === 1) break;
     }
-    sum += best;
+    return best;
+  });
+  let score = perToken.reduce((a, b) => a + b, 0) / qTokens.length;
+  // One-wrong-word allowance (user report, 28 Nov 2026): "karta purakh
+  // vkhaniye" must still find "Vich Karta Purakh Khloa | ..." — two of
+  // three query words match the title EXACTLY and the third is the
+  // user's own rendering of a word the title spells differently. Real
+  // search engines forgive one bad token when the rest match strongly;
+  // with 3+ tokens, score by the mean EXCLUDING the worst token,
+  // lightly discounted. Junk queries are unaffected: every token weak
+  // keeps the plain mean low either way.
+  if (qTokens.length >= 3) {
+    const sorted = [...perToken].sort((a, b) => a - b);
+    const excludingWorst = sorted.slice(1).reduce((a, b) => a + b, 0) / (sorted.length - 1);
+    score = Math.max(score, excludingWorst * 0.92);
   }
-  let score = sum / qTokens.length;
-  // A query token that matches nothing at all should hurt badly — that is
-  // a different video, not a typo.
-  const worst = Math.min(
-    ...qTokens.map((qToken) =>
-      Math.max(...tTokens.map((tToken) => tokenSimilarity(qToken, tToken))),
-    ),
-  );
-  if (worst < 0.4) score *= 0.6;
+  // A query token that matches nothing at all should hurt badly — but
+  // only when the overall match is not already strong (the case above).
+  const worst = Math.min(...perToken);
+  if (worst < 0.4 && score < 0.75) score *= 0.6;
   // Mild length penalty: a short query matching one word of a very long
   // title is weaker than matching most of a short title.
   const coverage = Math.min(1, qTokens.length / tTokens.length);

@@ -107,6 +107,21 @@ function topTitle(query, titles = TITLES) {
   );
 }
 
+// 5b. One wrong word must not sink an otherwise exact match
+//     (user report, 28 Nov 2026): "karta purakh vkhaniye" vs the real
+//     Amritvela Trust Live title "Vich Karta Purakh Khloa | ...".
+{
+  const { score } = scoreTitle(
+    'Karta purakh vkhaniye',
+    'Vich Karta Purakh Khloa | Amritvela Live Kirtan Darbar | Bhai Saheb Bhai Gurpreet Singh Rinku Veerji',
+  );
+  check(
+    "'karta purakh vkhaniye' (one wrong word) still matches 'Vich Karta Purakh Khloa'",
+    score >= 0.45,
+    `score=${score.toFixed(3)}`,
+  );
+}
+
 // 6. Acronym: how the sangat refers to the channel ("bgsj" is literally
 //    the query in reference screenshot 03).
 {

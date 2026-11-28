@@ -23,6 +23,10 @@ interface YouTubePlayerProps {
   fill?: boolean;
   /** Loop the video when it ends (Shorts behaviour). */
   loop?: boolean;
+  /** Start playback as soon as the embed loads (Watch page). The
+   * browser may still block sound-on autoplay; then the embed's own
+   * play button shows, exactly as before — never worse. */
+  autoplay?: boolean;
   /** The embed's own API reported 'ready'. */
   onReady?: () => void;
   /**
@@ -56,7 +60,7 @@ const Iframe = 'iframe' as unknown as React.ElementType;
  * or its ads once playback is possible.
  */
 export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(
-  function YouTubePlayer({ youtubeVideoId, onReady, onPlayingChange, fill, loop }, ref) {
+  function YouTubePlayer({ youtubeVideoId, onReady, onPlayingChange, fill, loop, autoplay }, ref) {
     const { colors } = useTheme();
     const styles = useMemo(() => createStyles(colors), [colors]);
     const [loaded, setLoaded] = useState(false);
@@ -102,7 +106,8 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
     const embedUrl =
       `https://www.youtube.com/embed/${encodeURIComponent(youtubeVideoId)}` +
       `?rel=0&playsinline=1&enablejsapi=1` +
-      (loop ? `&loop=1&playlist=${encodeURIComponent(youtubeVideoId)}` : '');
+      (loop ? `&loop=1&playlist=${encodeURIComponent(youtubeVideoId)}` : '') +
+      (autoplay ? '&autoplay=1' : '');
 
     return (
       <View style={fill ? styles.wrapFill : styles.wrap}>
