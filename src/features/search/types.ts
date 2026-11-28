@@ -34,6 +34,11 @@ export interface VideoResult {
   publishedAt: string | null;
   /** From YouTube snippet.liveBroadcastContent; 'none' for local rows. */
   liveBroadcastContent: 'none' | 'live' | 'upcoming';
+  /** Real view count when the producing leg already had it (the
+   *  uploads leg's enrichment call now asks for statistics too) —
+   *  the results screen prefers it over its own backfill so counts
+   *  are present at first paint instead of popping in (N-9). */
+  viewCount?: number | null;
   /** Owning channel for YouTube-leg results (multi-channel panel). */
   channelId?: string;
   channelTitle?: string;

@@ -20,10 +20,11 @@ const Tab = createBottomTabNavigator<MainTabParamList>();
  */
 export function MainTabs() {
   const { user, profile } = useAuth();
-  const initial =
+  const rawInitial =
     profile?.display_name?.charAt(0)?.toUpperCase() ??
     user?.email?.charAt(0)?.toUpperCase() ??
     null;
+  const initial = rawInitial && /\p{L}/u.test(rawInitial) ? rawInitial : null;
   // Real profile photo (synced Google DP) when one exists; the slot
   // falls back to the initial when it does not or fails to load.
   const avatarUrl = profile?.avatar_url ?? null;

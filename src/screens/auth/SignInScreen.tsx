@@ -183,7 +183,8 @@ export function SignInScreen({ navigation }: Props) {
       <Text style={styles.benefits}>
         Sign in to like and comment with the sangat, save samagams to your Library,
         follow channels, and join Samagam Sessions with your name. You can also
-        keep listening as a guest — use the back arrow and just press play.
+        keep listening as a guest — recordings play right away; only the
+        sangat-hosted copies inside Samagam Sessions need a sign-in.
       </Text>
       {!isSupabaseConfigured ? (
         <Text style={styles.error}>Sign-in is not available: the backend is not configured.</Text>

@@ -25,6 +25,7 @@ export function StackTabBar({ navigation, activeTab = null }: StackTabBarProps) 
     profile?.display_name?.charAt(0)?.toUpperCase() ??
     user?.email?.charAt(0)?.toUpperCase() ??
     null;
+  const safeInitial = initial && /\p{L}/u.test(initial) ? initial : null;
 
   const onPress = useCallback(
     (key: string) => {
@@ -47,7 +48,7 @@ export function StackTabBar({ navigation, activeTab = null }: StackTabBarProps) 
       label: 'You',
       kind: 'avatar',
       avatarUrl: profile?.avatar_url ?? null,
-      avatarInitial: initial,
+      avatarInitial: safeInitial,
     },
   ];
 

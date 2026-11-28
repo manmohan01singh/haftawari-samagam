@@ -348,7 +348,9 @@ export function SearchResultsScreen({ route, navigation }: Props) {
       const cardData = searchResultCardData(
         item,
         avatar,
-        item.youtubeVideoId ? (statsMap.get(item.youtubeVideoId) ?? null) : null,
+        // The leg's own count first (N-9): present at first paint;
+        // the batched backfill only fills what no leg carried.
+        item.viewCount ?? (item.youtubeVideoId ? (statsMap.get(item.youtubeVideoId) ?? null) : null),
       );
       return (
         <ShelfCard

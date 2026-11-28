@@ -464,6 +464,7 @@ interface VideosFullDetailsResponse {
     id: string;
     snippet: { liveBroadcastContent: 'none' | 'live' | 'upcoming' };
     contentDetails: { duration: string };
+    statistics?: { viewCount?: string };
   }[];
 }
 
@@ -567,11 +568,19 @@ export async function searchUploadsFallbackFor(
 
   const top = ranked.slice(0, 25);
   const ids = top.map(({ item }) => item.videoId).join(',');
+  // The enrichment call is NOT fatal (fix round 5, #37): the
+  // uploads themselves ride the 6h cache, so under total quota
+  // death the titles are already in hand — losing every result
+  // because the durations call failed reduced search to the Dec
+  // 2020 local archive alone. Without details, matches return
+  // with unknown durations (the #shorts tag still filters) and
+  // no live flag — degraded data, honestly labelled by the
+  // screen's banner logic, beats no data.
   const details = await apiGet<VideosFullDetailsResponse>(
-    `videos?part=contentDetails,snippet&id=${encodeURIComponent(ids)}`,
+    `videos?part=contentDetails,snippet,statistics&id=${encodeURIComponent(ids)}`,
     signal,
-  );
-  const byId = new Map((details.items ?? []).map((item) => [item.id, item]));
+  ).catch(() => null);
+  const byId = new Map((details?.items ?? []).map((item) => [item.id, item]));
 
   const results: VideoResult[] = [];
   for (const { item, score, kind } of top) {
@@ -590,6 +599,8 @@ export async function searchUploadsFallbackFor(
       durationSeconds,
       publishedAt: item.publishedAt,
       liveBroadcastContent: detail?.snippet.liveBroadcastContent ?? 'none',
+      viewCount:
+        detail?.statistics?.viewCount != null ? Number(detail.statistics.viewCount) : null,
       score,
       matchKind: kind,
     });
