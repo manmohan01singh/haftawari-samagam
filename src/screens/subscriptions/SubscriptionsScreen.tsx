@@ -331,6 +331,12 @@ export function SubscriptionsScreen({ navigation }: Props) {
           27 Nov 2026: the selected-channel header should carry the
           same glass blur as the app bars). */}
       <BarBlurBackground />
+      {!user ? (
+        <Text style={styles.guestNote}>
+          You&apos;re browsing as a guest — these are the sangat channels in this app.
+          Sign in to follow your favourites and make this feed yours.
+        </Text>
+      ) : null}
       {/* Avatar rail — every followed channel. */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
         {followedChannels.map((c) => {
@@ -533,6 +539,13 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   railItem: { width: 76, alignItems: 'center' },
   headerZone: { position: 'relative', overflow: 'hidden' },
+  guestNote: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.textSecondary,
+  },
   railAvatarWrap: { position: 'relative', borderRadius: nativeApp.avatarRail.avatarSize / 2 + 3, padding: 3, alignItems: 'center', justifyContent: 'center' },
   railAvatarClip: {
     width: nativeApp.avatarRail.avatarSize,

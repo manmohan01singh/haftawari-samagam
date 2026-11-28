@@ -38,6 +38,7 @@ export function SignUpScreen({ navigation }: Props) {
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,16 +47,21 @@ export function SignUpScreen({ navigation }: Props) {
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   // Supabase Auth's enforced minimum for this project is 6 characters;
-  // the rule is shown under the field and validated before submit.
-  const passwordValid = password.length >= 6;
-  const formValid = emailValid && passwordValid;
+  // the app asks for 8 (Chat 2 fault 41, 28 Nov 2026) and requires the
+  // password to be typed twice — one typo in a single field used to
+  // lock a new user out of the account they had just made.
+  const passwordValid = password.length >= 8;
+  const confirmValid = confirmPassword.length > 0 && confirmPassword === password;
+  const formValid = emailValid && passwordValid && confirmValid;
   const invalidReason = !email.trim()
-    ? 'Enter an email and a password (at least 6 characters) to sign up.'
+    ? 'Enter an email and a password (at least 8 characters) to sign up.'
     : !emailValid
       ? 'That email address does not look complete — check for an @ and a domain.'
       : !passwordValid
-        ? 'Your password needs at least 6 characters.'
-        : null;
+        ? 'Your password needs at least 8 characters.'
+        : !confirmValid
+          ? 'Type the same password again to confirm it.'
+          : null;
 
   const emailRef = useRef<ElementRef<typeof TextInput>>(null);
   const passwordRef = useRef<ElementRef<typeof TextInput>>(null);
@@ -186,7 +192,7 @@ export function SignUpScreen({ navigation }: Props) {
           <View style={styles.passwordRow}>
             <TextInput
               style={styles.passwordInput}
-              placeholder="At least 6 characters"
+              placeholder="At least 8 characters"
               placeholderTextColor={colors.textSecondary}
               autoCapitalize="none"
               autoCorrect={false}
@@ -214,9 +220,29 @@ export function SignUpScreen({ navigation }: Props) {
               />
             </Pressable>
           </View>
-          <Text style={styles.rules}>Password rules: at least 6 characters. Longer is stronger — mix letters and numbers if you can.</Text>
+          <Text style={styles.rules}>Password rules: at least 8 characters. Longer is stronger — mix letters and numbers if you can.</Text>
           {password && !passwordValid ? (
-            <Text style={styles.fieldError}>Password is too short — at least 6 characters are required.</Text>
+            <Text style={styles.fieldError}>Password is too short — at least 8 characters are required.</Text>
+          ) : null}
+          <Text style={styles.label}>Confirm password</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Type the same password again"
+            placeholderTextColor={colors.textSecondary}
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="new-password"
+            textContentType="newPassword"
+            returnKeyType="done"
+            onSubmitEditing={() => {
+              if (formValid && !busy) void submit();
+            }}
+            secureTextEntry={!showPassword}
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+          />
+          {confirmPassword && !confirmValid ? (
+            <Text style={styles.fieldError}>The two passwords do not match yet.</Text>
           ) : null}
           {error ? <Text style={styles.error}>{error}</Text> : null}
           {alreadyRegistered ? (
