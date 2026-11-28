@@ -488,7 +488,6 @@ export function createHomeFeedPager({ channels, filter }: HomeFeedPagerOptions):
 
   async function fillBufferInner(cursor: ChannelCursor): Promise<boolean> {
     if (filter.kind === 'live' && cursor.totalScans >= LIVE_TOTAL_SCAN_CAP) {
-    if (filter.kind === 'live' && cursor.totalScans >= LIVE_TOTAL_SCAN_CAP) {
       // Live-filter lifetime cap (see LIVE_TOTAL_SCAN_CAP): nothing
       // live lives this deep in a channel's uploads.
       cursor.exhausted = true;
