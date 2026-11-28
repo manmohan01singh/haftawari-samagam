@@ -1,5 +1,5 @@
 import React, { memo, useMemo } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 
 import { useTheme } from '../../theme';
@@ -67,17 +67,23 @@ export const BarBlurBackground = memo(function BarBlurBackground({
 
   const tintStyle = useMemo(
     () => ({
-      backgroundColor:
-        variant === 'nav'
-          ? isDark
-            ? 'rgba(15,15,15,0.96)'
-            : 'rgba(255,255,255,0.94)'
-          : isDark
-            ? 'rgba(15,15,15,0.85)'
-            : 'rgba(255,255,255,0.68)',
+      backgroundColor: isDark ? 'rgba(15,15,15,0.85)' : 'rgba(255,255,255,0.68)',
     }),
-    [isDark, variant],
+    [isDark],
   );
+
+  // The NAV bar is SOLID (fix round 4, Chat 2 #3/#50/N7): even at
+  // 0.96 the backdrop blur kept washing the text labels out over
+  // bright thumbnails and Shorts. Readability won over glass for
+  // the bar that carries words — the header keeps its glass.
+  if (variant === 'nav') {
+    return (
+      <View
+        style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? '#0F0F0F' : '#FFFFFF' }]}
+        pointerEvents="none"
+      />
+    );
+  }
 
   return (
     <BlurView

@@ -137,7 +137,7 @@ export function apiCardData(meta: YouTubeVideoMetadata, channelAvatarUrl: string
     if (meta.viewCount != null) parts.push(`▷ ${formatCount(meta.viewCount)}`);
     const ago = timeAgo(meta.publishedAt);
     if (ago) parts.push(ago);
-    metaLine = parts.join('  ·  ');
+    metaLine = parts.join('\u00A0·\u00A0');
   }
   return {
     key: `yt-${meta.youtubeVideoId}`,

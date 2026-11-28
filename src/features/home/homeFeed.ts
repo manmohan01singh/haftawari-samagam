@@ -194,7 +194,25 @@ export function resolveChipFilter(
 
 function matchesTopic(title: string, keywords: string[]): boolean {
   const haystack = title.toLowerCase();
-  return keywords.some((k) => haystack.includes(k));
+  let mine = Infinity;
+  for (const k of keywords) {
+    const i = haystack.indexOf(k);
+    if (i !== -1 && i < mine) mine = i;
+  }
+  if (mine === Infinity) return false;
+  // First-topic-wins (fix round 4, Chat 2 #9): a title that LEADS
+  // with another topic's keyword belongs to that topic's chip even
+  // when this chip's keyword appears later in the title — "Sakhi …
+  // Kirtan" is a Sakhi video that also mentions kirtan, and the
+  // Kirtan chip showing it read as "chips don't filter".
+  for (const kws of Object.values(TOPIC_KEYWORDS)) {
+    if (kws === keywords) continue;
+    for (const k of kws) {
+      const i = haystack.indexOf(k);
+      if (i !== -1 && i < mine) return false;
+    }
+  }
+  return true;
 }
 
 /**
@@ -321,6 +339,9 @@ interface ChannelCursor {
   tokenPrimed: boolean;
   /** Pages absorbed over the pager's whole life (live-filter cap). */
   totalScans: number;
+  /** A fill is already in flight for this cursor (deadline races
+   *  must not start a second fetch of the same page). */
+  filling: boolean;
   exhausted: boolean;
   /**
    * A fetch failed during the current next() call. The channel is
@@ -352,6 +373,7 @@ export function createHomeFeedPager({ channels, filter }: HomeFeedPagerOptions):
   // is emitted once; a different duration is a different programme
   // and always stays.
   const contentSeen = new Set<string>();
+  const liveSeen = new Set<string>();
 
   // ── Catalogue source ──────────────────────────────────────────────
   // Included for 'all' and topic filters, and for channel filters
@@ -423,6 +445,7 @@ export function createHomeFeedPager({ channels, filter }: HomeFeedPagerOptions):
       primed: false,
       tokenPrimed: false,
       totalScans: 0,
+      filling: false,
       exhausted: !isYouTubeConfigured,
       failed: false,
     }));
@@ -454,6 +477,17 @@ export function createHomeFeedPager({ channels, filter }: HomeFeedPagerOptions):
   async function fillBuffer(cursor: ChannelCursor): Promise<boolean> {
     if (cursor.buffer.length > 0) return true;
     if (cursor.exhausted || cursor.failed) return false;
+    if (cursor.filling) return false;
+    cursor.filling = true;
+    try {
+      return await fillBufferInner(cursor);
+    } finally {
+      cursor.filling = false;
+    }
+  }
+
+  async function fillBufferInner(cursor: ChannelCursor): Promise<boolean> {
+    if (filter.kind === 'live' && cursor.totalScans >= LIVE_TOTAL_SCAN_CAP) {
     if (filter.kind === 'live' && cursor.totalScans >= LIVE_TOTAL_SCAN_CAP) {
       // Live-filter lifetime cap (see LIVE_TOTAL_SCAN_CAP): nothing
       // live lives this deep in a channel's uploads.
@@ -554,6 +588,20 @@ export function createHomeFeedPager({ channels, filter }: HomeFeedPagerOptions):
         if (drops >= 6) return null;
         continue;
       }
+      // Live dedupe (fix round 4, Chat 2 #4): live items have no
+      // duration, so the content key above can never fire for them —
+      // and one channel's parallel streams with the SAME title
+      // ("Official SGPC LIVE" ×4) read as duplicates in the feed.
+      // Same channel + same normalised title + both live = one card.
+      if (meta.liveBroadcastContent === 'live') {
+        const liveKey = `live:${meta.channelId}:${meta.title.trim().toLowerCase().replace(/\s+/g, ' ')}`;
+        if (liveSeen.has(liveKey)) {
+          drops++;
+          if (drops >= 6) return null;
+          continue;
+        }
+        liveSeen.add(liveKey);
+      }
       seen.add(meta.youtubeVideoId);
       if (contentKey != null) contentSeen.add(contentKey);
       return { kind: 'upload', key: `yt-${meta.youtubeVideoId}`, meta, channel: cursor.channel };
@@ -595,7 +643,16 @@ export function createHomeFeedPager({ channels, filter }: HomeFeedPagerOptions):
       // now read from warm buffers — first paint no longer waits on
       // nine channels' round trips in series, and a topic chip's
       // deep scan stops feeling like an empty tab.
-      await Promise.all(cursors.map((c) => fillBuffer(c)));
+      // Deadline (fix round 4, Chat 2 #1/B9): the round no longer
+      // waits for the SLOWEST channel — under API quota death one
+      // hanging fetch (12 s timeout) stalled the whole first paint
+      // behind a full-screen loader. Fills that miss the deadline
+      // keep running in the background and their items join the
+      // next round; the channel is not marked failed for being slow.
+      await Promise.race([
+        Promise.all(cursors.map((c) => fillBuffer(c))),
+        new Promise((resolve) => setTimeout(resolve, 5000)),
+      ]);
       for (const cursor of cursors) {
         if (collected.length >= count) break;
         const item = await takeChannel(cursor);

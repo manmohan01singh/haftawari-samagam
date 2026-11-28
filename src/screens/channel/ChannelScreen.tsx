@@ -387,7 +387,7 @@ export function ChannelScreen({ route, navigation }: Props) {
                 channel.videoCount != null ? `${formatCount(channel.videoCount)} videos` : null,
               ]
                 .filter(Boolean)
-                .join('  •  ')}
+                .join('\u00A0•\u00A0')}
             </Text>
           ) : null}
         </View>

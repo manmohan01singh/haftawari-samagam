@@ -433,7 +433,7 @@ export function SearchResultsScreen({ route, navigation }: Props) {
                     : null,
                 ]
                   .filter(Boolean)
-                  .join('  •  ')}
+                  .join('\u00A0•\u00A0')}
               </Text>
             </View>
           </View>

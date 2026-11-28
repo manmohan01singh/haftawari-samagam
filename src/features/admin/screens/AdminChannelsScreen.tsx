@@ -196,7 +196,7 @@ function ChannelsContent({ ctx }: { ctx: AdminContext }) {
                 <Text style={styles.channelMeta}>
                   {[resolved.handle, resolved.subscriberCount != null ? `${formatCount(resolved.subscriberCount)} subscribers` : null, resolved.videoCount != null ? `${formatCount(resolved.videoCount)} videos` : null]
                     .filter(Boolean)
-                    .join('  •  ')}
+                    .join('\u00A0•\u00A0')}
                 </Text>
                 <Text style={styles.channelMeta}>{resolved.channelId}</Text>
               </View>
@@ -271,7 +271,7 @@ function ChannelsContent({ ctx }: { ctx: AdminContext }) {
                 <View style={styles.rowText}>
                   <Text style={styles.channelTitle}>{channel.title}</Text>
                   <Text style={styles.channelMeta}>
-                    {[channel.handle, channel.youtube_channel_id].filter(Boolean).join('  •  ')}
+                    {[channel.handle, channel.youtube_channel_id].filter(Boolean).join('\u00A0•\u00A0')}
                   </Text>
                 </View>
                 <Chip label={channel.is_active ? 'Active' : 'Inactive'} tone={channel.is_active ? 'dark' : 'outline'} />

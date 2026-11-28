@@ -439,9 +439,12 @@ export function ShortsScreen({ navigation }: Props) {
                 {item.meta.title}
               </Text>
               <Text style={styles.metaLine} numberOfLines={1}>
-                {item.meta.viewCount != null ? `${formatCount(item.meta.viewCount)} views` : ''}
-                {item.meta.viewCount != null ? ' · ' : ''}
-                {timeAgo(item.meta.publishedAt)}
+                {/* One template string (fix round 4, Chat 2 #17/N4):
+                    adjacent JSX expressions lose their separating
+                    spaces in the web render — "799 views·4 hr ago". */}
+                {item.meta.viewCount != null
+                  ? `${formatCount(item.meta.viewCount)} views · ${timeAgo(item.meta.publishedAt)}`
+                  : timeAgo(item.meta.publishedAt)}
               </Text>
             </View>
             {isActive ? (

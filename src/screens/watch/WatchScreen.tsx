@@ -618,39 +618,55 @@ export function WatchScreen({ route, navigation }: Props) {
     let active = true;
     (async () => {
       const rows = isSupabaseConfigured
-        ? await fetchUpNext(videoRowId ?? null).catch(() => [] as Video[])
+        ? await fetchUpNext(resolved?.row?.id ?? videoRowId ?? null).catch(() => [] as Video[])
         : [];
-      const items: UpNextItem[] = rows.map((video) => ({ kind: 'row' as const, video }));
       let token: string | null = null;
       let started = false;
-      // Same-channel first (Chat 2 fault 16, 28 Nov 2026): the
-      // fallback used to read the OFFICIAL channel's uploads no
-      // matter what was being watched, so an Amritvela video's
-      // Up Next was another channel's old uploads. The current
-      // video's own channel leads; the official channel is only
-      // the last resort.
+      // Same-channel uploads LEAD (fix round 4, Chat 2 #16): the
+      // old order put the catalogue first and consulted uploads
+      // only when the catalogue had < 4 rows — but the catalogue
+      // is a fixed Dec 2020 archive, so Up Next was the same old
+      // recordings on every watch, related or not. Now the watched
+      // video's own channel's recent uploads lead (up to 8), and
+      // catalogue rows fill the rest.
       const upNextPlaylistId =
         (resolved?.channelId ? uploadsPlaylistIdFor(resolved.channelId) : null) ??
         officialChannel?.uploadsPlaylistId ??
         null;
-      if (items.length < 4 && upNextPlaylistId) {
+      const items: UpNextItem[] = [];
+      if (upNextPlaylistId) {
         const page = await getUploadsPageCached(upNextPlaylistId).catch(() => null);
         if (page) {
           started = true;
           // P10: KEEP the page token — "Load more" (footer below)
           // continues from exactly here instead of the list ending.
           token = page.nextPageToken;
-          const seen = new Set(rows.map((r) => r.youtube_video_id));
+          const seen = new Set<string>();
           if (currentYtId) seen.add(currentYtId);
           for (const meta of page.videos) {
-            // NO Shorts anywhere (locked rule) — uploads pages are
-            // filtered with the app's established isShortVideo rule.
-            // Validity gate: a card with no title never renders.
-            if (!seen.has(meta.youtubeVideoId) && !isShortVideo(meta) && meta.title.trim().length > 0) {
+            if (items.length >= 8) break;
+            // NO Shorts in Up Next (locked rule) — uploads pages
+            // are filtered with the app's established isShortVideo
+            // rule. Validity gate: a card with no title never
+            // renders; live broadcasts don't belong in Up Next.
+            if (
+              !seen.has(meta.youtubeVideoId) &&
+              !isShortVideo(meta) &&
+              meta.liveBroadcastContent !== 'live' &&
+              meta.title.trim().length > 0
+            ) {
+              seen.add(meta.youtubeVideoId);
               items.push({ kind: 'api' as const, meta });
             }
           }
         }
+      }
+      const uploadIds = new Set(
+        items.flatMap((i) => (i.kind === 'api' ? [i.meta.youtubeVideoId] : [])),
+      );
+      for (const video of rows) {
+        if (video.youtube_video_id && uploadIds.has(video.youtube_video_id)) continue;
+        items.push({ kind: 'row' as const, video });
       }
       if (active) {
         setUpNextItems(items.slice(0, 15));
