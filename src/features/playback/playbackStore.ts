@@ -69,14 +69,33 @@ let lastDockSeconds: number | null = null;
 function persistDock(item: PlaybackItem | null, seconds?: number | null): void {
   if (item === null) {
     lastDockSeconds = null;
-    AsyncStorage.removeItem(DOCK_STORE_KEY).catch(() => undefined);
+    if (Platform.OS === 'web') {
+      try {
+        window.localStorage.removeItem(DOCK_STORE_KEY);
+      } catch {
+        // Private-mode storage denial: persistence is best-effort.
+      }
+    } else {
+      AsyncStorage.removeItem(DOCK_STORE_KEY).catch(() => undefined);
+    }
     return;
   }
   if (typeof seconds === 'number') lastDockSeconds = seconds;
-  AsyncStorage.setItem(
-    DOCK_STORE_KEY,
-    JSON.stringify({ item, seconds: lastDockSeconds }),
-  ).catch(() => undefined);
+  const payload = JSON.stringify({ item, seconds: lastDockSeconds });
+  if (Platform.OS === 'web') {
+    // Synchronous on web (fix round 6.2, #12): the read side is a
+    // sync localStorage read at store creation, and the write now
+    // lands in the same tick minimize() runs — an async write
+    // racing a fast full reload could be lost, and a lost write
+    // reads exactly like "the dock was never restored".
+    try {
+      window.localStorage.setItem(DOCK_STORE_KEY, payload);
+    } catch {
+      // Best-effort (see above).
+    }
+    return;
+  }
+  AsyncStorage.setItem(DOCK_STORE_KEY, payload).catch(() => undefined);
 }
 
 /** The host calls this while the dock plays, so a reload restores

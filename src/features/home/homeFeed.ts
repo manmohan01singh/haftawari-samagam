@@ -340,6 +340,20 @@ const LIVE_SCAN_PAGES = 2;
  * cards, all from page 1, spinner still hunting page 5+).
  */
 const LIVE_TOTAL_SCAN_CAP = 3;
+/**
+ * Lifetime scan cap per channel for EVERY filter (fix round 6.2,
+ * #8): without it a cursor paged a channel's uploads playlist to
+ * its very end — thousands of items — so the feed's end, and the
+ * "that's everything" marker that must close it, existed in
+ * theory but no amount of real scrolling ever reached it (two
+ * sweeps bottomed out their scroll budgets at 51 cards with the
+ * end still not in sight). A Home feed is the channels' RECENT
+ * uploads: four pages ≈ 200 per channel, on top of the FULL
+ * curated catalogue, is that pool — the same order as the Shorts
+ * pool. Older uploads remain one search away (search scans the
+ * archive independently of this pager).
+ */
+const FEED_TOTAL_SCAN_CAP = 4;
 
 interface ChannelCursor {
   channel: AppChannel;
@@ -519,9 +533,13 @@ export function createHomeFeedPager({ channels, filter }: HomeFeedPagerOptions):
   }
 
   async function fillBufferInner(cursor: ChannelCursor): Promise<boolean> {
-    if (filter.kind === 'live' && cursor.totalScans >= LIVE_TOTAL_SCAN_CAP) {
-      // Live-filter lifetime cap (see LIVE_TOTAL_SCAN_CAP): nothing
-      // live lives this deep in a channel's uploads.
+    const totalCap =
+      filter.kind === 'live' ? LIVE_TOTAL_SCAN_CAP : FEED_TOTAL_SCAN_CAP;
+    if (cursor.totalScans >= totalCap) {
+      // Lifetime scan cap (see LIVE_TOTAL_SCAN_CAP /
+      // FEED_TOTAL_SCAN_CAP): the channel has given the feed
+      // everything it is going to give; declare it drained so the
+      // feed can honestly end.
       cursor.exhausted = true;
       return false;
     }
@@ -539,7 +557,8 @@ export function createHomeFeedPager({ channels, filter }: HomeFeedPagerOptions):
       // stopped — one failing channel hung the whole batch).
       !cursor.failed &&
       scans < currentScanBudget &&
-      callScansUsed < CALL_SCAN_CAP
+      callScansUsed < CALL_SCAN_CAP &&
+      cursor.totalScans < totalCap
     ) {
       try {
         if (!cursor.primed) {

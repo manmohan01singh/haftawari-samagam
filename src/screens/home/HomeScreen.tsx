@@ -359,6 +359,20 @@ export function HomeScreen({ navigation }: Props) {
     // full minute (Chat 2's reload test).
     if (liveMap.size > 0) void refreshLiveCounts();
   }, [liveMap.size, refreshLiveCounts]);
+  const itemsWereEmptyRef = useRef(true);
+  useEffect(() => {
+    // …and again when the feed first lands (fix round 6.2, #5):
+    // the mount refresh above can run before any live card is on
+    // screen, and the sweep watched a fresh load sit on the stale
+    // cached count for ~a minute until the first tick. Once the
+    // items exist, the union refresh covers the cards actually
+    // showing.
+    if (items.length > 0 && itemsWereEmptyRef.current) {
+      itemsWereEmptyRef.current = false;
+      void refreshLiveCounts();
+    }
+    if (items.length === 0) itemsWereEmptyRef.current = true;
+  }, [items.length, refreshLiveCounts]);
   useEffect(() => {
     let ticks = 0;
     const t = setInterval(() => {
@@ -1144,7 +1158,7 @@ export function HomeScreen({ navigation }: Props) {
                 <View style={styles.endOfFeed}>
                   <MaterialIcons name="check-circle" size={18} color={colors.textSecondary} />
                   <Text style={styles.endOfFeedText}>
-                    That&rsquo;s every video from the sangat channels
+                    That&rsquo;s everything recent from the sangat channels
                   </Text>
                 </View>
               ) : undefined
