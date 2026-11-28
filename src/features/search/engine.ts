@@ -103,7 +103,20 @@ export async function deriveCorrection(queryText: string): Promise<string | null
         best = candidate;
       }
     }
-    if (best && bestScore >= 0.8 && best !== token) {
+    // Never "correct" by prefix-shrinking or prefix-growing: if one
+    // word is a prefix of the other, the longer one is usually the
+    // user's real word and the shorter a different word entirely —
+    // 'purakh' -> 'pura' and 'ramdasji' -> 'ramdas' both came from
+    // this (user screenshots, 28 Nov 2026) and read as wrong guesses.
+    // The scorer already handles prefix typing; the corrector is for
+    // genuine typos (transpositions, dropped letters) only.
+    if (
+      best &&
+      bestScore >= 0.8 &&
+      best !== token &&
+      !token.startsWith(best) &&
+      !best.startsWith(token)
+    ) {
       changed = true;
       return best;
     }
