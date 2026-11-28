@@ -50,7 +50,7 @@ type ResultFilter = 'all' | 'local' | 'youtube' | 'live';
  * (stage-1 results stay; stage 2 still merges in when it lands, and
  * its banner then shows from real stage-2 data).
  */
-const REMOTE_PENDING_CAP_MS = 15_000;
+const REMOTE_PENDING_CAP_MS = 6_000;
 
 /** Map an engine VideoResult onto the shared card display shape. */
 function searchResultCardData(v: VideoResult, channelAvatarUrl: string | null): CardVideoData {
@@ -176,13 +176,19 @@ export function SearchResultsScreen({ route, navigation }: Props) {
         }
       });
 
-    // Time bound on the pending note (REMOTE_PENDING_CAP_MS): if stage 2
-    // is still running, the note clears and the header falls silent —
-    // stage-1 results stay, and stage 2 still merges in when it lands.
-    // (Without this, a stalled leg left "Searching the channels…"
-    // under already-loaded results indefinitely — sweep round 4.)
+    // Time bound on the pending state (REMOTE_PENDING_CAP_MS, now
+    // 6 s — blueprint round 2, fault 37/N5): if stage 2 is still
+    // running, the search SETTLES with what has arrived — the note
+    // clears AND remotePending flips off, so a nonsense query
+    // reaches its honest "No results found" in seconds instead of
+    // spinning ~18 s while every leg's timeout burns in sequence.
+    // Stage 2 still merges in whenever it lands.
     const capTimer = setTimeout(() => {
-      if (active) setRemoteCapped(true);
+      if (!active) return;
+      setRemoteCapped(true);
+      setResult((prev) =>
+        prev?.query === query && prev.remotePending ? { ...prev, remotePending: false } : prev,
+      );
     }, REMOTE_PENDING_CAP_MS);
     return () => {
       active = false;
@@ -327,9 +333,15 @@ export function SearchResultsScreen({ route, navigation }: Props) {
     [],
   );
 
+  // A chip that cannot differ from All is a lie (fault 37): when
+  // every result is a local result, "In this app" is All with a
+  // second name — hide it. The render below also drops zero-count
+  // chips.
   const filterChips: { key: ResultFilter; label: string; count: number }[] = [
     { key: 'all', label: 'All', count: counts.all },
-    { key: 'local', label: 'In this app', count: counts.local },
+    ...(counts.local !== counts.all
+      ? [{ key: 'local' as ResultFilter, label: 'In this app', count: counts.local }]
+      : []),
     { key: 'youtube', label: 'On channels', count: counts.youtube },
     { key: 'live', label: 'Live', count: counts.live },
   ];
@@ -349,11 +361,17 @@ export function SearchResultsScreen({ route, navigation }: Props) {
       ) : null}
       {remotePending && !remoteCapped ? (
         <Text style={styles.pendingNote}>Searching the channels…</Text>
-      ) : !remotePending && data?.youtubeFallback && !channelMatches ? (
+      ) : !remotePending && data?.youtubeFallback && allItems.length > 0 ? (
+        // Transparency, not an error (blueprint round 2, faults
+        // 37/39/N5): these results came from scanning the channels'
+        // uploads rather than the full YouTube index — say so in
+        // one plain line. And NEVER over zero matches: a banner
+        // announcing "showing matches" above an empty list is a
+        // contradiction (N5).
         <Text style={styles.pendingNote}>
-          Channel search is unavailable — showing matches from the channels&apos; latest uploads.
+          {`Showing matches from the channels' latest uploads for "${query}".`}
         </Text>
-      ) : !remotePending && youtubeSkipped && !channelMatches ? (
+      ) : !remotePending && youtubeSkipped && !channelMatches && allItems.length > 0 ? (
         <View style={styles.skippedRow}>
           <Text style={[styles.skippedNote, styles.skippedText]}>
             {degradedBannerText(data?.youtubeError ?? null)}
@@ -403,9 +421,19 @@ export function SearchResultsScreen({ route, navigation }: Props) {
               </View>
               {channelResult.handle ? <Text style={styles.channelHandle}>{channelResult.handle}</Text> : null}
               <Text style={styles.channelMeta} numberOfLines={1}>
-                {channelResult.subscriberCount != null ? `${formatCount(channelResult.subscriberCount)} subscribers` : ''}
-                {channelResult.subscriberCount != null && channelResult.videoCount != null ? '  •  ' : ''}
-                {channelResult.videoCount != null ? `${formatCount(channelResult.videoCount)} videos` : ''}
+                {/* One template string (N4): adjacent JSX text
+                    expressions lose their separating spaces on
+                    web — "subscribers•1.3K videos". */}
+                {[
+                  channelResult.subscriberCount != null
+                    ? `${formatCount(channelResult.subscriberCount)} subscribers`
+                    : null,
+                  channelResult.videoCount != null
+                    ? `${formatCount(channelResult.videoCount)} videos`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join('  •  ')}
               </Text>
             </View>
           </View>
@@ -477,8 +505,8 @@ export function SearchResultsScreen({ route, navigation }: Props) {
       {allItems.length > 0 ? (
         <>
           <Text style={styles.resultsHeading}>
-            {counts.all} {counts.all === 1 ? 'result' : 'results'}
-            {channelResult ? ' · plus the channel above' : ''}
+            {/* One template string (N4: "6results" jam). */}
+            {`${counts.all} ${counts.all === 1 ? 'result' : 'results'}${channelResult ? ' · plus the channel above' : ''}`}
           </Text>
           <View style={styles.chipRow}>
             {filterChips
