@@ -117,6 +117,24 @@ export function PlaybackHost({
     if (routeName !== 'Watch' && suppressedKey) setSuppressedKey(null);
   }, [routeName, suppressedKey, setSuppressedKey]);
 
+  // Bar-hidden enforcement (fix round 6.1, R5-2 remainder): the
+  // one-shot pause on entering a session/admin/auth page can be
+  // escaped by a pre-roll AD — the embed ignores pauseVideo while
+  // an ad plays, then the recording starts audibly on a page
+  // whose whole point is that nothing plays there (the sweep
+  // heard the docked kirtan through the session sign-in wall).
+  // While the bar is hidden, re-assert the pause every 2.5 s:
+  // pausing an already-paused player is a no-op, and no ad or
+  // autoplay chain gets more than a couple of seconds of sound.
+  React.useEffect(() => {
+    if (!barHidden || !item || mode === 'closed') return;
+    const t = setInterval(() => {
+      if (item.kind === 'youtube') ytRef.current?.pause();
+      else hostedRef.current?.pause();
+    }, 2500);
+    return () => clearInterval(t);
+  }, [barHidden, item, mode]);
+
   // Dock position writer (fix round 6, R5-7): while the dock
   // plays, note the position every 5 s so a full page load can
   // restore the dock where the listener actually was.

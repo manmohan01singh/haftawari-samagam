@@ -306,18 +306,33 @@ export function HomeScreen({ navigation }: Props) {
   // are re-read cheaply on mount and on every 60 s tick, so a card
   // can disagree with the Watch page by at most a minute.
   const refreshLiveCounts = useCallback(async () => {
-    const live = [...liveMapRef.current.values()].filter(
-      (m) => m.liveBroadcastContent === 'live',
-    );
-    if (live.length === 0) return;
-    const fresh = await fetchVideosMetadata(live.map((m) => m.youtubeVideoId)).catch(
-      () => null,
-    );
+    // The union of the discovery map AND the live items actually
+    // in the feed (fix round 6.1, #5 remainder): the sweep's card
+    // stayed frozen at its gather-time count for 10+ minutes —
+    // when a feed live item's id is not in the discovery map (two
+    // SGPC streams run at once; discovery and the uploads scan do
+    // not always surface the same one), the card's override read
+    // a map that never held its id, and refreshing that map could
+    // never move the card. Feed-only ids now get a map entry
+    // (built on the item's own meta) so their counts refresh too.
+    const ids = new Set<string>();
+    for (const m of liveMapRef.current.values()) {
+      if (m.liveBroadcastContent === 'live') ids.add(m.youtubeVideoId);
+    }
+    const feedMetaById = new Map<string, YouTubeVideoMetadata>();
+    for (const item of itemsRef.current) {
+      if (item.kind === 'upload' && item.meta.liveBroadcastContent === 'live') {
+        ids.add(item.meta.youtubeVideoId);
+        feedMetaById.set(item.meta.youtubeVideoId, item.meta);
+      }
+    }
+    if (ids.size === 0) return;
+    const fresh = await fetchVideosMetadata([...ids]).catch(() => null);
     if (!fresh) return;
     setLiveMap((prev) => {
       const next = new Map(prev);
       for (const m of fresh) {
-        const old = next.get(m.youtubeVideoId);
+        const old = next.get(m.youtubeVideoId) ?? feedMetaById.get(m.youtubeVideoId);
         if (old) {
           next.set(m.youtubeVideoId, {
             ...old,
@@ -336,6 +351,8 @@ export function HomeScreen({ navigation }: Props) {
 
   const liveMapRef = useRef(liveMap);
   liveMapRef.current = liveMap;
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
   useEffect(() => {
     // Counts move on mount too — not only on the tick — because a
     // reload otherwise shows the cached snapshot's count for a
@@ -347,10 +364,10 @@ export function HomeScreen({ navigation }: Props) {
     const t = setInterval(() => {
       ticks++;
       void refreshLiveCounts();
-      // Full rediscovery (search.list) only every 5th tick — its
+      // Full rediscovery (search.list) only every 10th tick — its
       // cache already bounds it to one real call per 10 minutes.
-      if (ticks % 5 === 0) void refreshLive(false);
-    }, 60_000);
+      if (ticks % 10 === 0) void refreshLive(false);
+    }, 30_000);
     return () => clearInterval(t);
   }, [refreshLiveCounts, refreshLive]);
 

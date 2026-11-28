@@ -58,12 +58,25 @@ function readPersistedDockSync(): PersistedDock | null {
   }
 }
 
-function persistDock(item: PlaybackItem | null, seconds: number | null): void {
+// The last position this module wrote (fix round 6.1, #12):
+// minimize() used to persist seconds:null in a separate async
+// write that could land AFTER a position write and wipe it — the
+// restored dock then had no hand-back and autoplay restarted it
+// from 0, playing. One module-level value is now the single
+// source every persist carries.
+let lastDockSeconds: number | null = null;
+
+function persistDock(item: PlaybackItem | null, seconds?: number | null): void {
   if (item === null) {
+    lastDockSeconds = null;
     AsyncStorage.removeItem(DOCK_STORE_KEY).catch(() => undefined);
     return;
   }
-  AsyncStorage.setItem(DOCK_STORE_KEY, JSON.stringify({ item, seconds })).catch(() => undefined);
+  if (typeof seconds === 'number') lastDockSeconds = seconds;
+  AsyncStorage.setItem(
+    DOCK_STORE_KEY,
+    JSON.stringify({ item, seconds: lastDockSeconds }),
+  ).catch(() => undefined);
 }
 
 /** The host calls this while the dock plays, so a reload restores
@@ -75,6 +88,7 @@ export function persistDockPosition(seconds: number): void {
 }
 
 const restoredDock = readPersistedDockSync();
+if (restoredDock?.seconds != null) lastDockSeconds = restoredDock.seconds;
 
 export interface PlaybackItem {
   /** Stable identity of the playing video (player key). */
@@ -166,10 +180,15 @@ export const usePlaybackStore = create<PlaybackState>((set) => ({
   setCoveredKey: (coveredKey) => set({ coveredKey }),
   suppressedKey: null,
   setSuppressedKey: (suppressedKey) => set({ suppressedKey }),
-  rescuePosition:
-    restoredDock && restoredDock.seconds != null && restoredDock.seconds > 1
-      ? { key: restoredDock.item.key, seconds: restoredDock.seconds }
-      : null,
+  // A restored dock ALWAYS hands back (fix round 6.1, #12):
+  // with a rescuePosition on file, PlaybackHost's hand-back rule
+  // mounts the player PAUSED (autoplay = the paused state) and
+  // seeks to the saved spot. When the position was lost, the
+  // hand-back still applies with 0 — paused at the start beats
+  // auto-playing from the start.
+  rescuePosition: restoredDock
+    ? { key: restoredDock.item.key, seconds: restoredDock.seconds ?? 0 }
+    : null,
   setRescuePosition: (rescuePosition) => set({ rescuePosition }),
   dockVisible: false,
   setDockVisible: (dockVisible) => set({ dockVisible }),
@@ -201,7 +220,7 @@ export const usePlaybackStore = create<PlaybackState>((set) => ({
   minimize: () =>
     set((s) => {
       if (!s.item) return s;
-      if (s.item.kind === 'youtube') persistDock(s.item, null);
+      if (s.item.kind === 'youtube') persistDock(s.item);
       return { mode: 'mini' };
     }),
   expand: () => set((s) => (s.item ? { mode: 'full' } : s)),

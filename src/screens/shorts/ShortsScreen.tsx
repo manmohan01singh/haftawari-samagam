@@ -376,16 +376,16 @@ export function ShortsScreen({ navigation }: Props) {
   // the Settings toggle a no-op — a Short may then start only from
   // the viewer's own tap.
   useEffect(() => {
-    if (!isFocused) {
-      playerRefs.current.get(activeIndexRef.current)?.pause();
-      return;
-    }
-    // Autoplay OFF also STOPS a short that is already playing when
-    // the preference flips (fix round 5, B1): the gate used to only
-    // refuse NEW starts, so a short set playing under ON kept going
-    // after the user switched it OFF in Settings.
-    if (!autoplayEnabled) {
-      playerRefs.current.get(activeIndexRef.current)?.pause();
+    if (!isFocused || !autoplayEnabled) {
+      // Pause EVERY mounted player, not only the active one (fix
+      // round 6.1, B1 remainder): the sweep turned Autoplay OFF,
+      // came back, and heard a short playing — the visible page
+      // was a neighbour whose embed had mount-captured autoplay
+      // ON, while activeIndex still pointed at the page they had
+      // left. A gate that means "nothing plays" must silence the
+      // whole mounted window. (Autoplay OFF also STOPS a short
+      // already playing when the preference flips — round 5, B1.)
+      playerRefs.current.forEach((ref) => ref.pause());
       return;
     }
     if (!userPaused) playActive();
