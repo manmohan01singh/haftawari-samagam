@@ -7,6 +7,7 @@ import { formatDuration } from './VideoCard';
 import { ICON_HIT_SLOP } from '../../lib/touch';
 import type { CardVideoData } from './cardData';
 import { CardActionSheet, type CardMenuAction } from '../common/CardActionSheet';
+import { IkOnkarMark } from '../layout/IkOnkarMark';
 
 interface FeedCardProps {
   data: CardVideoData;
@@ -67,6 +68,12 @@ export const FeedCard = memo(function FeedCard({
 
   const thumbnail = (
     <View style={styles.thumbnailWrap}>
+      {/* Placeholder behind the image (fix round 6, R5-5): while a
+          thumbnail loads (or fails) the card shows the ੴ mark on
+          the surface instead of a dead grey rectangle. */}
+      <View style={styles.thumbnailPlaceholder} pointerEvents="none">
+        <IkOnkarMark size={44} />
+      </View>
       {data.thumbnailUrl ? (
         <Image
           recyclingKey={data.key}
@@ -100,7 +107,7 @@ export const FeedCard = memo(function FeedCard({
           <MaterialIcons name="schedule" size={13} color="#FFFFFF" />
           <Text style={styles.liveText}>UPCOMING</Text>
         </View>
-      ) : data.durationSeconds != null ? (
+      ) : data.durationSeconds != null && data.durationSeconds > 0 ? (
         <View style={styles.durationBadge} pointerEvents="none">
           <Text style={styles.durationText}>{formatDuration(data.durationSeconds)}</Text>
         </View>
@@ -153,7 +160,7 @@ export const FeedCard = memo(function FeedCard({
             <View style={[styles.upNextBadge, styles.upNextLiveBadge]}>
               <Text style={styles.liveText}>LIVE</Text>
             </View>
-          ) : data.durationSeconds != null ? (
+          ) : data.durationSeconds != null && data.durationSeconds > 0 ? (
             <View style={styles.upNextBadge}>
               <Text style={styles.durationText}>{formatDuration(data.durationSeconds)}</Text>
             </View>
@@ -292,6 +299,16 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   // same pressed-state language BottomNav/StackHeader already use.
   cardPressed: { opacity: 0.92 },
   thumbnailWrap: { position: 'relative' },
+  thumbnailPlaceholder: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    opacity: 0.5,
+  },
   thumbnail: {
     width: '100%',
     aspectRatio: layout.thumbnailAspectRatio,

@@ -45,6 +45,29 @@ export function dedupeByContent<T>(
   return out;
 }
 
+/**
+ * Title-only dedupe (fix round 6, #16/R5-9): for finite lists a
+ * viewer reads top-to-bottom (Up Next, Subscriptions, a channel's
+ * LIVE tab), an identical hard-normalised title appearing twice
+ * is a duplicate, whatever the ids or durations — the same SGPC
+ * live title showed FIVE times in one Up Next with five different
+ * durations. First copy wins; blank titles are always kept (they
+ * carry no identity to dedupe on).
+ */
+export function dedupeByTitleHard<T>(items: readonly T[], titleOf: (item: T) => string): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const item of items) {
+    const key = normaliseTitleHard(titleOf(item));
+    if (key) {
+      if (seen.has(key)) continue;
+      seen.add(key);
+    }
+    out.push(item);
+  }
+  return out;
+}
+
 /** Hard title normalisation for fuzzy matching: case, punctuation,
  *  emoji and extra whitespace all washed out. */
 export function normaliseTitleHard(title: string): string {

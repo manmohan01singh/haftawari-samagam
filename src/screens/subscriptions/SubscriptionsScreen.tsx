@@ -11,7 +11,7 @@ import { BarBlurBackground } from '../../components/layout/BarBlurBackground';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Toast, useToast } from '../../components/common/Toast';
 import { shareContent, shareFeedback } from '../../lib/share';
-import { contentKeyFor, dedupeByContent } from '../../lib/contentDedupe';
+import { contentKeyFor, dedupeByContent, dedupeByTitleHard } from '../../lib/contentDedupe';
 import { EmptyState } from '../../components/common/EmptyState';
 import { GridCard } from '../../components/video/GridCard';
 import { SkeletonCard } from '../../components/video/SkeletonCard';
@@ -284,12 +284,16 @@ export function SubscriptionsScreen({ navigation }: Props) {
       [...byVideoId.values()].filter((v) => v.title.trim().length > 0 && !isShortVideo(v)),
       (v) => contentKeyFor(v.channelId, v.title, v.durationSeconds),
     );
+    // Title dedupe on top of the content dedupe (fix round 6,
+    // R5-9): the generic SGPC live title repeated 3× here under
+    // different durations — one title, one row.
+    const deduped = dedupeByTitleHard(clean, (v) => v.title);
     const filtered =
       filter === 'all'
-        ? clean
+        ? deduped
         : filter === 'videos'
-          ? clean.filter((v) => v.liveBroadcastContent === 'none')
-          : clean.filter((v) => v.liveBroadcastContent !== 'none');
+          ? deduped.filter((v) => v.liveBroadcastContent === 'none')
+          : deduped.filter((v) => v.liveBroadcastContent !== 'none');
     return [...filtered].sort((a, b) =>
       sort === 'latest'
         ? b.publishedAt.localeCompare(a.publishedAt)

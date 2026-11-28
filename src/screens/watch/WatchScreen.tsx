@@ -49,7 +49,7 @@ import { usePlaybackStore, type PlaybackItem } from '../../features/playback/pla
 import { usePreferencesStore } from '../../features/settings/preferencesStore';
 import { AddToPlaylistSheet } from '../../features/library';
 import { formatCount } from '../../lib/format';
-import { contentKeyFor } from '../../lib/contentDedupe';
+import { contentKeyFor, dedupeByTitleHard } from '../../lib/contentDedupe';
 import { FEED_LIST_PERF } from '../../lib/listPerf';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import {
@@ -780,7 +780,12 @@ export function WatchScreen({ route, navigation }: Props) {
         items.push({ kind: 'row' as const, video });
       }
       if (active) {
-        setUpNextItems(items.slice(0, 15));
+        // Title dedupe (fix round 6, #16): the same programme
+        // title must never repeat in Up Next, whatever its ids or
+        // durations — Chat 2 counted one SGPC live title 5×.
+        setUpNextItems(
+          dedupeByTitleHard(items, (it) => (it.kind === 'row' ? it.video.title : it.meta.title)).slice(0, 15),
+        );
         setUpNextToken(token);
         setUpNextStarted(started);
       }
@@ -831,7 +836,12 @@ export function WatchScreen({ route, navigation }: Props) {
           return true;
         });
         if (fresh.length > 0) {
-          setUpNextItems((prev) => [...prev, ...fresh.map((meta) => ({ kind: 'api' as const, meta }))]);
+          setUpNextItems((prev) =>
+            dedupeByTitleHard(
+              [...prev, ...fresh.map((meta) => ({ kind: 'api' as const, meta }))],
+              (it) => (it.kind === 'row' ? it.video.title : it.meta.title),
+            ),
+          );
         }
         setUpNextStarted(true);
         setUpNextToken(page.nextPageToken);

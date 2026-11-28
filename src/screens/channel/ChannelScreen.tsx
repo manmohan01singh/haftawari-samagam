@@ -33,6 +33,7 @@ import {
   type YouTubeChannelInfo,
   type YouTubeVideoMetadata,
 } from '../../lib/youtube';
+import { dedupeByTitleHard } from '../../lib/contentDedupe';
 import { getLiveCached, getLiveFresh, getUploadsPageCached, invalidateUploadsFirstPages } from '../../features/channels/channelCache';
 import { apiCardData as baseApiCardData, formatDateLine } from '../../components/video/cardData';
 import { layout, nativeApp, radii, spacing, typography, useTheme, type ThemeColors } from '../../theme';
@@ -301,7 +302,9 @@ export function ChannelScreen({ route, navigation }: Props) {
       }
     }
     for (const v of liveItems) byId.set(v.youtubeVideoId, v);
-    return [...byId.values()];
+    // Title dedupe (fix round 6, R5-9): the LIVE tab listed the
+    // same programme title repeatedly under different ids.
+    return dedupeByTitleHard([...byId.values()], (v) => v.title);
   })();
   const liveNow = mergedLive.find((v) => v.liveBroadcastContent === 'live') ?? null;
 
