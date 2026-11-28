@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { OrbBackground } from '../../components/layout/OrbBackground';
 import {
   FlatList,
   Linking,
@@ -28,12 +29,11 @@ import { formatCount } from '../../lib/format';
 import {
   OFFICIAL_CHANNEL_ID,
   fetchChannelById,
-  fetchChannelLiveAndUpcoming,
   isShortVideo,
   type YouTubeChannelInfo,
   type YouTubeVideoMetadata,
 } from '../../lib/youtube';
-import { getUploadsPageCached } from '../../features/channels/channelCache';
+import { getLiveCached, getUploadsPageCached } from '../../features/channels/channelCache';
 import { apiCardData as baseApiCardData, formatDateLine } from '../../components/video/cardData';
 import { layout, nativeApp, radii, spacing, typography, useTheme, type ThemeColors } from '../../theme';
 import type { RootStackParamList } from '../../navigation/types';
@@ -192,7 +192,7 @@ export function ChannelScreen({ route, navigation }: Props) {
         active = false;
       };
     }
-    fetchChannelLiveAndUpcoming(channelId)
+    getLiveCached(channelId)
       .then((items) => {
         liveSearchCache.set(channelId, { at: Date.now(), items });
         if (active) {
@@ -492,6 +492,7 @@ export function ChannelScreen({ route, navigation }: Props) {
 
   return (
     <View style={styles.container}>
+      <OrbBackground />
       {ptr.indicator}
       <FlatList
         {...ptr.listProps}

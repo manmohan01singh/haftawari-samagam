@@ -31,7 +31,7 @@ import {
 const PREFIX = '@haftawari/channels:v1:';
 export const CHANNEL_INFO_TTL_MS = 6 * 60 * 60 * 1000;
 export const UPLOADS_TTL_MS = 30 * 60 * 1000;
-export const LIVE_TTL_MS = 5 * 60 * 1000;
+export const LIVE_TTL_MS = 10 * 60 * 1000;
 
 async function readCache<T>(key: string, ttlMs: number): Promise<T | null> {
   try {
@@ -243,7 +243,7 @@ export async function getTopicSearchPageCached(
 
 /**
  * A channel's live-now + upcoming broadcasts AS REPORTED BY YOUTUBE
- * (search.list eventType, 100 units each), cached 5 min. This is the
+ * (search.list eventType, 100 units each), cached 10 min. This is the
  * most expensive call in the app — never call it per keystroke or in a
  * tight loop; Subscriptions staggers it across channels.
  */

@@ -588,6 +588,96 @@ export async function fetchChannelRecentResults(
   return results;
 }
 
+/**
+ * GLOBAL YouTube search, filtered to the app's channels (user's
+ * explicit instruction, 28 Nov 2026: "YouTube te search kar, te
+ * jede jede channel appa add kite hoye ne unna nu filter karke
+ * present kar de"). ONE search.list call per query — YouTube's own
+ * index, so a video is findable no matter how old it is (the
+ * uploads scan only sees the latest ~500 per channel). Results keep
+ * YouTube's relevance order (score decays gently by rank) and are
+ * enriched with one videos.list call (duration -> Shorts filter,
+ * real live state). Cached like the channel search (10 min memory,
+ * 6h storage); failures are never cached. Costs search.list quota
+ * (its own daily bucket, per project — the key pool spreads it);
+ * when that bucket is gone the engine degrades to the uploads scan.
+ */
+export async function searchYouTubeGlobalFiltered(
+  queryText: string,
+  allowedChannelIds: readonly string[],
+  signal?: AbortSignal,
+): Promise<VideoResult[]> {
+  if (!isYouTubeConfigured || allowedChannelIds.length === 0) return [];
+  const cacheKey = `${SEARCH_CACHE_PREFIX}global:${queryText.trim().toLowerCase()}`;
+  const mem = memCache.get(cacheKey);
+  if (mem && Date.now() - mem.fetchedAt < SEARCH_MEM_CACHE_TTL_MS) return mem.value;
+  const cached = await readCache<VideoResult[]>(cacheKey, SEARCH_CACHE_TTL_MS);
+  if (cached) {
+    memCache.set(cacheKey, { fetchedAt: Date.now(), value: cached });
+    return cached;
+  }
+  const existing = inFlight.get(cacheKey);
+  if (existing) return existing;
+
+  const allowed = new Set(allowedChannelIds);
+  const promise = withRetry(async () => {
+    const params = new URLSearchParams({
+      part: 'snippet',
+      q: queryText,
+      type: 'video',
+      maxResults: '50',
+      order: 'relevance',
+    });
+    const data = await apiGet<SearchResponse>(`search?${params.toString()}`, signal);
+    const items = (data.items ?? []).filter((item) => allowed.has(item.snippet.channelId));
+    if (items.length === 0) return [] as VideoResult[];
+
+    const ids = items.map((item) => item.id.videoId).join(',');
+    const details = await apiGet<VideosFullDetailsResponse>(
+      `videos?part=contentDetails,snippet&id=${encodeURIComponent(ids)}`,
+      signal,
+    );
+    const byId = new Map((details.items ?? []).map((item) => [item.id, item]));
+
+    const results: VideoResult[] = [];
+    items.forEach((item, index) => {
+      const detail = byId.get(item.id.videoId);
+      const durationSeconds = detail ? parseIso8601Duration(detail.contentDetails.duration) : null;
+      const taggedShort =
+        item.snippet.title.toLowerCase().includes('#shorts') ||
+        item.snippet.description.toLowerCase().includes('#shorts');
+      if (taggedShort || (durationSeconds !== null && durationSeconds <= 60)) return;
+      const thumbs = item.snippet.thumbnails;
+      results.push({
+        kind: 'video',
+        source: 'youtube',
+        videoRowId: null,
+        youtubeVideoId: item.id.videoId,
+        title: item.snippet.title,
+        thumbnailUrl: (thumbs.high ?? thumbs.medium ?? thumbs.default)?.url ?? null,
+        durationSeconds,
+        publishedAt: item.snippet.publishedAt,
+        liveBroadcastContent: detail?.snippet.liveBroadcastContent ?? item.snippet.liveBroadcastContent,
+        channelId: item.snippet.channelId,
+        channelTitle: item.snippet.channelTitle,
+        // YouTube's relevance order IS the ranking: start just under
+        // an exact-phrase match and decay gently by position.
+        score: Math.max(0.9, 0.99 - index * 0.004),
+        matchKind: 'phrase',
+      });
+    });
+    return results;
+  }, signal)
+    .then(async (results) => {
+      memCache.set(cacheKey, { fetchedAt: Date.now(), value: results });
+      await writeCache(cacheKey, results);
+      return results;
+    })
+    .finally(() => inFlight.delete(cacheKey));
+  inFlight.set(cacheKey, promise);
+  return promise;
+}
+
 /** Back-compat wrapper: the uploads fallback for the official channel. */
 export async function searchUploadsFallback(
   queryText: string,

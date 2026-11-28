@@ -219,6 +219,8 @@ export interface ChatSubscriptionHandlers {
   onInsert?: (message: ChatMessage) => void;
   /** Fires on updates — e.g. an admin setting `is_removed`. */
   onUpdate?: (message: ChatMessage) => void;
+  /** Fires on EVERY (re)subscription — the gap-recovery hook. */
+  onSubscribed?: () => void;
 }
 
 /**
@@ -258,7 +260,9 @@ export function subscribeToChatEvents(
       (payload) => handlers.onUpdate?.(payload.new as ChatMessage),
     );
   }
-  return channel.subscribe();
+  return channel.subscribe((status) => {
+    if (status === 'SUBSCRIBED') handlers.onSubscribed?.();
+  });
 }
 
 /** Remove a channel created by subscribeToChat / subscribeToChatEvents. */

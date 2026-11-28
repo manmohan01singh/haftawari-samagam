@@ -7,6 +7,8 @@ import { useScrollToTop } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppHeader } from '../../components/layout/AppHeader';
+import { OrbBackground } from '../../components/layout/OrbBackground';
+import { IkOnkarMark } from '../../components/layout/IkOnkarMark';
 import { useWebPullToRefresh } from '../../components/gesture/WebPullToRefresh';
 import { ChipsRow } from '../../components/layout/ChipsRow';
 import { Toast, useToast } from '../../components/common/Toast';
@@ -27,13 +29,13 @@ import {
   type HomeFeedItem,
   type HomeFeedPager,
 } from '../../features/home/homeFeed';
-import { isSupabaseConfigured } from '../../lib/supabase';
+import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import {
   OFFICIAL_CHANNEL_ID,
-  fetchChannelLiveAndUpcoming,
   isYouTubeConfigured,
   type YouTubeVideoMetadata,
 } from '../../lib/youtube';
+import { getLiveCached } from '../../features/channels/channelCache';
 import { fetchSavedVideoIds, setVideoSaved } from '../../lib/videos';
 import { FEED_LIST_PERF } from '../../lib/listPerf';
 import { listSessionsWithVideos } from '../../features/sessions/sessionService';
@@ -196,7 +198,7 @@ export function HomeScreen({ navigation }: Props) {
   useEffect(() => {
     if (!isYouTubeConfigured) return;
     let active = true;
-    fetchChannelLiveAndUpcoming(OFFICIAL_CHANNEL_ID)
+    getLiveCached(OFFICIAL_CHANNEL_ID)
       .then((metas) => {
         if (active) setLiveMap(new Map(metas.map((m) => [m.youtubeVideoId, m])));
       })
@@ -293,10 +295,25 @@ export function HomeScreen({ navigation }: Props) {
       }
     };
     void check();
-    const timer = setInterval(() => void check(), 60_000);
+    // INSTANT session updates (user, 28 Nov 2026): the moment an
+    // admin schedules / edits / cancels a session, Home must show
+    // it — no reload. The sessions table is in the realtime
+    // publication (migration 0001), so any change re-runs the check
+    // immediately; the 30s sweep is the insurance layer in case the
+    // socket drops (research: flips are derived locally from
+    // starts_at, so the NOW PLAYING flip lands on the tick even if
+    // Realtime is down).
+    const channel = supabase
+      ?.channel('home-sessions-watch')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sessions' }, () => {
+        void check();
+      })
+      .subscribe();
+    const timer = setInterval(() => void check(), 30_000);
     return () => {
       active = false;
       clearInterval(timer);
+      if (channel && supabase) void supabase.removeChannel(channel);
     };
   }, []);
 
@@ -655,6 +672,7 @@ export function HomeScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
+      <OrbBackground />
       <View style={styles.headerBlock}>
         <AppHeader
           onSearchPress={() => navigation.navigate('Search')}
@@ -678,6 +696,7 @@ export function HomeScreen({ navigation }: Props) {
         />
       ) : loading ? (
         <View>
+          <IkOnkarMark />
           <SkeletonCard variant="feed" />
           <SkeletonCard variant="feed" />
         </View>

@@ -371,6 +371,7 @@ export function useSessionChat(
     if (!isSupabaseConfigured || !canRead) return;
     let channel: RealtimeChannel | null = null;
     try {
+      let firstSubscribe = true;
       channel = chatService.subscribeToChatEvents(sessionId, {
         onInsert: (message) => {
           mergeMessage(message);
@@ -378,6 +379,25 @@ export function useSessionChat(
         },
         onUpdate: (message) => {
           mergeMessage(message);
+        },
+        // GAP RECOVERY (deep-research finding, 28 Nov 2026):
+        // Realtime does not replay messages missed while the socket
+        // was down — a 30s disconnect silently loses chat. On every
+        // RE-subscribe, refetch the latest page and merge it in
+        // (mergeMessage dedupes by id). The first subscribe is
+        // covered by the initial history load above.
+        onSubscribed: () => {
+          if (firstSubscribe) {
+            firstSubscribe = false;
+            return;
+          }
+          chatService
+            .listMessagesPage(sessionId, { limit: pageSize })
+            .then((page) => {
+              for (const message of page.messages) mergeMessage(message);
+              void resolveAuthors(page.messages.map((m) => m.user_id));
+            })
+            .catch(() => undefined);
         },
       });
     } catch {
@@ -388,7 +408,7 @@ export function useSessionChat(
     return () => {
       if (channel) void chatService.unsubscribeChat(channel);
     };
-  }, [sessionId, canRead, mergeMessage, resolveAuthors]);
+  }, [sessionId, canRead, mergeMessage, resolveAuthors, pageSize]);
 
   // ── Pagination: walk backwards from the oldest loaded message ────
   const loadMore = useCallback(() => {

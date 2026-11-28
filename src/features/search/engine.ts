@@ -31,6 +31,7 @@ import {
   fetchChannelTitlesFor,
   matchChannel,
   searchUploadsFallbackFor,
+  searchYouTubeGlobalFiltered,
 } from './youtubeSearch';
 import { YouTubeApiError, type YouTubeErrorClass } from './youtubeError';
 import type { SearchOptions, SearchResults, VideoResult } from './types';
@@ -205,6 +206,21 @@ async function runLegs(query: string, options: SearchOptions): Promise<LegsOutco
   // a failed search and must not light the degraded banner).
   const targets = channels;
   let firstError: YouTubeErrorClass | null = null;
+  // PRIMARY leg (user's instruction, 28 Nov 2026): one real YouTube
+  // search, filtered to the app's channels — YouTube's index finds
+  // videos of ANY age on those channels. The per-channel uploads
+  // scans run alongside as the recall supplement and as the
+  // degradation path when the search.list bucket is exhausted.
+  let globalError: YouTubeErrorClass | null = null;
+  const globalPromise = searchYouTubeGlobalFiltered(
+    query,
+    targets.map((t) => t.id),
+    options.signal,
+  ).catch((error) => {
+    if (error instanceof Error && error.name === 'AbortError') throw error;
+    if (error instanceof YouTubeApiError) globalError = error.errorClass;
+    return [] as VideoResult[];
+  });
   const legs = await Promise.all(
     targets.map(async (identity) => {
       try {
@@ -219,7 +235,10 @@ async function runLegs(query: string, options: SearchOptions): Promise<LegsOutco
       }
     }),
   );
-  let youtubeVideos = legs.flatMap((leg) =>
+  const globalResults = await globalPromise;
+  let youtubeVideos = [
+    ...globalResults,
+    ...legs.flatMap((leg) =>
     leg.results.map((r) => {
       const identity = targets.find((t) => t.id === leg.channelId);
       return {
@@ -228,7 +247,8 @@ async function runLegs(query: string, options: SearchOptions): Promise<LegsOutco
         channelTitle: r.channelTitle ?? identity?.title,
       };
     }),
-  );
+    ),
+  ];
   // Channel-name query: the named channel's recent videos ride
   // under its card (YouTube behaviour for a channel search), scored
   // just under an exact title match so they interleave with the
@@ -250,14 +270,18 @@ async function runLegs(query: string, options: SearchOptions): Promise<LegsOutco
       // Best-effort garnish; the card and the query matches stand.
     }
   }
-  const allFailed = targets.length > 0 && legs.every((leg) => !leg.ok);
+  const scansFailed = targets.length > 0 && legs.every((leg) => !leg.ok);
+  // Skipped only when NOTHING remote worked. When the YouTube leg
+  // failed but the scans carried the page, the outcome is the
+  // degraded fallback mode (the screen notes it) — not an error.
+  const allFailed = scansFailed && globalError !== null;
   const [local, channel] = await Promise.all([localPromise, channelPromise]);
   return {
     channel,
     videos: capPerChannel(mergeRanked(local, youtubeVideos, options.limit ?? 25), options.limit ?? 25),
     youtubeSkipped: allFailed,
-    youtubeError: firstError,
-    youtubeFallback: false,
+    youtubeError: allFailed ? (globalError ?? firstError) : null,
+    youtubeFallback: globalError !== null && !allFailed,
   };
 }
 

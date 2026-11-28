@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { OrbBackground } from '../../components/layout/OrbBackground';
+import { IkOnkarMark } from '../../components/layout/IkOnkarMark';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -519,6 +521,7 @@ export function SearchResultsScreen({ route, navigation }: Props) {
 
   return (
     <View style={styles.container}>
+      <OrbBackground />
 
       <View style={styles.centered}>
         <View style={[styles.bar, { paddingTop: spacing.xs + insets.top }]}>
@@ -552,10 +555,7 @@ export function SearchResultsScreen({ route, navigation }: Props) {
             {/* QA issues 4/9: a labelled searching state — the user
                 must be able to tell their tap registered and a search
                 is running, not stare at a blank page. */}
-            <View style={styles.searchingRow}>
-              <ActivityIndicator color={colors.text} />
-              <Text style={styles.searchingLabel}>Searching for “{query}”…</Text>
-            </View>
+            <IkOnkarMark label={`Searching for “${query}”…`} />
             <SkeletonCard variant="shelf" />
             <SkeletonCard variant="shelf" />
             <SkeletonCard variant="shelf" />
@@ -583,8 +583,7 @@ export function SearchResultsScreen({ route, navigation }: Props) {
                 // channels were still being searched, then results
                 // arrived). Show the searching state instead.
                 <View style={styles.emptyWrap}>
-                  <ActivityIndicator color={colors.text} />
-                  <Text style={styles.searchingLabel}>Searching the channels…</Text>
+                  <IkOnkarMark label="Searching the channels…" />
                 </View>
               ) : (
                 <View style={styles.emptyWrap}>

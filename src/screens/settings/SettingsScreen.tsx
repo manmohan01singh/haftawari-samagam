@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { OrbBackground } from '../../components/layout/OrbBackground';
 import {
   Linking,
   Pressable,
@@ -131,6 +132,7 @@ export function SettingsScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
+      <OrbBackground />
       <StackHeader title="Settings" onBack={() => goBackOrTab(navigation, 'Library')} />
 
       <ScrollView contentContainerStyle={styles.content}>

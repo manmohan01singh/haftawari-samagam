@@ -82,7 +82,7 @@ const DRIFT_TOLERANCE_SECONDS = 5;
  * seeks and time reports are not precise enough for 1.5 s.
  */
 const HOSTED_DRIFT_TOLERANCE_SECONDS = 1.5;
-const HOSTED_DRIFT_CHECK_MS = 10_000;
+const HOSTED_DRIFT_CHECK_MS = 2_000;
 
 /**
  * Synchronized Samagam watch screen.
@@ -398,6 +398,12 @@ export function SessionWatchScreen({ route, navigation }: Props) {
     if (status !== 'now_playing' || !playerReady || behindLive) return;
     const tolerance = isHosted ? HOSTED_DRIFT_TOLERANCE_SECONDS : DRIFT_TOLERANCE_SECONDS;
     const checkMs = isHosted ? HOSTED_DRIFT_CHECK_MS : 5000;
+    // Seek only on SUSTAINED drift (deep-research finding, 28 Nov
+    // 2026): a seek costs 200-800 ms of disruption, and a single
+    // noisy time report must not trigger one — two consecutive
+    // out-of-tolerance checks (2 s apart for hosted) confirm the
+    // drift is real before correcting.
+    let strikes = 0;
     const timer = setInterval(() => {
       const reported = playerTimeRef.current;
       if (reported == null) return;
@@ -407,8 +413,14 @@ export function SessionWatchScreen({ route, navigation }: Props) {
         nowMs: serverClock.nowMs(),
       });
       if (Math.abs(target - reported) > tolerance) {
-        activeSeekTo(target);
-        playerTimeRef.current = target;
+        strikes += 1;
+        if (strikes >= 2) {
+          strikes = 0;
+          activeSeekTo(target);
+          playerTimeRef.current = target;
+        }
+      } else {
+        strikes = 0;
       }
     }, checkMs);
     return () => clearInterval(timer);

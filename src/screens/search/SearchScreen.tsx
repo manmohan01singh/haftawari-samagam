@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { OrbBackground } from '../../components/layout/OrbBackground';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -154,6 +155,7 @@ export function SearchScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
+      <OrbBackground />
       <View style={[styles.bar, { paddingTop: spacing.lg + insets.top }]}>
         <Pressable onPress={() => goBackOrTab(navigation, 'Home')} hitSlop={10} accessibilityLabel="Back">
           <MaterialIcons name="arrow-back" size={24} color={colors.text} />
