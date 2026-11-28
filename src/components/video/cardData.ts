@@ -82,6 +82,7 @@ export function supabaseCardData(
   video: Video,
   channelAvatarUrl: string | null,
   liveMeta?: YouTubeVideoMetadata | null,
+  viewCount?: number | null,
 ): CardVideoData {
   // QA issue 49: LIVE badge + "watching" count on Home cards. Archive
   // rows carry no live state, so this comes ONLY from a real YouTube
@@ -105,7 +106,17 @@ export function supabaseCardData(
         ? `${formatCount(liveMeta.concurrentViewers)} watching`
         : 'Live now'
       : (() => {
+          // Fault 5: catalogue rows used to show ONLY a date while
+          // upload cards showed views — one card contract for the
+          // whole feed. The caller backfills the row's real view
+          // count (one batched statistics call); when it is known
+          // the line is "▷ views · date", when genuinely unknown it
+          // stays date-only — never an invented count.
           const date = formatDateLine(video.published_at ?? video.created_at);
+          if (viewCount != null) {
+            const views = `${formatCount(viewCount)} views`;
+            return date ? `▷ ${views} · ${date}` : `▷ ${views}`;
+          }
           return date ? `▷ ${date}` : '';
         })(),
     channelAvatarUrl,

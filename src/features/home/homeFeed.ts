@@ -48,6 +48,7 @@
 import { uploadsPlaylistIdFor, type AppChannel } from '../channels/channelsService';
 import { getUploadsCached, getUploadsPageCached } from '../channels/channelCache';
 import { isSupabaseConfigured } from '../../lib/supabase';
+import { contentKeyFor } from '../../lib/contentDedupe';
 import { fetchPublishedVideos } from '../../lib/videos';
 import {
   OFFICIAL_CHANNEL_ID,
@@ -346,6 +347,11 @@ export interface HomeFeedPagerOptions {
 
 export function createHomeFeedPager({ channels, filter }: HomeFeedPagerOptions): HomeFeedPager {
   const seen = new Set<string>();
+  // Content-level dedupe (fault 4): the same programme re-uploaded
+  // under a different video id (same channel + title + duration)
+  // is emitted once; a different duration is a different programme
+  // and always stays.
+  const contentSeen = new Set<string>();
 
   // ── Catalogue source ──────────────────────────────────────────────
   // Included for 'all' and topic filters, and for channel filters
@@ -542,7 +548,14 @@ export function createHomeFeedPager({ channels, filter }: HomeFeedPagerOptions):
         if (drops >= 6) return null;
         continue;
       }
+      const contentKey = contentKeyFor(meta.channelId, meta.title, meta.durationSeconds);
+      if (contentKey != null && contentSeen.has(contentKey)) {
+        drops++;
+        if (drops >= 6) return null;
+        continue;
+      }
       seen.add(meta.youtubeVideoId);
+      if (contentKey != null) contentSeen.add(contentKey);
       return { kind: 'upload', key: `yt-${meta.youtubeVideoId}`, meta, channel: cursor.channel };
     }
   }

@@ -32,6 +32,7 @@ import {
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import {
   OFFICIAL_CHANNEL_ID,
+  fetchVideosMetadata,
   isYouTubeConfigured,
   type YouTubeVideoMetadata,
 } from '../../lib/youtube';
@@ -203,6 +204,10 @@ export function HomeScreen({ navigation }: Props) {
   // Bumped on every feed (re)start so a stale pager's late page can
   // never land on top of a newer filter/refresh.
   const generationRef = useRef(0);
+  // Per-chip feed cache for keepPreviousData (fault 1/N2): the last
+  // items each chip produced this session, so revisiting a chip is
+  // instant and a chip change never blanks the screen.
+  const chipCacheRef = useRef(new Map<string, { items: HomeFeedItem[]; exhausted: boolean }>());
   // Real live state from the YouTube API (QA 49/68): a map of
   // youtube_video_id → live/upcoming metadata for the official
   // channel. Archive rows have no live flag of their own.
@@ -353,6 +358,18 @@ export function HomeScreen({ navigation }: Props) {
   const startFeed = useCallback(async () => {
     const generation = ++generationRef.current;
     loadingRef.current = true;
+    // keepPreviousData (blueprint round 2, fault 1/N2): a chip
+    // visited before renders its cached items INSTANTLY and
+    // revalidates in the background; a new chip keeps the current
+    // list visible until its first page lands (the render gate
+    // shows the skeleton only when there are zero items). The
+    // full-screen loader on every chip tap is gone.
+    const cached = chipCacheRef.current.get(selectedChip);
+    if (cached) {
+      setItems(cached.items);
+      setExhausted(cached.exhausted);
+      setLoading(false);
+    }
     const resolved = resolveChipFilter(selectedChip, channels);
     const pager = createHomeFeedPager({
       channels,
@@ -362,12 +379,15 @@ export function HomeScreen({ navigation }: Props) {
     try {
       const first = await pager.next(PAGE_SIZE);
       if (generationRef.current !== generation) return;
+      chipCacheRef.current.set(selectedChip, { items: first.items, exhausted: first.exhausted });
       setItems(first.items);
       setExhausted(first.exhausted);
     } catch {
       if (generationRef.current !== generation) return;
-      setItems([]);
-      setExhausted(true);
+      if (!cached) {
+        setItems([]);
+        setExhausted(true);
+      }
     } finally {
       if (generationRef.current === generation) {
         loadingRef.current = false;
@@ -440,8 +460,17 @@ export function HomeScreen({ navigation }: Props) {
       .next(PAGE_SIZE)
       .then((page) => {
         if (generationRef.current !== generation) return;
-        if (page.items.length > 0) setItems((prev) => [...prev, ...page.items]);
-        setExhausted(page.exhausted);
+        if (page.items.length > 0) {
+          setItems((prev) => {
+            const next = [...prev, ...page.items];
+            chipCacheRef.current.set(selectedChip, { items: next, exhausted: page.exhausted });
+            return next;
+          });
+        }
+        // End marker guarantee (fault 8): a page that adds nothing
+        // IS the end, whatever the pager believes — the footer must
+        // appear instead of the loading skeleton running forever.
+        setExhausted(page.exhausted || page.items.length === 0);
       })
       .catch(() => undefined)
       .finally(() => {
@@ -450,7 +479,7 @@ export function HomeScreen({ navigation }: Props) {
           setLoadingMore(false);
         }
       });
-  }, [exhausted, loading, items.length]);
+  }, [exhausted, loading, items.length, selectedChip]);
 
   // Chip taps: every chip — Live included — selects a real feed
   // filter and restarts the pager (effect above). The Live filter
@@ -462,7 +491,9 @@ export function HomeScreen({ navigation }: Props) {
   const handleSelectChip = useCallback(
     (chip: string) => {
       if (chip === selectedChip) return;
-      setTimeout(() => setLoading(true), 0);
+      // No setLoading(true) here anymore: startFeed's
+      // keepPreviousData path decides what shows (cache / current
+      // list / skeleton only when the screen is truly empty).
       setSelectedChip(chip);
     },
     [selectedChip],
@@ -484,18 +515,60 @@ export function HomeScreen({ navigation }: Props) {
   // never on a saved-state toggle. The live map feeds the QA 49
   // enrichment (LIVE badge + real watching count) for catalogue rows;
   // upload cards carry their own API live state via apiCardData.
+  // Catalogue view-count backfill state (fault 5; the fetch effect
+  // sits just below cardDataByKey): rows carry no statistics, so
+  // their cards showed a bare date while upload cards showed
+  // views. One batched videos.list call per 50 ids fills the real
+  // counts; ids already fetched (or in flight) are never re-asked.
+  const [statsMap, setStatsMap] = useState<Map<string, number>>(new Map());
+  const statsAskedRef = useRef(new Set<string>());
   const cardDataByKey = useMemo(() => {
     const map = new Map<string, CardVideoData>();
     for (const item of items) {
       map.set(
         item.key,
         item.kind === 'catalogue'
-          ? supabaseCardData(item.video, avatarUrl, item.video.youtube_video_id ? (liveMap.get(item.video.youtube_video_id) ?? null) : null)
+          ? supabaseCardData(
+              item.video,
+              avatarUrl,
+              item.video.youtube_video_id ? (liveMap.get(item.video.youtube_video_id) ?? null) : null,
+              item.video.youtube_video_id ? (statsMap.get(item.video.youtube_video_id) ?? null) : null,
+            )
           : apiCardData(item.meta, avatarByChannelId.get(item.meta.channelId) ?? item.channel.avatarUrl),
       );
     }
     return map;
-  }, [items, avatarUrl, avatarByChannelId, liveMap]);
+  }, [items, avatarUrl, avatarByChannelId, liveMap, statsMap]);
+
+  useEffect(() => {
+    if (!isYouTubeConfigured) return;
+    const missing: string[] = [];
+    for (const item of items) {
+      if (item.kind !== 'catalogue') continue;
+      const id = item.video.youtube_video_id;
+      if (id && !statsAskedRef.current.has(id)) {
+        statsAskedRef.current.add(id);
+        missing.push(id);
+      }
+    }
+    if (missing.length === 0) return;
+    let active = true;
+    fetchVideosMetadata(missing)
+      .then((metas) => {
+        if (!active || metas.length === 0) return;
+        setStatsMap((prev) => {
+          const next = new Map(prev);
+          for (const m of metas) {
+            if (m.viewCount != null) next.set(m.youtubeVideoId, m.viewCount);
+          }
+          return next;
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [items]);
 
   // The NOW PLAYING session as a NORMAL feed card (user order,
   // 27 Nov 2026: on YouTube's home the live item is an ordinary big
@@ -672,13 +745,18 @@ export function HomeScreen({ navigation }: Props) {
         // moves to the list header, since a full-width strip inside
         // a grid cell would break the row.
         return (
-          <View style={styles.gridCell}>
+          <View
+            style={[
+              styles.gridCell,
+              { flexBasis: `${100 / columns}%`, maxWidth: `${100 / columns}%` },
+            ]}
+          >
             <HomeFeedCell
               item={item}
               data={
                 cardDataByKey.get(item.key) ??
                 (item.kind === 'catalogue'
-                  ? supabaseCardData(item.video, avatarUrl, item.video.youtube_video_id ? (liveMap.get(item.video.youtube_video_id) ?? null) : null)
+                  ? supabaseCardData(item.video, avatarUrl, item.video.youtube_video_id ? (liveMap.get(item.video.youtube_video_id) ?? null) : null, item.video.youtube_video_id ? (statsMap.get(item.video.youtube_video_id) ?? null) : null)
                   : apiCardData(item.meta, item.channel.avatarUrl))
               }
               saved={item.kind === 'catalogue' && savedIds.has(item.video.id)}
@@ -700,7 +778,7 @@ export function HomeScreen({ navigation }: Props) {
               data={
                 cardDataByKey.get(item.key) ??
                 (item.kind === 'catalogue'
-                  ? supabaseCardData(item.video, avatarUrl, item.video.youtube_video_id ? (liveMap.get(item.video.youtube_video_id) ?? null) : null)
+                  ? supabaseCardData(item.video, avatarUrl, item.video.youtube_video_id ? (liveMap.get(item.video.youtube_video_id) ?? null) : null, item.video.youtube_video_id ? (statsMap.get(item.video.youtube_video_id) ?? null) : null)
                   : apiCardData(item.meta, item.channel.avatarUrl))
               }
               saved={item.kind === 'catalogue' && savedIds.has(item.video.id)}
@@ -762,12 +840,17 @@ export function HomeScreen({ navigation }: Props) {
           title="Backend not configured"
           message="Samagams will appear here once the app is connected to its data sources."
         />
-      ) : loading ? (
+      ) : loading && items.length === 0 ? (
         <View>
           {/* Skeleton-first loading (Chat 2 fault 1, 28 Nov 2026):
               the structure of the feed is visible immediately, the
               ੴ is small, and a caption says what is happening —
-              never a lone symbol on a blank screen. */}
+              never a lone symbol on a blank screen. The skeleton
+              shows ONLY when there is nothing to display: with
+              keep-previous-data (round 2, fault 1/N2) a chip change
+              keeps the current list on screen until the new first
+              page lands, so a filter tap is never a full-screen
+              reload again. */}
           <IkOnkarMark size={56} label="Gathering the sangat…" />
           <SkeletonCard variant="feed" />
           <SkeletonCard variant="feed" />
@@ -909,7 +992,11 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   sessionsTitle: { ...typography.channelName, fontWeight: '600', color: colors.text },
   sessionsSub: { ...typography.metadata, color: colors.textSecondary, marginTop: 1 },
   feedContent: { paddingBottom: layout.bottomNavHeight + 24 },
-  gridCell: { flex: 1, paddingHorizontal: 6 },
+  // Grid cell (blueprint round 2, fault 6): NEVER bare flex:1 — in
+  // a numColumns list a short last row stretches its cells to the
+  // full row width (the giant 4th Live card). flexBasis/maxWidth
+  // percentages are applied inline from the live column count.
+  gridCell: { flexGrow: 0, flexShrink: 0, paddingHorizontal: 6 },
   gridRow: { paddingHorizontal: 10 },
   footerSpinner: { paddingVertical: spacing.lg },
   endOfFeed: {

@@ -252,7 +252,13 @@ export function ChannelScreen({ route, navigation }: Props) {
         metaLine: base.metaLine || formatDateLine(item.publishedAt),
       };
       return (
-        <View style={columns > 1 ? styles.gridCell : undefined}>
+        <View
+          style={
+            columns > 1
+              ? [styles.gridCell, { flexBasis: `${100 / columns}%`, maxWidth: `${100 / columns}%` }]
+              : undefined
+          }
+        >
           <ShelfCard
             data={data}
             onPress={() => navigation.navigate('Watch', { youtubeVideoId: item.youtubeVideoId })}
@@ -753,7 +759,10 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.textSecondary,
     marginTop: spacing.sm,
   },
-  gridCell: { flex: 1 },
+  // Fault 6: no bare flex:1 in grid cells (last-row stretch) —
+  // flexBasis/maxWidth percentages are applied inline per column
+  // count at the render site.
+  gridCell: { flexGrow: 0, flexShrink: 0 },
   columnWrapper: { gap: spacing.lg },
   descriptionWrap: { marginTop: spacing.md },
   moreText: { fontSize: 14, fontWeight: '600', color: colors.text, marginTop: spacing.xs },

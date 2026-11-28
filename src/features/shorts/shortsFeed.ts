@@ -1,4 +1,5 @@
 import { isShortVideo, type YouTubeVideoMetadata } from '../../lib/youtube';
+import { contentKeyFor, dedupeByContent } from '../../lib/contentDedupe';
 import {
   fetchActiveChannels,
   getUploadsPageCached,
@@ -78,10 +79,16 @@ export async function fetchShorts(limit = 60): Promise<ShortItem[]> {
       }),
   );
   const seen = new Set<string>();
-  const all = perChannel.flat().filter((it) => {
+  const byId = perChannel.flat().filter((it) => {
     if (seen.has(it.meta.youtubeVideoId)) return false;
     seen.add(it.meta.youtubeVideoId);
     return true;
   });
+  // Content dedupe (fault 23/N10): the same clip re-uploaded under
+  // a different id appears ONCE — which also stops its like counts
+  // "flapping" between copies, since only one copy is ever shown.
+  const all = dedupeByContent(byId, (it) =>
+    contentKeyFor(it.meta.channelId, it.meta.title, it.meta.durationSeconds),
+  );
   return spreadByChannel(all).slice(0, limit);
 }

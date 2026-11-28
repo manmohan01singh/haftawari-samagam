@@ -11,6 +11,7 @@ import { BarBlurBackground } from '../../components/layout/BarBlurBackground';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Toast, useToast } from '../../components/common/Toast';
 import { shareContent, shareFeedback } from '../../lib/share';
+import { contentKeyFor, dedupeByContent } from '../../lib/contentDedupe';
 import { EmptyState } from '../../components/common/EmptyState';
 import { GridCard } from '../../components/video/GridCard';
 import { SkeletonCard } from '../../components/video/SkeletonCard';
@@ -275,8 +276,11 @@ export function SubscriptionsScreen({ navigation }: Props) {
         }
       }
     }
-    const clean = [...byVideoId.values()].filter(
-      (v) => v.title.trim().length > 0 && !isShortVideo(v),
+    // Content dedupe (N9): the same programme re-uploaded under
+    // different ids (identical title + duration) shows once.
+    const clean = dedupeByContent(
+      [...byVideoId.values()].filter((v) => v.title.trim().length > 0 && !isShortVideo(v)),
+      (v) => contentKeyFor(v.channelId, v.title, v.durationSeconds),
     );
     const filtered =
       filter === 'all'
