@@ -144,6 +144,10 @@ export const HostedWatchPlayer = forwardRef<HostedPlayerHandle, HostedWatchPlaye
         ) : state.kind === 'signin' ? (
           <>
             <Text style={styles.message}>Sign in to watch this recording.</Text>
+            <Text style={styles.subMessage}>
+              This recording is a sangat-hosted copy for signed-in members — there is no
+              YouTube version of it to offer instead.
+            </Text>
             <Pressable
               style={styles.signinButton}
               onPress={() => navigation.navigate('SignIn')}
@@ -204,6 +208,14 @@ const createStyles = (colors: ThemeColors) =>
       padding: spacing.lg,
     },
     message: { color: '#FFFFFF', fontSize: 14, textAlign: 'center' },
+    subMessage: {
+      color: 'rgba(255,255,255,0.75)',
+      fontSize: 13,
+      textAlign: 'center',
+      marginTop: 6,
+      lineHeight: 18,
+      maxWidth: 300,
+    },
     signinButton: {
       marginTop: spacing.md,
       backgroundColor: '#FFFFFF',

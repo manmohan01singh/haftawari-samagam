@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Dimensions,
   FlatList,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -71,6 +72,8 @@ export function LibraryScreen({ navigation }: Props) {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { user, loading: authLoading } = useCurrentUser();
   const scrollRef = React.useRef<React.ElementRef<typeof ScrollView>>(null);
+  const historyListRef = React.useRef<FlatList>(null);
+  const [historyScroll, setHistoryScroll] = useState({ x: 0, max: 0 });
   useScrollToTop(scrollRef);
   const { profile } = useProfile(user?.id ?? null);
   const history = useHistory(user?.id ?? null);
@@ -360,15 +363,60 @@ export function LibraryScreen({ navigation }: Props) {
           <MaterialIcons name="chevron-right" size={22} color={colors.text} />
         </Pressable>
         {user && historyShelf.length > 0 ? (
-          <FlatList
-            horizontal
-            data={historyShelf}
-            keyExtractor={(item) => item.entry.video_id}
-            renderItem={renderHistoryCard}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.historyContent}
-            {...H_LIST_PERF}
-          />
+          <View>
+            <FlatList
+              ref={historyListRef}
+              horizontal
+              data={historyShelf}
+              keyExtractor={(item) => item.entry.video_id}
+              renderItem={renderHistoryCard}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.historyContent}
+              onScroll={(e) => {
+                const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+                setHistoryScroll({
+                  x: contentOffset.x,
+                  max: Math.max(0, contentSize.width - layoutMeasurement.width),
+                });
+              }}
+              scrollEventThrottle={32}
+              {...H_LIST_PERF}
+            />
+            {/* Desktop scroll affordance (fix round 6, R5-6): the
+                rail clipped its third card at the screen edge with
+                no visible way to scroll — on web, chevrons appear
+                whenever more rail exists in that direction. */}
+            {Platform.OS === 'web' && Dimensions.get('window').width >= 768 && historyScroll.x > 4 ? (
+              <Pressable
+                style={[styles.railChevron, styles.railChevronLeft]}
+                onPress={() =>
+                  historyListRef.current?.scrollToOffset({
+                    offset: Math.max(0, historyScroll.x - Dimensions.get('window').width * 0.7),
+                    animated: true,
+                  })
+                }
+                accessibilityRole="button"
+                accessibilityLabel="Scroll history back"
+              >
+                <MaterialIcons name="chevron-left" size={22} color={colors.text} />
+              </Pressable>
+            ) : null}
+            {Platform.OS === 'web' && Dimensions.get('window').width >= 768 && historyScroll.max > historyScroll.x + 4 ? (
+              <Pressable
+                style={[styles.railChevron, styles.railChevronRight]}
+                onPress={() =>
+                  historyListRef.current?.scrollToOffset({
+                    offset: historyScroll.x + Dimensions.get('window').width * 0.7,
+                    animated: true,
+                  })
+                }
+                accessibilityRole="button"
+                accessibilityLabel="Scroll history forward"
+              >
+                <MaterialIcons name="chevron-right" size={22} color={colors.text} />
+              </Pressable>
+            ) : null}
+          </View>
         ) : user && history.loading ? (
           <View style={[styles.sectionLoading, styles.sectionLoadingPadded]}>
             <ActivityIndicator size="small" color={colors.textSecondary} />
@@ -770,6 +818,19 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   sectionHeading: { ...typography.sectionTitle, color: colors.text },
   libraryHeading: { paddingHorizontal: spacing.lg, marginTop: spacing.xxl },
   historyContent: { paddingHorizontal: spacing.lg, gap: spacing.md, paddingTop: spacing.md },
+  railChevron: {
+    position: 'absolute',
+    top: '38%',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.surfaceVariant,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  railChevronLeft: { left: spacing.sm },
+  railChevronRight: { right: spacing.sm },
   historyCard: { width: HISTORY_CARD_WIDTH },
   historyThumbWrap: { position: 'relative' },
   historyThumb: {

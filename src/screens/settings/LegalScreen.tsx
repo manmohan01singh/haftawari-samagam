@@ -59,7 +59,7 @@ export function TermsScreen({ navigation }: TermsProps) {
         },
         {
           heading: 'Sessions are group playbacks',
-          body: 'A Samagam Session is a scheduled group playback of a recording, watched together in sync. It is not a live broadcast, and the app\u2019s own session labels never call it one \u2014 they read UPCOMING, NOW PLAYING and COMPLETED. Titles you see on cards are the recordings\u2019 own titles, exactly as their channels published them, and a genuinely live broadcast from a channel is labelled LIVE because it is one. Counts shown in a session (watching, joined) are the app\u2019s own real counts.',
+          body: 'A Samagam Session is a scheduled group playback of a recording, watched together in sync. It is not a live broadcast, and the app\u2019s own session labels never call it one \u2014 they read UPCOMING, NOW PLAYING and COMPLETED. Titles you see on cards are the recordings\u2019 own titles, exactly as their channels published them \u2014 so a recording\u2019s own title may itself contain the word \u201cLive\u201d even though its session is a group playback, not a broadcast. A genuinely live broadcast from a channel is labelled LIVE because it is one. Counts shown in a session (watching, joined) are the app\u2019s own real counts.',
         },
         {
           heading: 'Your account',

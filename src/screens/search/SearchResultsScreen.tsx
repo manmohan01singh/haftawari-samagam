@@ -602,7 +602,11 @@ export function SearchResultsScreen({ route, navigation }: Props) {
       kind: 'avatar',
       avatarUrl: profile?.avatar_url ?? null,
       avatarInitial:
-        profile?.display_name?.charAt(0)?.toUpperCase() ?? user?.email?.charAt(0)?.toUpperCase() ?? '?',
+        // A guest has NO initial (fix round 6, N-8): the old
+        // '?' fallback is exactly what rendered as a circled "?"
+        // on this page — null makes the nav draw its person glyph,
+        // the same as every other tab.
+        profile?.display_name?.charAt(0)?.toUpperCase() ?? user?.email?.charAt(0)?.toUpperCase() ?? null,
     },
   ];
 

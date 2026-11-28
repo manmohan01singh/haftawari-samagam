@@ -327,12 +327,24 @@ export function ChannelScreen({ route, navigation }: Props) {
         />
       </View>
       {channel.bannerUrl ? (
-        <Image
-          source={{ uri: channel.bannerUrl }}
-          style={styles.banner}
-          contentFit="cover"
-          cachePolicy="memory-disk"
-        />
+        <View style={styles.bannerWrap}>
+          {/* Placeholder stays BEHIND the banner until the image
+              itself lands (fix round 6, #36): the page used to
+              open on a grey void with a lone ੴ for ~8 s while the
+              channel data loaded, then jump. The mark now sits
+              under the image from the first frame and the image
+              fades in over it — no void, no jump. */}
+          <View style={styles.bannerPlaceholder} pointerEvents="none">
+            <IkOnkarMark size={40} />
+          </View>
+          <Image
+            source={{ uri: channel.bannerUrl }}
+            style={styles.banner}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={250}
+          />
+        </View>
       ) : null}
       <View style={styles.identity}>
         {/* Real-YouTube parity (Part B, 27 Nov): when the channel is
@@ -708,6 +720,17 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   listPad: { paddingHorizontal: spacing.lg },
   topBarBleed: { marginHorizontal: -spacing.lg },
+  bannerWrap: { position: 'relative', marginHorizontal: -spacing.lg },
+  bannerPlaceholder: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    opacity: 0.45,
+  },
   banner: {
     // Full-bleed: escape the list's horizontal padding (same trick
     // as topBar), NO radius, and the aspect of the crop the API URL
@@ -717,7 +740,6 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     // the served image, so cover-fit scaled the art up and cropped
     // its sides; at 1546/256 the strip shows the whole band
     // edge-to-edge with no letterbox and no crop.
-    marginHorizontal: -spacing.lg,
     aspectRatio: 1546 / 256,
     backgroundColor: colors.surfaceVariant,
   },

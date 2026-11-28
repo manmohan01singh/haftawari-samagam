@@ -39,7 +39,9 @@ export function HelpScreen({ navigation }: Props) {
           Playback uses the official YouTube player. A copy hosted for a session
           needs you to be signed in; the same recording on YouTube is open to
           everyone, and when a finished session&apos;s recording is also on
-          YouTube, its page offers that copy to everyone too.
+          YouTube, its page offers that copy to everyone too. A few recordings
+          exist only as a sangat-hosted copy, with no YouTube version — those
+          ask you to sign in even after the session has finished.
         </Text>
 
         <Text style={styles.sectionTitle}>Your account</Text>

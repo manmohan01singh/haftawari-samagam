@@ -2,7 +2,7 @@ import React, { memo, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { formatDuration } from '../../../components/video/VideoCard';
-import { listThumbnailUrl } from '../../../components/video/cardData';
+import { formatDateLine, listThumbnailUrl } from '../../../components/video/cardData';
 import { layout, nativeApp, radii, spacing, typography, useTheme, type ThemeColors } from '../../../theme';
 import type { SessionStatus } from '../../../types/database';
 import { formatCountdown, formatSessionDateTime, formatStartedAgo, formatStreamedAgo } from '../format';
@@ -97,6 +97,16 @@ export const SessionCard = memo(function SessionCard({ item, effectiveStatus, no
         <Text style={styles.schedule} numberOfLines={1}>
           {scheduleLine}
         </Text>
+        {video?.published_at && effectiveStatus !== 'completed' ? (
+          // The recording's own date (fix round 6, R5-13): a title
+          // carrying "(03/12/20)" beside a "Sun, 29 Nov" schedule
+          // read as a contradiction — this line says plainly that
+          // the date in the title is when it was RECORDED, and the
+          // line above is when the sangat watches it together.
+          <Text style={styles.videoTitle} numberOfLines={1}>
+            {`Recorded ${formatDateLine(video.published_at)}`}
+          </Text>
+        ) : null}
         {video && effectiveStatus !== 'completed' ? (
           <Text style={styles.videoTitle} numberOfLines={1}>
             {video.title}

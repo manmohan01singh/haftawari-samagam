@@ -294,6 +294,7 @@ export function SessionsListScreen({ navigation, route }: Props) {
       <View style={styles.screen}>
         {topBar}
         <View style={styles.loadingPad}>
+          <Text style={styles.loadingLabel}>Loading sessions…</Text>
           <SkeletonCard variant="shelf" />
           <SkeletonCard variant="shelf" />
           <SkeletonCard variant="shelf" />
@@ -383,6 +384,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.background,
   },
   loadingPad: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
+  loadingLabel: { ...typography.body, color: colors.textSecondary, marginBottom: spacing.lg },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -664,6 +664,49 @@ export function WatchScreen({ route, navigation }: Props) {
           },
           error: null,
         });
+        // Full-text recovery (fix round 6, B10 remainder): when
+        // the API was unreachable at resolve time, the catalogue
+        // row's TRUNCATED excerpt is what the description box
+        // shows — ending mid-word, with nothing more to expand.
+        // One quiet retry a few seconds later replaces the excerpt
+        // with the channel's full text (and the real like count)
+        // when the API answers.
+        if (!meta && ytId) {
+          setTimeout(() => {
+            void (async () => {
+              const m3 = await fetchVideoMetadata(ytId).catch(() => null);
+              if (!active || !m3) return;
+              setWatchState((prev) => {
+                if (prev.key !== watchKey || !prev.resolved || prev.resolved.youtubeVideoId !== ytId) return prev;
+                const parts: string[] = [];
+                if (m3.liveBroadcastContent === 'live') {
+                  if (m3.concurrentViewers != null) parts.push(`${formatCount(m3.concurrentViewers)} watching`);
+                } else if (m3.viewCount != null) {
+                  parts.push(`▷ ${formatCount(m3.viewCount)} views`);
+                }
+                parts.push(formatDateLine(m3.publishedAt));
+                const tags = [...new Set((m3.description.match(/#[\p{L}\p{N}_]+/gu) ?? []).slice(0, 2))];
+                parts.push(...tags);
+                return {
+                  key: watchKey,
+                  error: null,
+                  resolved: {
+                    ...prev.resolved,
+                    title: prev.resolved.title || m3.title,
+                    description: m3.description,
+                    channelId: m3.channelId ?? prev.resolved.channelId,
+                    channelTitle: prev.resolved.channelTitle || m3.channelTitle,
+                    thumbnailUrl: prev.resolved.thumbnailUrl ?? m3.thumbnailUrl,
+                    durationSeconds: prev.resolved.durationSeconds ?? m3.durationSeconds,
+                    ytLikeCount: m3.likeCount ?? prev.resolved.ytLikeCount ?? null,
+                    isLive: m3.liveBroadcastContent === 'live',
+                    metaLine: parts.filter(Boolean).join(' · '),
+                  },
+                };
+              });
+            })();
+          }, 8000);
+        }
       } catch (e) {
         if (active) {
           setWatchState({
