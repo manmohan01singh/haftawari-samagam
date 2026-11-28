@@ -14,6 +14,7 @@ import { shareContent, shareFeedback } from '../../lib/share';
 import { EmptyState } from '../../components/common/EmptyState';
 import { GridCard } from '../../components/video/GridCard';
 import { SkeletonCard } from '../../components/video/SkeletonCard';
+import { useWebPullToRefresh } from '../../components/gesture/WebPullToRefresh';
 import { apiCardData, formatDateLine } from '../../components/video/cardData';
 import { useAuth } from '../../features/auth';
 import { ensureDefaultFollows, readFollowedChannelIds } from '../../features/channel';
@@ -27,7 +28,7 @@ import {
 } from '../../features/channels';
 import { isShortVideo, type YouTubeVideoMetadata } from '../../lib/youtube';
 import { FEED_LIST_PERF } from '../../lib/listPerf';
-import { layout, nativeApp, radii, spacing, useTheme, type ThemeColors } from '../../theme';
+import { layout, nativeApp, radii, spacing, typography, useTheme, type ThemeColors } from '../../theme';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
 
 type Props = CompositeScreenProps<
@@ -87,7 +88,18 @@ export function SubscriptionsScreen({ navigation }: Props) {
   const [filter, setFilter] = useState<UploadFilter>('all');
   const [sort, setSort] = useState<UploadSort>('latest');
   const [reloadKey, setReloadKey] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
   const { toast, showToast } = useToast();
+
+  // Pull-to-refresh (audit A1): the PWA's RefreshControl is a stub,
+  // so the web gesture comes from the shared hook — same pattern as
+  // Home. A pull re-runs the whole load via reloadKey.
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    setLoading(true);
+    setReloadKey((k) => k + 1);
+  }, []);
+  const ptr = useWebPullToRefresh({ onRefresh, refreshing });
 
   const shareVideo = useCallback(
     (title: string, youtubeVideoId: string) => {
@@ -168,7 +180,7 @@ export function SubscriptionsScreen({ navigation }: Props) {
       } catch (e) {
         if (active) setError(e instanceof Error ? e.message : 'Could not load subscriptions.');
       } finally {
-        if (active) setLoading(false);
+        if (active) { setLoading(false); setRefreshing(false); }
       }
     })();
     return () => {
@@ -378,6 +390,7 @@ export function SubscriptionsScreen({ navigation }: Props) {
             return (
               <Pressable
                 key={f.key}
+                hitSlop={6}
                 style={[styles.chip, activeChip && styles.chipActive]}
                 onPress={() => setFilter(f.key)}
                 accessibilityRole="button"
@@ -418,13 +431,20 @@ export function SubscriptionsScreen({ navigation }: Props) {
           onAction={() => navigation.navigate('MainTabs', { screen: 'Home' })}
         />
       ) : isLoading ? (
-        <View style={[styles.listPad, styles.skeletonRow]}>
-          <View style={styles.skeletonCell}>
-            <SkeletonCard variant="shelf" />
-          </View>
-          <View style={styles.skeletonCell}>
-            <SkeletonCard variant="shelf" />
-          </View>
+        // Geometry-matched skeleton grid (audit A9): the loaded state
+        // is a multi-row 2-column grid, so the placeholder is too —
+        // one lone row left most of the screen blank while loading.
+        <View style={styles.listPad}>
+          {[0, 1, 2].map((row) => (
+            <View key={row} style={styles.skeletonRow}>
+              <View style={styles.skeletonCell}>
+                <SkeletonCard variant="shelf" />
+              </View>
+              <View style={styles.skeletonCell}>
+                <SkeletonCard variant="shelf" />
+              </View>
+            </View>
+          ))}
         </View>
       ) : error ? (
         <EmptyState
@@ -442,7 +462,12 @@ export function SubscriptionsScreen({ navigation }: Props) {
           message="The admin has not activated any channel yet. Channels added in the admin panel will appear here."
         />
       ) : (
-        <FlatList
+        <View style={styles.ptrWrap}>
+          {ptr.indicator}
+          <FlatList
+            {...ptr.listProps}
+            refreshing={refreshing}
+            onRefresh={onRefresh}
           ref={listRef}
           key={`cols-${columns}`}
           data={visible}
@@ -467,7 +492,8 @@ export function SubscriptionsScreen({ navigation }: Props) {
             />
           }
           {...FEED_LIST_PERF}
-        />
+          />
+        </View>
       )}
       <Toast message={toast} />
     </View>
@@ -515,7 +541,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: nativeApp.avatarRail.liveDotSize / 2,
     backgroundColor: colors.accent,
     borderWidth: 2,
-    borderColor: '#FFFFFF',
+    borderColor: colors.background,
   },
   railName: {
     fontSize: nativeApp.avatarRail.nameFontSize,
@@ -526,7 +552,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     width: '100%',
   },
   railAll: { paddingVertical: 4 },
-  railAllText: { fontSize: 15, fontWeight: '600', color: '#065FD4' },
+  railAllText: { fontSize: 15, fontWeight: '600', color: colors.linkBlue },
   headingRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -537,8 +563,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   heading: {
     flex: 1,
-    fontSize: 20,
-    fontWeight: '600',
+    ...typography.sectionTitle,
     color: colors.text,
   },
   controlsRow: {
@@ -567,6 +592,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   sortText: { fontSize: 14, fontWeight: '600', color: colors.text },
   columnWrapper: { gap: spacing.md },
-  skeletonRow: { flexDirection: 'row', gap: spacing.md },
+  ptrWrap: { flex: 1 },
+  skeletonRow: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.md },
   skeletonCell: { flex: 1 },
 });

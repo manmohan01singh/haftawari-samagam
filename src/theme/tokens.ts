@@ -109,6 +109,16 @@ export interface ThemeColors {
    * hard-coded white in HomeScreen, so dark mode got a white band.
    */
   headerBlockBackground: string;
+  /** Error/danger text (admin status colors were hard-coded light-theme values). */
+  danger: string;
+  /** Pale surface behind danger text. */
+  dangerSurface: string;
+  /** Success/confirmation text — must stay readable on the dark page. */
+  success: string;
+  /** Link blue, per theme (the light-mode value is unreadable on dark). */
+  linkBlue: string;
+  /** Link color on the inverted undo bar (bar bg is colors.text). */
+  undoLink: string;
 }
 
 export const lightColors: ThemeColors = {
@@ -129,6 +139,11 @@ export const lightColors: ThemeColors = {
   secondaryTabSelectedBg: '#F8E9EC',
   pageGround: '#F8F8F8',
   headerBlockBackground: 'rgba(255,255,255,0.88)',
+  danger: '#8B0000',
+  dangerSurface: '#FDECEC',
+  success: '#1B5E20',
+  linkBlue: '#065FD4',
+  undoLink: '#8AB4F8',
 };
 
 export const darkColors: ThemeColors = {
@@ -155,6 +170,11 @@ export const darkColors: ThemeColors = {
   secondaryTabSelectedBg: '#272727',
   pageGround: '#0F0F0F',
   headerBlockBackground: 'rgba(15,15,15,0.88)',
+  danger: '#F2B8B5',
+  dangerSurface: '#3D1A1A',
+  success: '#81C784',
+  linkBlue: '#8AB4F8',
+  undoLink: '#0B57D0',
 };
 
 /**

@@ -174,7 +174,7 @@ export function PlaybackHost({
         <Pressable
           style={[styles.miniClose, { bottom: bottomOffset + 8 + 168 / layout.thumbnailAspectRatio - 30, right: 18 }]}
           onPress={close}
-          hitSlop={8}
+          hitSlop={12}
           accessibilityRole="button"
           accessibilityLabel="Close player"
         >
@@ -186,7 +186,7 @@ export function PlaybackHost({
         <Pressable
           style={[styles.miniClose, { bottom: bottomOffset + 14, right: 18 }]}
           onPress={togglePlay}
-          hitSlop={8}
+          hitSlop={12}
           accessibilityRole="button"
           accessibilityLabel={playing ? 'Pause' : 'Play'}
         >

@@ -137,7 +137,7 @@ export function SettingsScreen({ navigation }: Props) {
         <Text style={styles.sectionLabel}>Account</Text>
         {user ? (
           <Pressable
-            style={styles.profileRow}
+            style={({ pressed }) => [styles.profileRow, pressed && styles.rowPressed]}
             onPress={() => navigation.navigate('Account')}
             accessibilityRole="button"
             accessibilityLabel="Account"
@@ -162,7 +162,7 @@ export function SettingsScreen({ navigation }: Props) {
         ) : (
           <View>
             <Pressable
-              style={styles.profileRow}
+              style={({ pressed }) => [styles.profileRow, pressed && styles.rowPressed]}
               onPress={() => navigation.navigate('SignIn')}
               accessibilityRole="button"
               accessibilityLabel="Sign in"
@@ -199,7 +199,7 @@ export function SettingsScreen({ navigation }: Props) {
 
         {user ? (
           <Pressable
-            style={styles.row}
+            style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
             onPress={() => navigation.navigate('EditProfile')}
             accessibilityRole="button"
             accessibilityLabel="Edit profile"
@@ -212,7 +212,7 @@ export function SettingsScreen({ navigation }: Props) {
 
         <Text style={styles.sectionLabel}>General</Text>
         <Pressable
-          style={styles.row}
+          style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
           onPress={() => navigation.navigate('Channel', { channelId: OFFICIAL_CHANNEL_ID })}
           accessibilityRole="button"
         >
@@ -221,7 +221,7 @@ export function SettingsScreen({ navigation }: Props) {
           <MaterialIcons name="chevron-right" size={22} color={colors.textSecondary} />
         </Pressable>
         <Pressable
-          style={styles.row}
+          style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
           onPress={() => {
             void Linking.openURL(`https://www.youtube.com/channel/${OFFICIAL_CHANNEL_ID}`);
           }}
@@ -234,7 +234,7 @@ export function SettingsScreen({ navigation }: Props) {
 
         <Text style={styles.sectionLabel}>Appearance</Text>
         <Pressable
-          style={styles.row}
+          style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
           onPress={() => setThemeOpen((open) => !open)}
           accessibilityRole="button"
           accessibilityLabel="Theme"
@@ -255,7 +255,7 @@ export function SettingsScreen({ navigation }: Props) {
               return (
                 <Pressable
                   key={option.value}
-                  style={styles.row}
+                  style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
                   onPress={() => {
                     setPreference(option.value);
                     setThemeOpen(false);
@@ -278,7 +278,7 @@ export function SettingsScreen({ navigation }: Props) {
         {libraryRows.map((row) => (
           <Pressable
             key={row.label}
-            style={styles.row}
+            style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
             onPress={row.onPress}
             accessibilityRole="button"
           >
@@ -292,7 +292,7 @@ export function SettingsScreen({ navigation }: Props) {
           <>
             <Text style={styles.sectionLabel}>Admin</Text>
             <Pressable
-              style={styles.row}
+              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
               onPress={() => navigation.navigate('Admin', { screen: 'AdminOverview' })}
               accessibilityRole="button"
             >
@@ -305,7 +305,7 @@ export function SettingsScreen({ navigation }: Props) {
 
         {user ? (
           <Pressable
-            style={styles.signOutButton}
+            style={({ pressed }) => [styles.signOutButton, pressed && styles.rowPressed]}
             onPress={() => setConfirmingSignOut(true)}
             accessibilityRole="button"
           >
@@ -314,7 +314,7 @@ export function SettingsScreen({ navigation }: Props) {
         ) : null}
 
         <Pressable
-          style={styles.row}
+          style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
           onPress={() => navigation.navigate('Help')}
           accessibilityRole="button"
           accessibilityLabel="Help"
@@ -390,7 +390,7 @@ const createStyles = (colors: ThemeColors) =>
       backgroundColor: colors.subscribeBackground,
       borderRadius: radii.pill,
       paddingHorizontal: spacing.lg,
-      minHeight: 40,
+      minHeight: 44,
       justifyContent: 'center',
     },
     primaryButtonText: { fontSize: 14, fontWeight: '600', color: colors.subscribeText },
@@ -398,10 +398,11 @@ const createStyles = (colors: ThemeColors) =>
       backgroundColor: colors.surfaceVariant,
       borderRadius: radii.pill,
       paddingHorizontal: spacing.lg,
-      minHeight: 40,
+      minHeight: 44,
       justifyContent: 'center',
     },
     secondaryButtonText: { fontSize: 14, fontWeight: '600', color: colors.text },
+    rowPressed: { backgroundColor: colors.surfaceVariant },
     row: {
       flexDirection: 'row',
       alignItems: 'center',

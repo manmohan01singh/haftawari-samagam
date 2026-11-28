@@ -695,7 +695,7 @@ const createStyles = (colors: ThemeColors) =>
       backgroundColor: colors.surface,
     },
     help: { ...typography.body, color: colors.textSecondary },
-    notice: { ...typography.body, color: '#1B5E20' },
+    notice: { ...typography.body, color: colors.success },
     card: {
       flexDirection: 'row',
       alignItems: 'center',

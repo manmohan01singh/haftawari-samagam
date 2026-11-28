@@ -1,5 +1,5 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { CompositeScreenProps } from '@react-navigation/native';
@@ -681,12 +681,21 @@ export function HomeScreen({ navigation }: Props) {
           <SkeletonCard variant="feed" />
         </View>
       ) : items.length === 0 ? (
+        // The empty state carries its own way out (audit A5): a
+        // filtered empty offers "Show all"; the All empty — which can
+        // also mean a transient failure — offers "Try again".
         <EmptyState
           title={selectedChip === ALL_CHIP ? 'No samagams yet' : 'Nothing in this filter yet'}
           message={
             selectedChip === ALL_CHIP
               ? 'Recordings from the sangat channels will appear here.'
               : `No videos match "${selectedChip}" yet — try another chip.`
+          }
+          actionLabel={selectedChip === ALL_CHIP ? 'Try again' : 'Show all'}
+          onAction={
+            selectedChip === ALL_CHIP
+              ? onRefresh
+              : () => handleSelectChip(ALL_CHIP)
           }
         />
       ) : (
@@ -734,7 +743,9 @@ export function HomeScreen({ navigation }: Props) {
             onRefresh={onRefresh}
             ListFooterComponent={
               loadingMore ? (
-                <ActivityIndicator style={styles.footerSpinner} color={colors.textSecondary} />
+                // Skeleton footer (audit A11): a bare spinner row is
+                // shorter than a card and makes the list end jump.
+                <SkeletonCard variant="feed" />
               ) : exhausted ? (
                 <View style={styles.endOfFeed}>
                   <MaterialIcons name="check-circle" size={18} color={colors.textSecondary} />

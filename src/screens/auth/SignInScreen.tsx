@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState, type ElementRef } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -58,6 +58,7 @@ export function SignInScreen({ navigation }: Props) {
         ? 'Enter your password to sign in.'
         : null;
 
+  const passwordRef = useRef<ElementRef<typeof TextInput>>(null);
   const submit = async () => {
     if (!supabase || !formValid) return;
     setBusy(true);
@@ -199,7 +200,10 @@ export function SignInScreen({ navigation }: Props) {
             placeholderTextColor={colors.textSecondary}
             autoCapitalize="none"
             autoComplete="email"
+            textContentType="emailAddress"
             keyboardType="email-address"
+            returnKeyType="next"
+            onSubmitEditing={() => passwordRef.current?.focus()}
             value={email}
             onChangeText={setEmail}
           />
@@ -214,7 +218,13 @@ export function SignInScreen({ navigation }: Props) {
               placeholderTextColor={colors.textSecondary}
               autoCapitalize="none"
               autoCorrect={false}
+              ref={passwordRef}
               autoComplete="password"
+              textContentType="password"
+              returnKeyType="done"
+              onSubmitEditing={() => {
+                if (formValid && !busy) void submit();
+              }}
               secureTextEntry={!showPassword}
               value={password}
               onChangeText={setPassword}

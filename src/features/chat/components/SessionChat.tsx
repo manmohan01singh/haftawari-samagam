@@ -340,7 +340,7 @@ export function SessionChat({
         disabled={!onClose}
         accessibilityRole={onClose ? 'button' : undefined}
         accessibilityLabel={onClose ? 'Close chat' : undefined}
-        hitSlop={6}
+        hitSlop={{ top: 14, bottom: 14, left: 24, right: 24 }}
       >
         <View style={styles.dragHandle} />
       </Pressable>

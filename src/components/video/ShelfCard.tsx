@@ -34,7 +34,7 @@ export const ShelfCard = memo(function ShelfCard({ data, onPress, showAvatar = f
   const [menuOpen, setMenuOpen] = React.useState(false);
   return (
     <>
-    <Pressable onPress={onPress} style={styles.card} accessibilityRole="button">
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.card, pressed && styles.cardPressed]} accessibilityRole="button">
       <View style={styles.thumbnailWrap}>
         {data.thumbnailUrl ? (
           <Image
@@ -119,6 +119,7 @@ export const ShelfCard = memo(function ShelfCard({ data, onPress, showAvatar = f
 
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
   card: { paddingBottom: spacing.xl },
+  cardPressed: { opacity: 0.92 },
   thumbnailWrap: { position: 'relative' },
   thumbnail: {
     width: '100%',

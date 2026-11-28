@@ -49,7 +49,7 @@ export function UserAvatar({ avatarUrl, initial, size = 40, initialFontSize }: U
           {initial}
         </Text>
       ) : (
-        <MaterialIcons name="person" size={Math.round(size * 0.6)} color={colors.textSecondary} />
+        <MaterialIcons name="person" size={Math.round(size * 0.6)} color={colors.subscribeText} />
       )}
     </View>
   );
@@ -57,9 +57,9 @@ export function UserAvatar({ avatarUrl, initial, size = 40, initialFontSize }: U
 
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
   fallback: {
-    backgroundColor: colors.surfaceVariant,
+    backgroundColor: colors.subscribeBackground,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  initial: { fontWeight: '600', color: colors.textSecondary },
+  initial: { fontWeight: '600', color: colors.subscribeText },
 });

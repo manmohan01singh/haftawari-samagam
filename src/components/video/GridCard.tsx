@@ -30,7 +30,7 @@ export const GridCard = memo(function GridCard({ data, onPress, menuActions }: G
   const isLive = data.broadcastState === 'live';
   return (
     <View style={styles.cell}>
-      <Pressable onPress={onPress} style={styles.card} accessibilityRole="button" accessibilityLabel={data.title}>
+      <Pressable onPress={onPress} style={({ pressed }) => [styles.card, pressed && styles.cardPressed]} accessibilityRole="button" accessibilityLabel={data.title}>
         <View style={styles.thumbnailWrap}>
           {data.thumbnailUrl ? (
             <Image
@@ -88,6 +88,7 @@ export const GridCard = memo(function GridCard({ data, onPress, menuActions }: G
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
   cell: { flex: 1 },
   card: { paddingBottom: spacing.xl },
+  cardPressed: { opacity: 0.92 },
   thumbnailWrap: { position: 'relative' },
   thumbnail: {
     width: '100%',

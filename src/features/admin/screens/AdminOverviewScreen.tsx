@@ -1,7 +1,8 @@
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useState, useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { spacing, typography, useTheme, type ThemeColors } from '../../../theme';
 import type { AdminStackParamList } from '../../../navigation/types';
 import { fetchOverviewCounts, type OverviewCounts } from '../adminService';
@@ -95,13 +96,21 @@ function OverviewContent({ navigation }: { navigation: Props['navigation'] }) {
       <View style={styles.links}>
         <SectionTitle>Manage</SectionTitle>
         {LINKS.map((link) => (
-          <View key={link.route} style={styles.linkRow}>
+          // The whole row is the tap target (audit C4) — the label
+          // and hint used to be dead area beside a small button.
+          <Pressable
+            key={link.route}
+            style={({ pressed }) => [styles.linkRow, pressed && styles.linkRowPressed]}
+            onPress={() => navigation.navigate(link.route)}
+            accessibilityRole="button"
+            accessibilityLabel={`${link.label}: ${link.hint}`}
+          >
             <View style={styles.linkText}>
               <Text style={styles.linkLabel}>{link.label}</Text>
               <Text style={styles.linkHint}>{link.hint}</Text>
             </View>
-            <AdminButton title="Open" onPress={() => navigation.navigate(link.route)} />
-          </View>
+            <MaterialIcons name="chevron-right" size={22} color={colors.textSecondary} />
+          </Pressable>
         ))}
         <AdminButton title="Refresh totals" onPress={load} />
       </View>
@@ -131,7 +140,10 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing.md,
+    minHeight: 52,
+    paddingVertical: spacing.sm,
   },
+  linkRowPressed: { backgroundColor: colors.surfaceVariant, opacity: 0.85 },
   linkText: { flex: 1 },
   linkLabel: { ...typography.cardTitle, color: colors.text },
   linkHint: { ...typography.metadata, color: colors.textSecondary },

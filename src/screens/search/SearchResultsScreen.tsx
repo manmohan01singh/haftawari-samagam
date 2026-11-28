@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -80,6 +81,7 @@ function searchResultCardData(v: VideoResult, channelAvatarUrl: string | null): 
  */
 export function SearchResultsScreen({ route, navigation }: Props) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { query } = route.params;
   const channel = useOfficialChannel();
@@ -356,6 +358,7 @@ export function SearchResultsScreen({ route, navigation }: Props) {
             {degradedBannerText(data?.youtubeError ?? null)}
           </Text>
           <Pressable
+            hitSlop={6}
             style={styles.retryChip}
             onPress={retryLeg}
             disabled={legRetrying}
@@ -482,6 +485,7 @@ export function SearchResultsScreen({ route, navigation }: Props) {
               .map((chip) => (
                 <Pressable
                   key={chip.key}
+                  hitSlop={6}
                   onPress={() => setFilter(chip.key)}
                   accessibilityRole="button"
                   accessibilityState={{ selected: filter === chip.key }}
@@ -516,7 +520,7 @@ export function SearchResultsScreen({ route, navigation }: Props) {
     <View style={styles.container}>
 
       <View style={styles.centered}>
-        <View style={styles.bar}>
+        <View style={[styles.bar, { paddingTop: spacing.xs + insets.top }]}>
           <Pressable onPress={() => goBackOrTab(navigation, 'Home')} hitSlop={10} accessibilityLabel="Back">
             <MaterialIcons name="arrow-back" size={24} color={colors.text} />
           </Pressable>
@@ -728,14 +732,14 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: radii.pill,
   },
   followPillText: { fontSize: 15, fontWeight: '600', color: colors.text },
-  followNote: { fontSize: 11, color: colors.textSecondary, marginTop: 6 },
+  followNote: { ...typography.metadata, color: colors.textSecondary, marginTop: 6 },
   channelHandle: { fontSize: 14, color: colors.textSecondary, marginTop: 3 },
   channelMeta: { fontSize: 14, color: colors.textSecondary, marginTop: 2 },
   viewChannelPill: {
     flex: 1,
     height: nativeApp.searchChannel.buttonHeight, // 44
     borderWidth: 1,
-    borderColor: '#9E9E9E', // ref-3: clearly visible outline on the tint
+    borderColor: colors.border, // ref-3: clearly visible outline on the tint
     borderRadius: radii.pill,
     justifyContent: 'center',
     alignItems: 'center',
@@ -747,7 +751,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
   chip: {
     backgroundColor: colors.surfaceVariant,
-    borderRadius: radii.badge + 4,
+    borderRadius: radii.chipRadius,
     paddingHorizontal: spacing.md,
     paddingVertical: 6,
   },

@@ -247,7 +247,7 @@ export function AdminCategoriesScreen() {
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
   form: { gap: spacing.md },
   help: { ...typography.body, color: colors.textSecondary },
-  notice: { ...typography.body, color: '#1B5E20' },
+  notice: { ...typography.body, color: colors.success },
   listHeader: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -7,7 +7,7 @@
  * file only (refs precedent: SwipeableRow). */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
-import { radii, spacing, useTheme, type ThemeColors } from '../../theme';
+import { layout, radii, spacing, useTheme, type ThemeColors } from '../../theme';
 
 /**
  * Minimal toast hook + view: transient visible feedback for actions
@@ -75,7 +75,9 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: spacing.xxl,
+    // Above the overlay bottom nav (audit C2): at spacing.xxl the
+    // pill drew ON TOP of the nav bar on tab screens.
+    bottom: layout.bottomNavHeight + spacing.lg,
     alignItems: 'center',
     zIndex: 50,
   },

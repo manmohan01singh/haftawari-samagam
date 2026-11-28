@@ -996,7 +996,7 @@ export function WatchScreen({ route, navigation }: Props) {
           {/* QA issue 62: the whole channel row is the tap target to
               the Channel page; the name is one line, tail-ellipsis. */}
           <Pressable
-            style={styles.channelRow}
+            style={({ pressed }) => [styles.channelRow, pressed && styles.actionPressed]}
             onPress={() => navigation.navigate('Channel', { channelId: channel?.channelId })}
             accessibilityRole="button"
             accessibilityLabel={`View channel ${channelName}`}
@@ -1063,32 +1063,45 @@ export function WatchScreen({ route, navigation }: Props) {
               <MaterialIcons name="expand-more" size={18} color={colors.text} />
             </Pressable>
             <View style={styles.actions}>
+              {/* YouTube's segmented Like|Dislike pill (audit B2):
+                  one surfaceVariant capsule, real like count inside,
+                  a divider, then Dislike. */}
+              <View style={styles.likePill}>
+                <Pressable
+                  onPress={onToggleLike}
+                  hitSlop={ICON_HIT_SLOP}
+                  accessibilityLabel="Like"
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: likedByMe }}
+                  style={({ pressed }) => [styles.likeButton, pressed && styles.actionPressed]}
+                >
+                  <MaterialIcons
+                    name={likedByMe ? 'thumb-up' : 'thumb-up-off-alt'}
+                    size={22}
+                    color={colors.text}
+                  />
+                  {likeStatus === 'ready' && likeCount > 0 ? (
+                    <Text style={styles.likeCount}>{formatCount(likeCount)}</Text>
+                  ) : null}
+                </Pressable>
+                <View style={styles.likeDivider} />
+                <Pressable
+                  onPress={() => showToast('Dislikes are not available in this app yet — nothing was recorded')}
+                  hitSlop={ICON_HIT_SLOP}
+                  accessibilityLabel="Dislike"
+                  accessibilityRole="button"
+                  style={({ pressed }) => [styles.likeButton, pressed && styles.actionPressed]}
+                >
+                  <MaterialIcons name="thumb-down-off-alt" size={22} color={colors.text} />
+                </Pressable>
+              </View>
               <Pressable
-                onPress={onToggleLike}
+                onPress={onShare}
                 hitSlop={ICON_HIT_SLOP}
-                accessibilityLabel="Like"
+                accessibilityLabel="Share"
                 accessibilityRole="button"
-                accessibilityState={{ selected: likedByMe }}
-                style={styles.likeButton}
+                style={({ pressed }) => pressed && styles.actionPressed}
               >
-                <MaterialIcons
-                  name={likedByMe ? 'thumb-up' : 'thumb-up-off-alt'}
-                  size={24}
-                  color={colors.text}
-                />
-                {likeStatus === 'ready' && likeCount > 0 ? (
-                  <Text style={styles.likeCount}>{formatCount(likeCount)}</Text>
-                ) : null}
-              </Pressable>
-              <Pressable
-                onPress={() => showToast('Dislikes are not available in this app yet — nothing was recorded')}
-                hitSlop={ICON_HIT_SLOP}
-                accessibilityLabel="Dislike"
-                accessibilityRole="button"
-              >
-                <MaterialIcons name="thumb-down-off-alt" size={24} color={colors.text} />
-              </Pressable>
-              <Pressable onPress={onShare} hitSlop={ICON_HIT_SLOP} accessibilityLabel="Share" accessibilityRole="button">
                 <MaterialIcons name="share" size={24} color={colors.text} />
               </Pressable>
               {resolved.row ? (
@@ -1098,6 +1111,7 @@ export function WatchScreen({ route, navigation }: Props) {
                   accessibilityLabel={saved ? 'Remove from saved' : 'Save'}
                   accessibilityRole="button"
                   accessibilityState={{ selected: saved }}
+                  style={({ pressed }) => pressed && styles.actionPressed}
                 >
                   <MaterialIcons name={saved ? 'bookmark' : 'bookmark-border'} size={24} color={colors.text} />
                 </Pressable>
@@ -1113,6 +1127,7 @@ export function WatchScreen({ route, navigation }: Props) {
                 hitSlop={ICON_HIT_SLOP}
                 accessibilityLabel="More actions"
                 accessibilityRole="button"
+                style={({ pressed }) => pressed && styles.actionPressed}
               >
                 <MaterialIcons name="more-horiz" size={24} color={colors.text} />
               </Pressable>
@@ -1191,7 +1206,10 @@ export function WatchScreen({ route, navigation }: Props) {
                 accessibilityLabel="Show description"
               >
                 <Text style={styles.descriptionText} numberOfLines={2} ellipsizeMode="tail">
-                  {resolved.description}
+                  {/* Newlines collapse to spaces in the 2-line preview
+                      so words never run together ("SahibSahibJi");
+                      the expanded view keeps the real line breaks. */}
+                  {resolved.description.replace(/\s*\n\s*/g, ' ')}
                 </Text>
                 {/* Visible expand control, mirroring the expanded
                     state's "Show less" — the collapsed box previously
@@ -1310,24 +1328,17 @@ export function WatchScreen({ route, navigation }: Props) {
           <Text style={styles.upNextEmpty}>No other published recordings yet.</Text>
         }
         ListFooterComponent={
-          // "Load more" (P10): continues the channel-uploads paging
-          // above; rendered only while another page can exist.
-          upNextItems.length > 0 && upNextHasMore ? (
-            <Pressable
-              style={styles.loadMoreRow}
-              onPress={loadMoreUpNext}
-              disabled={upNextLoadingMore}
-              accessibilityRole="button"
-              accessibilityLabel="Load more videos"
-            >
-              {upNextLoadingMore ? (
-                <ActivityIndicator color={colors.textSecondary} />
-              ) : (
-                <Text style={styles.loadMoreText}>Load more</Text>
-              )}
-            </Pressable>
+          // Paging continues automatically via onEndReached (audit
+          // B5 — YouTube's Up Next never asks for a tap); the footer
+          // is just a spinner while the next page is in flight.
+          upNextItems.length > 0 && upNextLoadingMore ? (
+            <View style={styles.loadMoreRow}>
+              <ActivityIndicator color={colors.textSecondary} />
+            </View>
           ) : undefined
         }
+        onEndReached={loadMoreUpNext}
+        onEndReachedThreshold={0.5}
         {...FEED_LIST_PERF}
       />
       {/* ⋮ action menu (screenshot 06 •••): only actions that really
@@ -1591,6 +1602,17 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   // target; the count text inherits the row's 24px icon rhythm.
   likeButton: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   likeCount: { fontSize: 13, fontWeight: '600', color: colors.text },
+  // Segmented Like|Dislike capsule (YouTube's current watch row).
+  likePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surfaceVariant,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    minHeight: 40,
+  },
+  likeDivider: { width: 1, height: 20, backgroundColor: colors.border, marginHorizontal: spacing.sm },
+  actionPressed: { opacity: 0.6 },
   descriptionBox: {
     backgroundColor: colors.surfaceVariant,
     borderRadius: radii.card,

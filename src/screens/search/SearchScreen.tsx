@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { radii, spacing, typography, useTheme, type ThemeColors } from '../../theme';
@@ -36,6 +37,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Search'>;
  */
 export function SearchScreen({ navigation }: Props) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { user } = useAuth();
   const userId = user?.id ?? null;
@@ -152,7 +154,7 @@ export function SearchScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.bar}>
+      <View style={[styles.bar, { paddingTop: spacing.lg + insets.top }]}>
         <Pressable onPress={() => goBackOrTab(navigation, 'Home')} hitSlop={10} accessibilityLabel="Back">
           <MaterialIcons name="arrow-back" size={24} color={colors.text} />
         </Pressable>
@@ -425,5 +427,5 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingVertical: spacing.md,
   },
   undoText: { flex: 1, color: colors.subscribeText, fontSize: 14 },
-  undoAction: { color: '#8AB4F8', fontSize: 14, fontWeight: '700' },
+  undoAction: { color: colors.undoLink, fontSize: 14, fontWeight: '700' },
 });

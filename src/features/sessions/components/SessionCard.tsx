@@ -5,7 +5,7 @@ import { formatDuration } from '../../../components/video/VideoCard';
 import { listThumbnailUrl } from '../../../components/video/cardData';
 import { layout, nativeApp, radii, spacing, typography, useTheme, type ThemeColors } from '../../../theme';
 import type { SessionStatus } from '../../../types/database';
-import { formatCountdown, formatSessionDateTime, formatStartedAgo } from '../format';
+import { formatCountdown, formatSessionDateTime, formatStartedAgo, formatStreamedAgo } from '../format';
 import type { SessionWithVideo } from '../sessionService';
 import { SessionStatusBadge } from './SessionStatusBadge';
 
@@ -33,12 +33,26 @@ export const SessionCard = memo(function SessionCard({ item, effectiveStatus, no
     ? listThumbnailUrl(video.youtube_video_id, video.thumbnail_url)
     : null;
 
+  // Completed cards speak the session page's language (audit B9):
+  // "Streamed … ago" from the effective end (start + the recording's
+  // duration, else the scheduled end) — not a raw timestamp.
+  const effectiveEndIso = new Date(
+    Date.parse(session.scheduled_start_at) +
+      (video?.duration_seconds != null
+        ? video.duration_seconds * 1000
+        : session.scheduled_end_at
+          ? Date.parse(session.scheduled_end_at) - Date.parse(session.scheduled_start_at)
+          : 0),
+  ).toISOString();
+
   const scheduleLine =
     effectiveStatus === 'now_playing'
       ? formatStartedAgo(session.scheduled_start_at, nowMs)
       : effectiveStatus === 'upcoming'
         ? `${formatSessionDateTime(session.scheduled_start_at)} · ${formatCountdown(session.scheduled_start_at, nowMs)}`
-        : formatSessionDateTime(session.scheduled_start_at);
+        : effectiveStatus === 'completed'
+          ? formatStreamedAgo(effectiveEndIso, nowMs)
+          : formatSessionDateTime(session.scheduled_start_at);
 
   return (
     <Pressable

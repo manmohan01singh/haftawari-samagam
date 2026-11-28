@@ -14,6 +14,7 @@ import {
 import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { EmptyState } from '../../components/common/EmptyState';
+import { LinkedText } from '../../components/common/LinkedText';
 import { Toast, useToast } from '../../components/common/Toast';
 import { shareContent, shareFeedback } from '../../lib/share';
 import { sessionShareUrl } from '../../navigation/linking';
@@ -126,6 +127,7 @@ export function SessionWatchScreen({ route, navigation }: Props) {
   // so the iframe/WebView source never changes after first render —
   // ongoing sync is the drift-correction seek's job, not the src's.
   const [chatOpen, setChatOpen] = useState(false);
+  const [titleExpanded, setTitleExpanded] = useState(false);
   const { toast, showToast } = useToast();
 
   // Share (Phase 13): the link is THIS app's deep link for this
@@ -636,9 +638,18 @@ export function SessionWatchScreen({ route, navigation }: Props) {
         <View style={styles.backRow}>
           <BackButton onPress={() => goBackOrTab(navigation, 'Home')} />
         </View>
-        <Text style={styles.title} numberOfLines={2}>
-          {title}
-        </Text>
+        {/* Tap the title to expand it (audit B3 — same pattern as
+            Watch): session titles are long and a permanent 2-line
+            clamp left them unreadable. */}
+        <Pressable
+          onPress={() => setTitleExpanded((v) => !v)}
+          accessibilityRole="button"
+          accessibilityLabel={titleExpanded ? 'Show less' : 'Show full title'}
+        >
+          <Text style={styles.title} numberOfLines={titleExpanded ? undefined : 2}>
+            {title}
+          </Text>
+        </Pressable>
 
         {/* YouTube-live meta line: the red NOW PLAYING badge chip
             (SessionStatusBadge — red like YouTube's LIVE chip, words
@@ -715,7 +726,7 @@ export function SessionWatchScreen({ route, navigation }: Props) {
             official-channel source as the Watch screen). */}
         {officialChannel ? (
           <Pressable
-            style={styles.channelRow}
+            style={({ pressed }) => [styles.channelRow, pressed && styles.pressed]}
             onPress={() => navigation.navigate('Channel', { channelId: officialChannel.channelId })}
             accessibilityRole="button"
             accessibilityLabel={`View channel ${officialChannel.title}`}
@@ -829,7 +840,7 @@ export function SessionWatchScreen({ route, navigation }: Props) {
             <View>
               <Pressable
                 onPress={() => navigation.navigate('SignIn')}
-                style={styles.joinPill}
+                style={({ pressed }) => [styles.joinPill, pressed && styles.pressed]}
                 accessibilityRole="button"
               >
                 <Text style={styles.joinPillText}>Sign in to join</Text>
@@ -890,7 +901,9 @@ export function SessionWatchScreen({ route, navigation }: Props) {
             comments/chat first, description after — same as Watch). */}
         {video?.description ? (
           <View style={styles.descriptionBox}>
-            <Text style={styles.descriptionText}>{video.description}</Text>
+            {/* LinkedText, same as Watch (audit B7): links in the
+                description are tappable here too. */}
+            <LinkedText text={video.description} style={styles.descriptionText} />
           </View>
         ) : null}
       </ScrollView>
@@ -999,7 +1012,9 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   sheetContent: { padding: spacing.lg, paddingBottom: spacing.xxl },
   backRow: { flexDirection: 'row', alignItems: 'center' },
-  title: { ...typography.watchTitle, fontWeight: '600', color: colors.text },
+  // Matches WatchScreen's title exactly (audit B11): 20/26, w600 —
+  // the watchTitle token says 20/28 w700 and neither screen used it.
+  title: { fontSize: 20, lineHeight: 26, fontWeight: '600', color: colors.text },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',

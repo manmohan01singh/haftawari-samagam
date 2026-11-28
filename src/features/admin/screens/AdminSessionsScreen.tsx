@@ -41,6 +41,22 @@ function todayLocalDate(): string {
   return `${d.getFullYear()}-${mm}-${dd}`;
 }
 
+/** Auto-format while typing (audit C9): digits only, separators
+ *  inserted — 20261128 → "2026-11-28", 1600 → "16:00". Removes the
+ *  whole class of "wrong separator" errors on the daily-use form. */
+function maskDate(value: string): string {
+  const d = value.replace(/\D/g, '').slice(0, 8);
+  if (d.length <= 4) return d;
+  if (d.length <= 6) return `${d.slice(0, 4)}-${d.slice(4)}`;
+  return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}`;
+}
+
+function maskTime(value: string): string {
+  const d = value.replace(/\D/g, '').slice(0, 4);
+  if (d.length <= 2) return d;
+  return `${d.slice(0, 2)}:${d.slice(2)}`;
+}
+
 /** Combine a YYYY-MM-DD date and HH:MM time (device-local) into an ISO string. */
 function toIso(dateStr: string, timeStr: string): string | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr) || !/^\d{2}:\d{2}$/.test(timeStr)) return null;
@@ -350,7 +366,8 @@ function SessionsContent({ ctx }: { ctx: AdminContext }) {
             <TextInput
               style={adminStyles.input}
               value={startDate}
-              onChangeText={setStartDate}
+              onChangeText={(v) => setStartDate(maskDate(v))}
+              maxLength={10}
               placeholder="YYYY-MM-DD"
               placeholderTextColor={colors.textSecondary}
               autoCapitalize="none"
@@ -363,7 +380,8 @@ function SessionsContent({ ctx }: { ctx: AdminContext }) {
             <TextInput
               style={adminStyles.input}
               value={startTime}
-              onChangeText={setStartTime}
+              onChangeText={(v) => setStartTime(maskTime(v))}
+              maxLength={5}
               placeholder="17:00"
               placeholderTextColor={colors.textSecondary}
               autoCapitalize="none"
@@ -379,7 +397,8 @@ function SessionsContent({ ctx }: { ctx: AdminContext }) {
             <TextInput
               style={adminStyles.input}
               value={endDate}
-              onChangeText={setEndDate}
+              onChangeText={(v) => setEndDate(maskDate(v))}
+              maxLength={10}
               placeholder="Same as start date"
               placeholderTextColor={colors.textSecondary}
               autoCapitalize="none"
@@ -392,7 +411,8 @@ function SessionsContent({ ctx }: { ctx: AdminContext }) {
             <TextInput
               style={adminStyles.input}
               value={endTime}
-              onChangeText={setEndTime}
+              onChangeText={(v) => setEndTime(maskTime(v))}
+              maxLength={5}
               placeholder="19:00"
               placeholderTextColor={colors.textSecondary}
               autoCapitalize="none"
@@ -548,7 +568,7 @@ export function AdminSessionsScreen() {
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
   form: { gap: spacing.md },
   help: { ...typography.body, color: colors.textSecondary },
-  notice: { ...typography.body, color: '#1B5E20' },
+  notice: { ...typography.body, color: colors.success },
   videoOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   dateRow: { flexDirection: 'row', gap: spacing.md },
   dateField: { flex: 1 },
@@ -559,12 +579,12 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   previewText: { ...typography.body, color: colors.text },
   problemsBox: {
-    backgroundColor: '#FDECEC',
+    backgroundColor: colors.dangerSurface,
     borderRadius: 12,
     padding: spacing.md,
     gap: spacing.xs,
   },
-  problemText: { ...typography.body, color: '#8B0000' },
+  problemText: { ...typography.body, color: colors.danger },
   listHeader: {
     flexDirection: 'row',
     alignItems: 'center',

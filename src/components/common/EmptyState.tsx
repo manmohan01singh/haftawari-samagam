@@ -58,6 +58,10 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: radii.pill,
     paddingHorizontal: spacing.xl,
     paddingVertical: 11,
+    // 48dp: this is the recovery action on error/empty screens
+    // app-wide (audit C7) — it must meet the tap minimum.
+    minHeight: 48,
+    justifyContent: 'center',
     marginTop: spacing.lg,
   },
   buttonText: { fontSize: 15, fontWeight: '600', color: colors.subscribeText },

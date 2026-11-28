@@ -21,7 +21,7 @@ import {
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useEvent, useEventListener } from 'expo';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { layout, spacing, useTheme, type ThemeColors } from '../../theme';
+import { layout, radii, spacing, useTheme, type ThemeColors } from '../../theme';
 
 export interface HostedPlayerHandle {
   /** Seek to an absolute position (seconds). */
@@ -405,11 +405,54 @@ export const HostedPlayer = memo(
       [player],
     );
 
+    // Manual retry from the error state (audit B1): re-mint the
+    // signed URL through the same path the silent refresh uses and
+    // resume at the last known position — the error view must never
+    // be a dead end mid-samagam.
+    const retryFromError = () => {
+      const resumeAt = positionRef.current;
+      const resumePlaying = wasPlayingRef.current || autoplay;
+      setErrorMessage(null);
+      refreshCountRef.current = 0;
+      const applyUri = async (newUri: string) => {
+        await player.replaceAsync(newUri);
+        if (resumeAt > 0) player.currentTime = resumeAt;
+        if (resumePlaying) player.play();
+      };
+      const refresh = callbacks.current.onRefreshUri;
+      if (refresh) {
+        refreshingRef.current = true;
+        setRefreshing(true);
+        refresh()
+          .then(async (newUri) => {
+            if (!newUri) throw new Error('refresh returned no URL');
+            await applyUri(newUri);
+          })
+          .catch(() => setErrorMessage('This recording could not be played.'))
+          .finally(() => {
+            refreshingRef.current = false;
+            setRefreshing(false);
+          });
+      } else {
+        void applyUri(uri).catch(() =>
+          setErrorMessage('This recording could not be played.'),
+        );
+      }
+    };
+
     if (errorMessage) {
       return (
         <View style={[styles.wrap, styles.errorWrap]}>
           <MaterialIcons name="error-outline" size={32} color="#FFFFFF" />
           <Text style={styles.errorText}>{errorMessage}</Text>
+          <Pressable
+            onPress={retryFromError}
+            style={({ pressed }) => [styles.retryButton, pressed && styles.pressedDim]}
+            accessibilityRole="button"
+            accessibilityLabel="Retry playback"
+          >
+            <Text style={styles.retryText}>Retry</Text>
+          </Pressable>
         </View>
       );
     }
@@ -636,12 +679,12 @@ export const HostedPlayer = memo(
                     onPress={() => setSheetView('quality')}
                     accessibilityRole="button"
                   >
-                    <MaterialIcons name="tune" size={22} color="#FFFFFF" />
+                    <MaterialIcons name="tune" size={22} color={colors.text} />
                     <Text style={styles.sheetRowLabel}>Quality</Text>
                     <Text style={styles.sheetRowValue}>
                       {videoHeight ? `${videoHeight}p` : 'Original'}
                     </Text>
-                    <MaterialIcons name="chevron-right" size={20} color="#AAAAAA" />
+                    <MaterialIcons name="chevron-right" size={20} color={colors.textSecondary} />
                   </Pressable>
                   <Pressable
                     style={[styles.sheetRow, rateLocked && styles.sheetRowDim]}
@@ -651,15 +694,15 @@ export const HostedPlayer = memo(
                     accessibilityRole="button"
                     accessibilityLabel="Playback speed"
                   >
-                    <MaterialIcons name="slow-motion-video" size={22} color="#FFFFFF" />
+                    <MaterialIcons name="slow-motion-video" size={22} color={colors.text} />
                     <Text style={styles.sheetRowLabel}>Playback speed</Text>
                     <Text style={styles.sheetRowValue}>
                       {rateLocked ? 'Locked' : `${RATES[rateIndex]}×`}
                     </Text>
-                    <MaterialIcons name="chevron-right" size={20} color="#AAAAAA" />
+                    <MaterialIcons name="chevron-right" size={20} color={colors.textSecondary} />
                   </Pressable>
                   <View style={styles.sheetRow}>
-                    <MaterialIcons name="closed-caption" size={22} color="#777777" />
+                    <MaterialIcons name="closed-caption" size={22} color={colors.textSecondary} />
                     <Text style={[styles.sheetRowLabel, styles.sheetRowDimText]}>Captions</Text>
                     <Text style={styles.sheetRowDimText}>Unavailable</Text>
                     <MaterialIcons name="chevron-right" size={20} color="#555555" />
@@ -673,7 +716,7 @@ export const HostedPlayer = memo(
                     accessibilityRole="button"
                     accessibilityLabel="Back to settings"
                   >
-                    <MaterialIcons name="arrow-back" size={20} color="#FFFFFF" />
+                    <MaterialIcons name="arrow-back" size={20} color={colors.text} />
                     <Text style={styles.sheetBackLabel}>Playback speed</Text>
                   </Pressable>
                   {RATE_OPTIONS.map((rate) => (
@@ -685,7 +728,7 @@ export const HostedPlayer = memo(
                     >
                       <View style={styles.sheetCheck}>
                         {RATES[rateIndex] === rate ? (
-                          <MaterialIcons name="check" size={18} color="#FFFFFF" />
+                          <MaterialIcons name="check" size={18} color={colors.text} />
                         ) : null}
                       </View>
                       <Text style={styles.sheetRowLabel}>{rate === 1 ? 'Normal' : `${rate}×`}</Text>
@@ -700,12 +743,12 @@ export const HostedPlayer = memo(
                     accessibilityRole="button"
                     accessibilityLabel="Back to settings"
                   >
-                    <MaterialIcons name="arrow-back" size={20} color="#FFFFFF" />
+                    <MaterialIcons name="arrow-back" size={20} color={colors.text} />
                     <Text style={styles.sheetBackLabel}>Quality</Text>
                   </Pressable>
                   <View style={styles.sheetRow}>
                     <View style={styles.sheetCheck}>
-                      <MaterialIcons name="check" size={18} color="#FFFFFF" />
+                      <MaterialIcons name="check" size={18} color={colors.text} />
                     </View>
                     <Text style={styles.sheetRowLabel}>
                       {videoHeight ? `${videoHeight}p` : 'Original'}
@@ -856,7 +899,7 @@ const createStyles = (colors: ThemeColors) =>
     sheetBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
     sheetBackdropTap: { flex: 1 },
     sheet: {
-      backgroundColor: '#212121',
+      backgroundColor: colors.surface,
       borderTopLeftRadius: 16,
       borderTopRightRadius: 16,
       paddingHorizontal: spacing.lg,
@@ -867,7 +910,7 @@ const createStyles = (colors: ThemeColors) =>
       width: 36,
       height: 4,
       borderRadius: 2,
-      backgroundColor: '#555555',
+      backgroundColor: colors.border,
       alignSelf: 'center',
       marginBottom: spacing.md,
     },
@@ -879,9 +922,9 @@ const createStyles = (colors: ThemeColors) =>
       paddingVertical: spacing.sm,
     },
     sheetRowDim: { opacity: 0.55 },
-    sheetRowLabel: { flex: 1, color: '#FFFFFF', fontSize: 15 },
-    sheetRowValue: { color: '#AAAAAA', fontSize: 13 },
-    sheetRowDimText: { color: '#777777', fontSize: 15 },
+    sheetRowLabel: { flex: 1, color: colors.text, fontSize: 15 },
+    sheetRowValue: { color: colors.textSecondary, fontSize: 13 },
+    sheetRowDimText: { color: colors.textSecondary, fontSize: 15 },
     sheetBackRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -889,9 +932,9 @@ const createStyles = (colors: ThemeColors) =>
       minHeight: 48,
       paddingVertical: spacing.sm,
     },
-    sheetBackLabel: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
+    sheetBackLabel: { color: colors.text, fontSize: 15, fontWeight: '600' },
     sheetCheck: { width: 24, alignItems: 'center' },
-    sheetNote: { color: '#AAAAAA', fontSize: 13, lineHeight: 19, paddingVertical: spacing.sm },
+    sheetNote: { color: colors.textSecondary, fontSize: 13, lineHeight: 19, paddingVertical: spacing.sm },
     track: { flex: 1, height: 28, justifyContent: 'center' },
     trackSpacer: { flex: 1 },
     trackBackground: {
@@ -926,4 +969,16 @@ const createStyles = (colors: ThemeColors) =>
       padding: spacing.lg,
     },
     errorText: { color: '#FFFFFF', fontSize: 14, textAlign: 'center' },
+    retryButton: {
+      marginTop: spacing.md,
+      borderWidth: 1,
+      borderColor: '#FFFFFF',
+      borderRadius: radii.pill,
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.sm,
+      minHeight: 44,
+      justifyContent: 'center',
+    },
+    retryText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+    pressedDim: { opacity: 0.7 },
   });

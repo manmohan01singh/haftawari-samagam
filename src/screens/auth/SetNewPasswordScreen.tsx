@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState, type ElementRef } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -65,6 +65,8 @@ export function SetNewPasswordScreen({ navigation }: Props) {
 
   const passwordValid = password.length >= 6;
   const formValid = passwordValid && confirm === password;
+
+  const confirmRef = useRef<ElementRef<typeof TextInput>>(null);
 
   const submit = async () => {
     if (!supabase || !formValid) return;
@@ -138,6 +140,9 @@ export function SetNewPasswordScreen({ navigation }: Props) {
                 autoCapitalize="none"
                 autoCorrect={false}
                 autoComplete="new-password"
+                textContentType="newPassword"
+                returnKeyType="next"
+                onSubmitEditing={() => confirmRef.current?.focus()}
                 secureTextEntry={!showPassword}
                 value={password}
                 onChangeText={setPassword}
@@ -165,7 +170,11 @@ export function SetNewPasswordScreen({ navigation }: Props) {
               placeholderTextColor={colors.textSecondary}
               autoCapitalize="none"
               autoCorrect={false}
+              ref={confirmRef}
               autoComplete="new-password"
+              textContentType="newPassword"
+              returnKeyType="done"
+              onSubmitEditing={() => void submit()}
               secureTextEntry={!showPassword}
               value={confirm}
               onChangeText={setConfirm}

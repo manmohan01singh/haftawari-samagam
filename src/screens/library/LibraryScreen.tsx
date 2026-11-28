@@ -18,7 +18,8 @@ import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { isSupabaseConfigured } from '../../lib/supabase';
-import { layout, radii, spacing, useTheme, type ThemeColors } from '../../theme';
+import { layout, radii, spacing, typography, useTheme, type ThemeColors } from '../../theme';
+import { useWebPullToRefresh } from '../../components/gesture/WebPullToRefresh';
 import { ICON_HIT_SLOP } from '../../lib/touch';
 import type { MainTabParamList } from '../../navigation/types';
 import {
@@ -106,6 +107,11 @@ export function LibraryScreen({ navigation }: Props) {
     local.reload();
   }, [history, saved, summaries, local]);
 
+  // Web pull-to-refresh (audit A1): RefreshControl above is a no-op
+  // stub in the PWA; the shared hook restores the gesture on web
+  // while native keeps the real control.
+  const ptr = useWebPullToRefresh({ onRefresh, refreshing });
+
   const openVideo = useCallback(
     (videoId: string) => navigation.navigate('Watch', { videoRowId: videoId }),
     [navigation],
@@ -171,7 +177,7 @@ export function LibraryScreen({ navigation }: Props) {
             </Text>
             <Pressable
               onPress={() => removeFromShelf(item)}
-              hitSlop={8}
+              hitSlop={12}
               accessibilityRole="button"
               accessibilityLabel="Remove from history"
               style={styles.historyMore}
@@ -216,8 +222,10 @@ export function LibraryScreen({ navigation }: Props) {
         </View>
       </View>
 
+      {ptr.indicator}
       <ScrollView
         ref={scrollRef}
+        {...ptr.listProps}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: layout.bottomNavHeight + insets.bottom + 24 }]}
       >
@@ -326,7 +334,7 @@ export function LibraryScreen({ navigation }: Props) {
             <Text style={styles.errorBannerText}>
               Some of your library could not be loaded. Check your connection and try again.
             </Text>
-            <Pressable onPress={onRefresh} accessibilityRole="button" hitSlop={8}>
+            <Pressable onPress={onRefresh} accessibilityRole="button" hitSlop={12}>
               <Text style={styles.errorBannerAction}>Retry</Text>
             </Pressable>
           </View>
@@ -398,7 +406,7 @@ export function LibraryScreen({ navigation }: Props) {
                           .catch(() => undefined)
                           .finally(() => local.reload());
                       }}
-                      hitSlop={8}
+                      hitSlop={12}
                       accessibilityRole="button"
                       accessibilityLabel="Remove from device history"
                       style={styles.historyMore}
@@ -465,7 +473,7 @@ export function LibraryScreen({ navigation }: Props) {
             )
           ) : null}
           {user ? (
-            <Pressable style={styles.newPlaylistRow} onPress={() => setCreateOpen(true)} accessibilityRole="button">
+            <Pressable style={({ pressed }) => [styles.newPlaylistRow, pressed && styles.rowPressed]} onPress={() => setCreateOpen(true)} accessibilityRole="button">
               <MaterialIcons name="add" size={24} color={colors.text} />
               <Text style={styles.newPlaylistText}>New playlist</Text>
             </Pressable>
@@ -485,7 +493,7 @@ export function LibraryScreen({ navigation }: Props) {
             app and are not imitated. */}
         <View style={styles.rowsBlock}>
           <Pressable
-            style={styles.collectionRow}
+            style={({ pressed }) => [styles.collectionRow, pressed && styles.rowPressed]}
             onPress={() => navigation.navigate('Saved')}
             accessibilityRole="button"
           >
@@ -525,7 +533,7 @@ export function LibraryScreen({ navigation }: Props) {
           </Pressable>
 
           <Pressable
-            style={styles.collectionRow}
+            style={({ pressed }) => [styles.collectionRow, pressed && styles.rowPressed]}
             onPress={() => navigation.navigate('Sessions')}
             accessibilityRole="button"
           >
@@ -667,7 +675,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: spacing.lg,
     marginTop: spacing.xxl,
   },
-  sectionHeading: { fontSize: 20, fontWeight: '600', color: colors.text },
+  sectionHeading: { ...typography.sectionTitle, color: colors.text },
   libraryHeading: { paddingHorizontal: spacing.lg, marginTop: spacing.xxl },
   historyContent: { paddingHorizontal: spacing.lg, gap: spacing.md, paddingTop: spacing.md },
   historyCard: { width: HISTORY_CARD_WIDTH },
@@ -676,7 +684,9 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     width: '100%',
     aspectRatio: layout.thumbnailAspectRatio,
     borderRadius: radii.card,
-    backgroundColor: colors.playerBackground,
+    // surfaceVariant while loading (audit A6): pure black read as a
+    // row of black boxes on slow connections — FeedCard's own fix.
+    backgroundColor: colors.surfaceVariant,
   },
   thumbEmpty: { backgroundColor: colors.surfaceVariant },
   progressTrack: {
@@ -701,6 +711,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   historyMore: { marginLeft: spacing.xs, marginTop: 1 },
   historyChannel: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  rowPressed: { opacity: 0.92 },
   collectionRow: {
     flexDirection: 'row',
     alignItems: 'center',

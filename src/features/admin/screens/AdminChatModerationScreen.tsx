@@ -196,7 +196,7 @@ export function AdminChatModerationScreen() {
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
   sessionOptions: { gap: spacing.sm },
   sessionOption: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
-  notice: { ...typography.body, color: '#1B5E20' },
+  notice: { ...typography.body, color: colors.success },
   help: { ...typography.body, color: colors.textSecondary },
   listHeader: {
     flexDirection: 'row',

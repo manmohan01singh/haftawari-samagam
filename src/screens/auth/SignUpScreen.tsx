@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState, type ElementRef } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -57,6 +57,8 @@ export function SignUpScreen({ navigation }: Props) {
         ? 'Your password needs at least 6 characters.'
         : null;
 
+  const emailRef = useRef<ElementRef<typeof TextInput>>(null);
+  const passwordRef = useRef<ElementRef<typeof TextInput>>(null);
   const submit = async () => {
     if (!supabase || !formValid) return;
     setBusy(true);
@@ -155,6 +157,10 @@ export function SignUpScreen({ navigation }: Props) {
             placeholder="How your name appears in chat"
             placeholderTextColor={colors.textSecondary}
             autoCapitalize="words"
+            textContentType="name"
+            maxLength={50}
+            returnKeyType="next"
+            onSubmitEditing={() => emailRef.current?.focus()}
             value={displayName}
             onChangeText={setDisplayName}
           />
@@ -164,8 +170,12 @@ export function SignUpScreen({ navigation }: Props) {
             placeholder="you@example.com"
             placeholderTextColor={colors.textSecondary}
             autoCapitalize="none"
+            ref={emailRef}
             autoComplete="email"
+            textContentType="emailAddress"
             keyboardType="email-address"
+            returnKeyType="next"
+            onSubmitEditing={() => passwordRef.current?.focus()}
             value={email}
             onChangeText={setEmail}
           />
@@ -180,7 +190,13 @@ export function SignUpScreen({ navigation }: Props) {
               placeholderTextColor={colors.textSecondary}
               autoCapitalize="none"
               autoCorrect={false}
+              ref={passwordRef}
               autoComplete="new-password"
+              textContentType="newPassword"
+              returnKeyType="done"
+              onSubmitEditing={() => {
+                if (formValid && !busy) void submit();
+              }}
               secureTextEntry={!showPassword}
               value={password}
               onChangeText={setPassword}

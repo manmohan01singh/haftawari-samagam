@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   FlatList,
   Linking,
   Modal,
@@ -23,6 +22,7 @@ import { Toast, useToast } from '../../components/common/Toast';
 import { shareContent, shareFeedback } from '../../lib/share';
 import { ShelfCard } from '../../components/video/ShelfCard';
 import { SkeletonCard } from '../../components/video/SkeletonCard';
+import { useWebPullToRefresh } from '../../components/gesture/WebPullToRefresh';
 import { ensureDefaultFollowsSeeded, useChannelFollow, useOfficialChannel } from '../../features/channel';
 import { formatCount } from '../../lib/format';
 import {
@@ -91,6 +91,8 @@ export function ChannelScreen({ route, navigation }: Props) {
   const [nextPage, setNextPage] = useState<string | null>(null);
   const [liveItems, setLiveItems] = useState<YouTubeVideoMetadata[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [liveLoaded, setLiveLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -138,13 +140,22 @@ export function ChannelScreen({ route, navigation }: Props) {
       } catch (e) {
         if (active) setError(e instanceof Error ? e.message : 'Could not load this channel.');
       } finally {
-        if (active) setLoading(false);
+        if (active) { setLoading(false); setRefreshing(false); }
       }
     })();
     return () => {
       active = false;
     };
-  }, [channelId, isOfficial, official]);
+  }, [channelId, isOfficial, official, reloadKey]);
+
+  // Pull-to-refresh (audit A1): web gesture via the shared hook
+  // (RefreshControl is a PWA stub); a pull re-runs the load effect.
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    setLoading(true);
+    setReloadKey((k) => k + 1);
+  }, []);
+  const ptr = useWebPullToRefresh({ onRefresh, refreshing });
 
   // Live discovery (round-3 senior fix, found live 27 Nov): the old
   // code swallowed the search call's failure and then stated "not
@@ -329,7 +340,7 @@ export function ChannelScreen({ route, navigation }: Props) {
         </Pressable>
         <View style={styles.identityLines}>
           <View style={styles.nameRow}>
-            <Text style={styles.name}>{channel.title}</Text>
+            <Text style={styles.name} numberOfLines={2}>{channel.title}</Text>
             {/* Same rule as the Search channel block: the badge belongs
                 to the official channel's verified-music record only. */}
             {isOfficial ? (
@@ -337,14 +348,19 @@ export function ChannelScreen({ route, navigation }: Props) {
             ) : null}
           </View>
           {channel.handle ? <Text style={styles.handleLine}>{channel.handle}</Text> : null}
-          <Text style={styles.metaLine} numberOfLines={1}>
-            {[
-              channel.subscriberCount != null ? `${formatCount(channel.subscriberCount)} subscribers` : null,
-              channel.videoCount != null ? `${formatCount(channel.videoCount)} videos` : null,
-            ]
-              .filter(Boolean)
-              .join('  •  ')}
-          </Text>
+          {/* Rendered only when at least one count exists (audit
+              A10): with both missing (e.g. a quota outage) it used to
+              leave a stray blank line in the identity block. */}
+          {channel.subscriberCount != null || channel.videoCount != null ? (
+            <Text style={styles.metaLine} numberOfLines={1}>
+              {[
+                channel.subscriberCount != null ? `${formatCount(channel.subscriberCount)} subscribers` : null,
+                channel.videoCount != null ? `${formatCount(channel.videoCount)} videos` : null,
+              ]
+                .filter(Boolean)
+                .join('  •  ')}
+            </Text>
+          ) : null}
         </View>
       </View>
       {/* Round-3 mobile evidence (m.youtube channel page measured at
@@ -475,7 +491,11 @@ export function ChannelScreen({ route, navigation }: Props) {
 
   return (
     <View style={styles.container}>
+      {ptr.indicator}
       <FlatList
+        {...ptr.listProps}
+        refreshing={refreshing}
+        onRefresh={onRefresh}
         key={`cols-${columns}`}
         data={data}
         numColumns={columns}
@@ -487,8 +507,12 @@ export function ChannelScreen({ route, navigation }: Props) {
         onEndReached={tab === 'videos' ? loadMore : undefined}
         onEndReachedThreshold={0.6}
         ListFooterComponent={
+          // Skeleton footer, not a bare spinner (audit A11): the
+          // list keeps its card rhythm while the next page loads.
           loadingMore ? (
-            <ActivityIndicator style={styles.footerSpinner} color={colors.textSecondary} />
+            <View style={styles.footerSkeleton}>
+              <SkeletonCard variant="shelf" />
+            </View>
           ) : undefined
         }
         ListEmptyComponent={
@@ -670,12 +694,12 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     justifyContent: 'center',
   },
   avatarWrap: { position: 'relative' },
-  avatarLiveRing: { borderWidth: 2, borderColor: '#FF0000' },
+  avatarLiveRing: { borderWidth: 2, borderColor: colors.accent },
   avatarLivePill: {
     position: 'absolute',
     bottom: -6,
     alignSelf: 'center',
-    backgroundColor: '#FF0000',
+    backgroundColor: colors.accent,
     borderRadius: 4,
     paddingHorizontal: 6,
     paddingVertical: 1,
@@ -711,7 +735,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   moreText: { fontSize: 14, fontWeight: '600', color: colors.text, marginTop: spacing.xs },
   subscribePill: {
     alignSelf: 'stretch',
-    height: 40, // m.youtube channel page at 412px: ~41px tall, ~91% width
+    height: 44, // m.youtube reference ~41px; 44 meets the app's own tap minimum (audit A3)
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -776,6 +800,8 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   aboutLabel: { ...typography.body, color: colors.textSecondary },
   aboutValue: { ...typography.body, fontWeight: '600', color: colors.text },
   footerSpinner: { paddingVertical: spacing.lg },
+  footerSkeleton: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
+  ptrWrap: { flex: 1 },
   menuBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',

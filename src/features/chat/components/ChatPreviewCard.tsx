@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { nativeApp, radii, spacing, typography, useTheme, type ThemeColors } from '../../../theme';
+import { nativeApp, radii, spacing, useTheme, type ThemeColors } from '../../../theme';
 import { useCurrentChatUser, type ChatUser } from '../useSessionChat';
 import { formatCount } from '../../../lib/format';
 import { ChatAvatar } from './ChatAvatar';
@@ -20,10 +20,10 @@ export interface ChatPreviewCardProps {
   /** Tapping the pill while signed out (defaults to onPress). */
   onSignInPress?: () => void;
   /**
-   * Prominent mode — used when the session is NOW PLAYING, so the live
-   * chat entry is obvious rather than buried: accent outline, a filled
-   * "Open live chat" action and a NOW PLAYING caption (the status text
-   * is the host's real session status, passed in by the caller).
+   * Prominent mode — used when the session is NOW PLAYING: the header
+   * gains a red NOW PLAYING caption (the host's real session status,
+   * passed in by the caller). The card fill stays the standard one —
+   * YouTube's live chat card is a quiet grey box, not a red frame.
    */
   prominent?: boolean;
 }
@@ -66,13 +66,20 @@ export function ChatPreviewCard({
   };
 
   return (
-    <View
-      style={[styles.card, prominent && styles.cardProminent]}
+    // The WHOLE card is the tap target (audit B4): the header row's
+    // chevron used to be a dead zone, and prominent mode duplicated
+    // the action with a second full-width button. One Pressable,
+    // one obvious affordance — YouTube's chat card works this way.
+    <Pressable
+      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+      onPress={handlePress}
+      accessibilityRole="button"
       accessibilityLabel={`Live chat for session ${sessionId}`}
     >
       <View style={styles.headerRow}>
         <Text style={styles.headerTitle}>
-          Live chat{prominent ? ' · NOW PLAYING' : ''}
+          Live chat
+          {prominent ? <Text style={styles.nowPlayingText}> · NOW PLAYING</Text> : null}
         </Text>
         <View style={styles.headerRight}>
           {participantCount !== undefined ? (
@@ -84,7 +91,7 @@ export function ChatPreviewCard({
           <MaterialIcons name="chevron-right" size={20} color={colors.textSecondary} />
         </View>
       </View>
-      <Pressable style={styles.inputRow} onPress={handlePress} accessibilityRole="button">
+      <View style={styles.inputRow}>
         {user ? (
           <ChatAvatar userId={user.id} displayName={user.displayName} />
         ) : (
@@ -97,13 +104,8 @@ export function ChatPreviewCard({
             {pillText}
           </Text>
         </View>
-      </Pressable>
-      {prominent ? (
-        <Pressable style={styles.openButton} onPress={handlePress} accessibilityRole="button">
-          <Text style={styles.openButtonText}>Open live chat</Text>
-        </Pressable>
-      ) : null}
-    </View>
+      </View>
+    </Pressable>
   );
 }
 
@@ -113,18 +115,8 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: nativeApp.chatCard.radius,
     padding: nativeApp.chatCard.padding,
   },
-  cardProminent: {
-    borderWidth: 2,
-    borderColor: colors.accent,
-  },
-  openButton: {
-    marginTop: spacing.md,
-    backgroundColor: colors.subscribeBackground,
-    borderRadius: radii.pill,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  openButtonText: { ...typography.chip, color: colors.subscribeText },
+  cardPressed: { opacity: 0.92 },
+  nowPlayingText: { color: colors.accent },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',

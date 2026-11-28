@@ -12,6 +12,7 @@ import {
   AdminVideosScreen,
 } from '../features/admin/screens';
 import type { AdminStackParamList } from './types';
+import { useTheme } from '../theme';
 
 const Stack = createNativeStackNavigator<AdminStackParamList>();
 
@@ -21,8 +22,20 @@ const Stack = createNativeStackNavigator<AdminStackParamList>();
  * Level Security on every admin-writable table.
  */
 export function AdminStack() {
+  const { colors } = useTheme();
   return (
-    <Stack.Navigator>
+    <Stack.Navigator
+      screenOptions={{
+        // Themed headers (audit C3): the admin stack was the only
+        // surface still showing React Navigation's stock header —
+        // default font/tint made it read as a different app.
+        headerStyle: { backgroundColor: colors.surface },
+        headerTintColor: colors.text,
+        headerTitleStyle: { fontSize: 17, fontWeight: '600', color: colors.text },
+        headerShadowVisible: false,
+        contentStyle: { backgroundColor: colors.background },
+      }}
+    >
       <Stack.Screen name="AdminOverview" component={AdminOverviewScreen} options={{ title: 'Admin' }} />
       <Stack.Screen name="AdminVideos" component={AdminVideosScreen} options={{ title: 'Videos' }} />
       <Stack.Screen name="AdminHosted" component={AdminHostedScreen} options={{ title: 'Hosted videos' }} />
