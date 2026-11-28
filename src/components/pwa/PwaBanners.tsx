@@ -98,7 +98,7 @@ export function PwaBanners() {
     return (
       <View style={styles.wrap} pointerEvents="box-none">
         <View style={styles.banner}>
-          <Text style={styles.text}>A new version of Haftawari Samagam is available.</Text>
+          <Text style={styles.text}>A new version of YouTube Gurbani is available.</Text>
           <Pressable style={styles.primary} onPress={() => applyPwaUpdate()} accessibilityRole="button">
             <Text style={styles.primaryText}>Tap to update</Text>
           </Pressable>
@@ -114,7 +114,7 @@ export function PwaBanners() {
     return (
       <View style={styles.wrap} pointerEvents="box-none">
         <View style={styles.banner}>
-          <Text style={styles.text}>Install Haftawari Samagam on this device.</Text>
+          <Text style={styles.text}>Install YouTube Gurbani on this device.</Text>
           <Pressable
             style={styles.primary}
             onPress={() => {
@@ -148,7 +148,7 @@ export function PwaBanners() {
       <View style={styles.wrap} pointerEvents="box-none">
         <View style={styles.banner}>
           <Text style={styles.text}>
-            Install Haftawari Samagam: tap Share, then “Add to Home Screen”.
+            Install YouTube Gurbani: tap Share, then “Add to Home Screen”.
           </Text>
           <Pressable
             onPress={() => {

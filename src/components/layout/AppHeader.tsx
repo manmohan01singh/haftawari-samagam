@@ -57,6 +57,9 @@ export const AppHeader = memo(function AppHeader({
         <Text style={styles.wordmark} numberOfLines={1}>
           {branding.shortName}
         </Text>
+        <Text style={styles.wordmarkSuffix} numberOfLines={1}>
+          {branding.wordmarkSuffix}
+        </Text>
       </View>
       <View style={styles.actions}>
         <Pressable onPress={onSearchPress} hitSlop={ICON_HIT_SLOP} accessibilityLabel="Search" accessibilityRole="button">
@@ -140,7 +143,15 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   // Round-2 measurement (ref-1): wordmark ~20dp, tight tracking,
   // sitting ~8dp from the brand mark; right-side icons 24dp.
   // letterSpacing -0.3 matches the web splash shell (public/index.html).
-  wordmark: { fontSize: 20, fontWeight: '700', color: colors.text, letterSpacing: -0.3 },
+  wordmark: { fontSize: 20, fontWeight: '700', color: colors.text, letterSpacing: -0.5 },
+  wordmarkSuffix: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginLeft: 4,
+    marginTop: 2,
+    alignSelf: 'flex-start',
+  },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 22 },
   avatar: { width: 28, height: 28, borderRadius: 14 },
   avatarFallback: {

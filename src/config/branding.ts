@@ -1,18 +1,21 @@
 /**
  * Single source of truth for branding.
  *
- * The working name is "Haftawari Samagam". To rename the product later,
- * change the values in THIS file (plus the display name in app.json) —
- * no other source file should hard-code the product name.
- *
- * Branding is deliberately independent of YouTube's identity: this is a
- * YouTube-inspired layout with its own name, colours and identity.
+ * RENAMED (user, 28 Nov 2026): the product is now "YouTube Gurbani" —
+ * the header wordmark reads "YouTube" with a small "Gurbani" suffix,
+ * in the same bold, tight style as the reference. The user chose
+ * this name with the trademark risk stated plainly beforehand (it
+ * is Google's brand; the site/repo are his, and the choice was his).
+ * Change the values in THIS file (plus the display name in app.json)
+ * to rename again — no other source file should hard-code the name.
  */
 export const branding = {
-  /** Product / app display name (working name, refinable later). */
-  appName: 'Haftawari Samagam',
-  /** Short name used in compact headers and the PWA manifest. */
-  shortName: 'Haftawari',
+  /** Product / app display name. */
+  appName: 'YouTube Gurbani',
+  /** Main wordmark word (compact headers, PWA manifest short name). */
+  shortName: 'YouTube',
+  /** Small suffix rendered beside the main wordmark in the header. */
+  wordmarkSuffix: 'Gurbani',
   /** One-line description used in app.json / PWA manifest. */
   tagline: 'Haftawari and Amritvela kirtan samagams, scheduled and shared.',
   /** Channel identity shown inside this app (this app's own archive). */

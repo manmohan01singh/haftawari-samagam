@@ -372,7 +372,7 @@ function SessionsContent({ ctx }: { ctx: AdminContext }) {
           style={adminStyles.input}
           value={title}
           onChangeText={setTitle}
-          placeholder="Haftawari Samagam"
+          placeholder="YouTube Gurbani"
           placeholderTextColor={colors.textSecondary}
         />
 

@@ -14,7 +14,7 @@
       "bundleIdentifier": "com.haftawarisamagam.app",
       "supportsTablet": true
     },
-    "name": "Haftawari Samagam",
+    "name": "YouTube Gurbani",
     "orientation": "portrait",
     "slug": "haftawari-samagam",
     "userInterfaceStyle": "automatic",
@@ -26,8 +26,8 @@
       "display": "standalone",
       "favicon": "./assets/favicon.png",
       "lang": "en",
-      "name": "Haftawari Samagam",
-      "shortName": "Haftawari",
+      "name": "YouTube Gurbani",
+      "shortName": "YouTube",
       "themeColor": "#FFFFFF"
     },
     "plugins": [
