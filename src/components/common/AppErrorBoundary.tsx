@@ -59,9 +59,6 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
             This screen hit a snag and could not be shown. Your account and recordings are fine —
             try again, and if it keeps happening, reopen the app.
           </Text>
-          {/* TEMP DIAGNOSTIC (28 Nov 2026): surface the error while
-              hunting the Results -> Home crash. Remove once fixed. */}
-          <Text style={styles.message}>{String(this.state.error?.message ?? '')}</Text>
           <Pressable
             style={styles.button}
             onPress={this.handleRetry}

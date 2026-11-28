@@ -200,7 +200,7 @@ export async function getCurrentSessionUser(): Promise<{
  * in the client registry either.
  */
 let realtimeChannelSeq = 0;
-function uniqueTopic(base: string): string {
+export function uniqueTopic(base: string): string {
   realtimeChannelSeq += 1;
   return `${base}:${realtimeChannelSeq}`;
 }

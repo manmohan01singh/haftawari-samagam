@@ -38,7 +38,7 @@ import {
 import { getLiveCached } from '../../features/channels/channelCache';
 import { fetchSavedVideoIds, setVideoSaved } from '../../lib/videos';
 import { FEED_LIST_PERF } from '../../lib/listPerf';
-import { listSessionsWithVideos } from '../../features/sessions/sessionService';
+import { listSessionsWithVideos, uniqueTopic } from '../../features/sessions/sessionService';
 import { deriveStatus } from '../../features/sessions/stateMachine';
 import { serverClock } from '../../features/sessions/serverClock';
 import { layout, spacing, typography, useTheme, type ThemeColors } from '../../theme';
@@ -303,12 +303,25 @@ export function HomeScreen({ navigation }: Props) {
     // socket drops (research: flips are derived locally from
     // starts_at, so the NOW PLAYING flip lands on the tick even if
     // Realtime is down).
-    const channel = supabase
-      ?.channel('home-sessions-watch')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sessions' }, () => {
-        void check();
-      })
-      .subscribe();
+    // The topic MUST be unique per subscription instance:
+    // channel(topic) returns the existing channel for a repeated
+    // topic, and .on() then throws after subscribe() — that exact
+    // throw crashed Home on return visits (the P10 lesson in
+    // sessionService, re-learned 28 Nov 2026). try/catch as well:
+    // a realtime failure must degrade to the 30s sweep, never to
+    // an error screen.
+    let channel: ReturnType<NonNullable<typeof supabase>['channel']> | null = null;
+    try {
+      channel =
+        supabase
+          ?.channel(uniqueTopic('home-sessions-watch'))
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'sessions' }, () => {
+            void check();
+          })
+          .subscribe() ?? null;
+    } catch {
+      channel = null;
+    }
     const timer = setInterval(() => void check(), 30_000);
     return () => {
       active = false;
