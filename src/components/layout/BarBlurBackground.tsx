@@ -49,16 +49,34 @@ import { useTheme } from '../../theme';
  * washes through, but the bar's own tone wins. Light stays at the
  * measured 0.68, pixel-identical to before.
  */
-export const BarBlurBackground = memo(function BarBlurBackground() {
+export const BarBlurBackground = memo(function BarBlurBackground({
+  variant = 'bar',
+}: {
+  /**
+   * 'nav' = the bottom navigation bar: it carries TEXT labels
+   * (28 Nov 2026), and at the header's alphas those labels washed
+   * out over bright thumbnails and on Shorts' black stage (fault
+   * N7). The nav tint is therefore raised until label contrast
+   * holds over any content — the glass is still there, a whisper
+   * of content still washes through, but the bar's own tone wins
+   * decisively. The header keeps the lighter glass.
+   */
+  variant?: 'bar' | 'nav';
+}) {
   const { isDark } = useTheme();
 
   const tintStyle = useMemo(
     () => ({
-      backgroundColor: isDark
-        ? 'rgba(15,15,15,0.85)'
-        : 'rgba(255,255,255,0.68)',
+      backgroundColor:
+        variant === 'nav'
+          ? isDark
+            ? 'rgba(15,15,15,0.96)'
+            : 'rgba(255,255,255,0.94)'
+          : isDark
+            ? 'rgba(15,15,15,0.85)'
+            : 'rgba(255,255,255,0.68)',
     }),
-    [isDark],
+    [isDark, variant],
   );
 
   return (

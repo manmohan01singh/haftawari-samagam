@@ -381,7 +381,7 @@ export function SubscriptionsScreen({ navigation }: Props) {
                 </View>
                 {isLiveNow ? <View style={styles.liveDot} /> : null}
               </View>
-              <Text style={styles.railName} numberOfLines={1}>
+              <Text style={styles.railName} numberOfLines={2}>
                 {/* Rail labels elide a trailing parenthetical
                     ("(OFFICIAL CHANNEL)") before truncating: at 76dp
                     the raw title cut to "BHAI GURS…" in the live
@@ -397,9 +397,22 @@ export function SubscriptionsScreen({ navigation }: Props) {
       </ScrollView>
 
       <View style={styles.headingRow}>
-        <Text style={styles.heading}>
-          {selectedChannel ? selectedChannel.title : 'Most relevant'}
-        </Text>
+        {selectedChannel ? (
+          // The labelled path to the channel page (fault 26): the
+          // rail tap filters (its accessibility label says so);
+          // the selected channel's heading opens its page.
+          <Pressable
+            style={styles.headingTap}
+            onPress={() => navigation.navigate('Channel', { channelId: selectedChannel.youtubeChannelId })}
+            accessibilityRole="button"
+            accessibilityLabel={`Open ${selectedChannel.title} channel page`}
+          >
+            <Text style={styles.heading}>{selectedChannel.title}</Text>
+            <MaterialIcons name="chevron-right" size={22} color={colors.textSecondary} />
+          </Pressable>
+        ) : (
+          <Text style={styles.heading}>Most relevant</Text>
+        )}
         {followedChannels.length > 1 && activeSelected !== 'all' ? (
           <Pressable
             onPress={() => setSelected('all')}
@@ -541,7 +554,11 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingTop: spacing.sm,
     gap: spacing.lg,
   },
-  railItem: { width: 76, alignItems: 'center' },
+  // Fault 26: at 76dp the names cut to "BHAI GUR…" — unreadable.
+  // Wider items + two-line names keep every registry channel's
+  // name legible; the heading below is the labelled path to the
+  // channel page itself.
+  railItem: { width: 96, alignItems: 'center' },
   headerZone: { position: 'relative', overflow: 'hidden' },
   guestNote: {
     paddingHorizontal: 16,
@@ -598,6 +615,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     marginBottom: spacing.md,
     gap: spacing.md,
   },
+  headingTap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 2 },
   heading: {
     flex: 1,
     ...typography.sectionTitle,

@@ -76,7 +76,7 @@ export const BottomNav = memo(function BottomNav({ items, activeKey, onPress, ov
         overlay && styles.barOverlay,
       ]}
     >
-      <BarBlurBackground />
+      <BarBlurBackground variant="nav" />
       <View style={[styles.row, { paddingBottom: bottomInset }]}>
       {items.map((item) => {
         const active = item.key === activeKey;
