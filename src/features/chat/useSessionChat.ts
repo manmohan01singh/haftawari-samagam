@@ -422,6 +422,7 @@ export function useSessionChat(
       .listMessagesPage(sessionId, {
         limit: pageSize,
         beforeCreatedAt: oldest.created_at,
+        beforeId: oldest.id,
       })
       .then((page) => {
         setHistory((prev) => {

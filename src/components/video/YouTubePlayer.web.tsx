@@ -85,6 +85,12 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
 
     useEffect(() => {
       const onMessage = (event: MessageEvent) => {
+        // Only OUR iframe may drive this player (audit P1, 28 Nov
+        // 2026): every embed on the page hears every other embed's
+        // messages otherwise — the parked mini-player's clock was
+        // feeding the session drift checker, and any embed's
+        // onReady lifted every player's facade.
+        if (!frameRef.current?.contentWindow || event.source !== frameRef.current.contentWindow) return;
         if (typeof event.data !== 'string') return;
         let parsed: { event?: string; info?: { playerState?: number } };
         try {

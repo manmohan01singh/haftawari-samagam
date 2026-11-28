@@ -11,7 +11,6 @@ import React, {
 } from 'react';
 import {
   ActivityIndicator,
-  Modal,
   PanResponder,
   Platform,
   Pressable,
@@ -711,13 +710,15 @@ export const HostedPlayer = memo(
             speed / Captions — only what is true for our own hosted
             files. One original quality (the real track height when
             the player reports it); captions honestly Unavailable. */}
-        <Modal
-          visible={sheetOpen}
-          transparent
-          animationType="slide"
-          onRequestClose={() => setSheetOpen(false)}
-        >
-          <View style={styles.sheetBackdrop}>
+        {/* The sheet renders INSIDE the player wrap, not in a Modal
+            (audit P1, 28 Nov 2026): a Modal portals to the app root,
+            outside the element that goes fullscreen on web — in
+            fullscreen the gear opened an invisible sheet and the
+            player looked hung. An absolute overlay inside the wrap
+            stays in the fullscreen subtree on every platform. */}
+        {sheetOpen ? (
+          <View style={styles.sheetOverlay}>
+            <View style={styles.sheetBackdrop}>
             <Pressable
               style={styles.sheetBackdropTap}
               onPress={() => setSheetOpen(false)}
@@ -814,8 +815,9 @@ export const HostedPlayer = memo(
                 </>
               )}
             </View>
+            </View>
           </View>
-        </Modal>
+        ) : null}
       </View>
     );
   }),
@@ -967,6 +969,14 @@ const createStyles = (colors: ThemeColors) =>
       backgroundColor: 'rgba(255,255,255,0.25)',
     },
     miniProgressFill: { height: 3, backgroundColor: '#FF0000' },
+    sheetOverlay: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 60,
+    },
     sheetBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
     sheetBackdropTap: { flex: 1 },
     sheet: {

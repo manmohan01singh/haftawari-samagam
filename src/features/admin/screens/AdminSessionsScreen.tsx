@@ -250,6 +250,11 @@ function SessionsContent({ ctx }: { ctx: AdminContext }) {
       setStartTime('');
       setEndDate('');
       setEndTime('');
+      // Clear the video + start date too (audit P2, 28 Nov 2026):
+      // leaving them selected made a second tap an exact duplicate
+      // of the session just created.
+      setVideoId(null);
+      setStartDate('');
       setNotice(
         `Session scheduled for ${formatDateTime(startIso)}. Use "Share app link" on its card below to send the sangat a link that opens this session in the app.`,
       );

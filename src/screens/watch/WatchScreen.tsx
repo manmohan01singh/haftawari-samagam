@@ -172,13 +172,21 @@ export function WatchScreen({ route, navigation }: Props) {
   // no count — hidden, never invented.
   const { user: chatUser } = useCurrentChatUser();
   const [presenceCount, setPresenceCount] = useState<number | null>(null);
+  // Depend on PRIMITIVES, not the chatUser object (audit P0, 28 Nov
+  // 2026): useCurrentChatUser recreates the object on every profile
+  // resolve and every auth-state change (incl. the hourly token
+  // refresh), which tore down and re-created the presence
+  // subscription each time — churn at best, the .on()-after-
+  // subscribe throw at worst, potentially mid-samagam.
+  const presenceUserId = chatUser?.id;
+  const presenceDisplayName = chatUser?.displayName;
   useEffect(() => {
-    if (!sessionId || !isSupabaseConfigured || !chatUser) return;
+    if (!sessionId || !isSupabaseConfigured || !presenceUserId) return;
     const channel = joinPresence(
       sessionId,
       {
-        userId: chatUser.id,
-        displayName: chatUser.displayName,
+        userId: presenceUserId,
+        displayName: presenceDisplayName ?? '',
         onlineAt: new Date().toISOString(),
       },
       (snapshot) => setPresenceCount(snapshot.participantCount),
@@ -186,7 +194,7 @@ export function WatchScreen({ route, navigation }: Props) {
     return () => {
       void leavePresence(channel);
     };
-  }, [sessionId, chatUser]);
+  }, [sessionId, presenceUserId, presenceDisplayName]);
   // Comments + like engagement for THIS video (Phase 13): keyed by
   // the resolved YouTube id, so catalogue rows and API-only videos
   // behave identically. Identity comes from the chat user resolution
@@ -613,6 +621,7 @@ export function WatchScreen({ route, navigation }: Props) {
     void recordLocalWatch({
       youtubeVideoId: resolved.youtubeVideoId,
       videoRowId: resolved.row?.id ?? null,
+      channelTitle: resolved.channelTitle || null,
       title: resolved.title,
       thumbnailUrl: resolved.thumbnailUrl,
       durationSeconds: resolved.durationSeconds,
@@ -623,7 +632,7 @@ export function WatchScreen({ route, navigation }: Props) {
     if (!resolved?.row || !user) return;
     if (serverHistoryRecordedFor.current === resolved.row.id) return;
     serverHistoryRecordedFor.current = resolved.row.id;
-    void recordWatchHistory(user.id, resolved.row.id).catch(() => undefined);
+    void recordWatchHistory(user.id, resolved.row.id, resolved.channelTitle || null).catch(() => undefined);
   }, [user, resolved]);
 
   // Lazy player mount: mark this video ready only after the navigation

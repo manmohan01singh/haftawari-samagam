@@ -121,7 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [passwordRecovery, setPasswordRecovery] = useState(
     () => authCallbackInfo.type === 'recovery',
   );
-  const [linkError] = useState<string | null>(() =>
+  const [linkError, setLinkError] = useState<string | null>(() =>
     authLinkErrorMessage(
       authCallbackInfo.error,
       authCallbackInfo.errorCode,
@@ -188,6 +188,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // sign-in itself survived — but the recovery gate did not exist
     // at all before, and the event is its primary trigger).
     const { data: subscription } = supabase.auth.onAuthStateChange((event, next) => {
+      // A successful sign-in retires any stale landing link error
+      // (audit P2, 28 Nov 2026): it used to resurface for the rest
+      // of the page session, telling a happily signed-in user their
+      // email link had expired.
+      if (event === 'SIGNED_IN') setLinkError(null);
       if (!active) return;
       if (event === 'PASSWORD_RECOVERY') {
         setPasswordRecovery(true);

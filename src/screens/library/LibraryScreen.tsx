@@ -30,7 +30,6 @@ import {
   useSavedItems,
 } from '../../features/library/hooks';
 import { createPlaylist, removeHistoryEntry } from '../../features/library/libraryService';
-import { OFFICIAL_CHANNEL_HANDLE } from '../../lib/youtube';
 import { resumeRatio } from '../../features/library/format';
 import type { HistoryItem, PlaylistSummary } from '../../features/library/types';
 import type { LibraryRootStackParamList } from '../../features/library/screenTypes';
@@ -185,9 +184,11 @@ export function LibraryScreen({ navigation }: Props) {
               <MaterialIcons name="more-horiz" size={20} color={colors.text} />
             </Pressable>
           </View>
-          <Text style={styles.historyChannel} numberOfLines={1}>
-            {OFFICIAL_CHANNEL_HANDLE}
-          </Text>
+          {item.entry.channel_title ? (
+            <Text style={styles.historyChannel} numberOfLines={1}>
+              {item.entry.channel_title}
+            </Text>
+          ) : null}
         </View>
       );
     },
@@ -414,9 +415,11 @@ export function LibraryScreen({ navigation }: Props) {
                       <MaterialIcons name="more-horiz" size={20} color={colors.text} />
                     </Pressable>
                   </View>
-                  <Text style={styles.historyChannel} numberOfLines={1}>
-                    {OFFICIAL_CHANNEL_HANDLE}
-                  </Text>
+                  {item.channelTitle ? (
+                    <Text style={styles.historyChannel} numberOfLines={1}>
+                      {item.channelTitle}
+                    </Text>
+                  ) : null}
                 </View>
               )}
             />

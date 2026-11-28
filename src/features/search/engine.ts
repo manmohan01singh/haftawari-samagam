@@ -212,7 +212,9 @@ async function runLegs(query: string, options: SearchOptions): Promise<LegsOutco
   // scans run alongside as the recall supplement and as the
   // degradation path when the search.list bucket is exhausted.
   let globalError: YouTubeErrorClass | null = null;
-  const globalPromise = searchYouTubeGlobalFiltered(
+  const globalPromise = options.skipGlobalLeg
+    ? Promise.resolve([] as VideoResult[])
+    : searchYouTubeGlobalFiltered(
     query,
     targets.map((t) => t.id),
     options.signal,
@@ -365,7 +367,18 @@ export async function searchAll(queryText: string, options: SearchOptions = {}):
       // channel-card legs only; the screen's Retry re-runs the
       // channel scan once things recover.
       const legDead = youtubeError !== null && !youtubeFallback;
-      const second = await runLegs(didYouMean, legDead ? { ...options, localOnly: true } : options).catch(
+      // When the first run's global leg already succeeded (no error,
+      // no fallback), the correction re-run skips it (audit P2,
+      // 28 Nov 2026): the corrected query's recall comes from the
+      // scans + local legs, and the shared search bucket is not
+      // burned twice for one user search.
+      const globalAlreadyOk = !youtubeFallback && youtubeError === null;
+      const secondOptions = legDead
+        ? { ...options, localOnly: true }
+        : globalAlreadyOk
+          ? { ...options, skipGlobalLeg: true }
+          : options;
+      const second = await runLegs(didYouMean, secondOptions).catch(
         () => null,
       );
       if (second) {

@@ -17,6 +17,7 @@
     "name": "YouTube Gurbani",
     "orientation": "portrait",
     "slug": "haftawari-samagam",
+    "scheme": "haftawarisamagam",
     "userInterfaceStyle": "automatic",
     "version": "1.0.0",
     "web": {

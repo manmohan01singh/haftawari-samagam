@@ -114,11 +114,14 @@ export async function syncProfileFromMetadata(
 
   const signature = `${user.id}|${meta.displayName ?? ''}|${meta.avatarUrl ?? ''}`;
   if (attemptedSyncs.has(signature)) return merged;
-  attemptedSyncs.add(signature);
-
+  // The signature is recorded only AFTER a successful persist
+  // (audit P2, 28 Nov 2026): marking it before the update meant one
+  // transient failure silently lost the Google name/DP seed for the
+  // whole app session.
   const client = supabase;
   const { error } = await client.from('profiles').update(patch).eq('id', user.id);
   if (!error) {
+    attemptedSyncs.add(signature);
     return { ...profile, ...patch, avatar_url: patch.avatar_url ?? profile.avatar_url ?? null };
   }
 
@@ -135,6 +138,7 @@ export async function syncProfileFromMetadata(
       .update({ display_name: patch.display_name })
       .eq('id', user.id);
     if (!retry.error) {
+      attemptedSyncs.add(signature);
       return {
         ...merged,
         display_name: patch.display_name,

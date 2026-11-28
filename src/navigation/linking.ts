@@ -139,6 +139,7 @@ function createWebLinking(): LinkingOptions<RootStackParamList> {
             AdminVideos: 'videos',
             AdminChannels: 'channels',
             AdminSessions: 'sessions',
+            AdminHosted: 'hosted',
             AdminCategories: 'categories',
             AdminMembers: 'members',
             AdminChatModeration: 'chat-moderation',

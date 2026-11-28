@@ -85,7 +85,8 @@ check('no end, during → now_playing', status(startMs + 60_000, { scheduledEndA
 check('no end, at duration → completed', status(startMs + DURATION * 1000, { scheduledEndAt: null }), 'completed');
 
 // ── No end and no duration: plays until stored status changes ──────
-check('no end, no duration → now_playing', status(startMs + 999_000_000, { scheduledEndAt: null, durationSeconds: null }), 'now_playing');
+check('no end, no duration → now_playing', status(startMs + 3_600_000, { scheduledEndAt: null, durationSeconds: null }), 'now_playing');
+check('no end, no duration, past the 4h hard cap → completed', status(startMs + 999_000_000, { scheduledEndAt: null, durationSeconds: null }), 'completed');
 check('before start regardless → upcoming', status(startMs - 60_000, { scheduledEndAt: null, durationSeconds: null }), 'upcoming');
 
 // ── Stored terminal states are never revived by the clock ──────────

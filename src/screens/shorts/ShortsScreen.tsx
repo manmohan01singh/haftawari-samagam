@@ -176,7 +176,15 @@ export function ShortsScreen({ navigation }: Props) {
     if (!pool) return null;
     const out: { item: ShortItem; key: string }[] = [];
     for (let c = 0; c < cycles; c++) {
-      for (const item of pool) out.push({ item, key: `${c}:${item.meta.youtubeVideoId}` });
+      // Rotate each cycle's start (audit P2, 28 Nov 2026): repeating
+      // the pool verbatim made the pool's last and first items meet
+      // at every seam — when both were the same channel, the feed
+      // ran one channel twice in a row, breaking the user's
+      // never-one-channel-in-a-block rule at each loop boundary.
+      const offset = pool.length > 1 ? c % pool.length : 0;
+      const rotated =
+        offset === 0 ? pool : [...pool.slice(offset), ...pool.slice(0, offset)];
+      for (const item of rotated) out.push({ item, key: `${c}:${item.meta.youtubeVideoId}` });
     }
     return out;
   }, [pool, cycles]);

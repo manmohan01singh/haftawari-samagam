@@ -22,8 +22,22 @@ export function invalidateCatalogueCache(): void {
  * All published videos, newest first. Returns [] when Supabase is not
  * configured — an honest empty catalogue, never invented rows.
  */
+let catalogueInFlight: Promise<Video[]> | null = null;
+
 export async function fetchPublishedVideos(signal?: AbortSignal): Promise<Video[]> {
   if (cache && Date.now() - cache.fetchedAt < CACHE_TTL_MS) return cache.videos;
+  if (!supabase) return [];
+  // Share one in-flight fetch (audit P2, 28 Nov 2026): stage-1
+  // search, the correction pass and a retry could otherwise fire
+  // the same Supabase query concurrently on a cold cache.
+  if (catalogueInFlight) return catalogueInFlight;
+  catalogueInFlight = fetchPublishedVideosUncached(signal).finally(() => {
+    catalogueInFlight = null;
+  });
+  return catalogueInFlight;
+}
+
+async function fetchPublishedVideosUncached(signal?: AbortSignal): Promise<Video[]> {
   if (!supabase) return [];
 
   let query = supabase

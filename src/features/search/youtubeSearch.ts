@@ -137,7 +137,17 @@ async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> {
       noteYouTubeKeyWorked(key);
       return result;
     } catch (error) {
-      if (error instanceof YouTubeApiError && error.errorClass === 'quota') {
+      // Quota AND per-key config/referrer failures move to the next
+      // key (audit P1, 28 Nov 2026): a key that is invalid or whose
+      // project never enabled the API is just as dead as a quota-
+      // exhausted one — surfacing it immediately poisoned the whole
+      // pool whenever such a key sat ahead of the working key.
+      if (
+        error instanceof YouTubeApiError &&
+        (error.errorClass === 'quota' ||
+          error.errorClass === 'config' ||
+          error.errorClass === 'referrer')
+      ) {
         noteYouTubeKeyQuotaDead(key);
         lastError = error;
         continue;
@@ -461,36 +471,50 @@ interface VideosFullDetailsResponse {
  * raw material: real API data, newest first — NOT a query-matched
  * set on its own.
  */
+const uploadsInFlight = new Map<string, Promise<UploadItem[]>>();
+
 async function fetchRecentUploadsFor(channelId: string, signal?: AbortSignal): Promise<UploadItem[]> {
   const cacheKey =
     channelId === OFFICIAL_CHANNEL.id ? UPLOADS_CACHE_KEY : `${UPLOADS_CACHE_KEY}:${channelId}`;
   const cached = await readCache<UploadItem[]>(cacheKey, UPLOADS_CACHE_TTL_MS);
   if (cached) return cached;
 
-  const playlistId = uploadsPlaylistId(channelId);
-  const uploads: UploadItem[] = [];
-  let pageToken = '';
-  for (let page = 0; page < 10; page++) {
-    const tokenPart = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '';
-    const data = await apiGet<PlaylistSnippetResponse>(
-      `playlistItems?part=snippet&playlistId=${playlistId}&maxResults=50${tokenPart}`,
-      signal,
-    );
-    for (const item of data.items ?? []) {
-      const thumbs = item.snippet.thumbnails;
-      uploads.push({
-        videoId: item.snippet.resourceId.videoId,
-        title: item.snippet.title,
-        description: item.snippet.description,
-        publishedAt: item.snippet.publishedAt,
-        thumbnailUrl: (thumbs.high ?? thumbs.medium ?? thumbs.default)?.url ?? null,
-      });
+  // In-flight dedup (audit P1, 28 Nov 2026): the scan leg and the
+  // channel-recent leg can both need this fetch on a cold cache and
+  // previously each paid the full 10 playlistItems units. The shared
+  // fetch also runs WITHOUT any one caller's AbortSignal — a screen
+  // unmounting must not abort the fetch another screen is waiting
+  // on (apiGet's own timeout still bounds it).
+  void signal;
+  const existing = uploadsInFlight.get(cacheKey);
+  if (existing) return existing;
+  const promise = (async (): Promise<UploadItem[]> => {
+    const playlistId = uploadsPlaylistId(channelId);
+    const uploads: UploadItem[] = [];
+    let pageToken = '';
+    for (let page = 0; page < 10; page++) {
+      const tokenPart = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '';
+      const data = await apiGet<PlaylistSnippetResponse>(
+        `playlistItems?part=snippet&playlistId=${playlistId}&maxResults=50${tokenPart}`,
+      );
+      for (const item of data.items ?? []) {
+        const thumbs = item.snippet.thumbnails;
+        uploads.push({
+          videoId: item.snippet.resourceId.videoId,
+          title: item.snippet.title,
+          description: item.snippet.description,
+          publishedAt: item.snippet.publishedAt,
+          thumbnailUrl: (thumbs.high ?? thumbs.medium ?? thumbs.default)?.url ?? null,
+        });
+      }
+      pageToken = data.nextPageToken ?? '';
+      if (!pageToken) break;
     }
-    pageToken = data.nextPageToken ?? '';
-    if (!pageToken) break;
-  }
-  await writeCache(cacheKey, uploads);
-  return uploads;
+    await writeCache(cacheKey, uploads);
+    return uploads;
+  })().finally(() => uploadsInFlight.delete(cacheKey));
+  uploadsInFlight.set(cacheKey, promise);
+  return promise;
 }
 
 /**

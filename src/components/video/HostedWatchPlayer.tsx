@@ -49,6 +49,7 @@ export const HostedWatchPlayer = forwardRef<HostedPlayerHandle, HostedWatchPlaye
     | { videoId: string; kind: 'signin' }
     | null
   >(null);
+  const [mintAttempt, setMintAttempt] = useState(0);
   const state:
     | { kind: 'loading' }
     | { kind: 'ready'; url: string }
@@ -82,7 +83,7 @@ export const HostedWatchPlayer = forwardRef<HostedPlayerHandle, HostedWatchPlaye
     return () => {
       active = false;
     };
-  }, [videoId]);
+  }, [videoId, mintAttempt]);
 
   // Silent re-mint for HostedPlayer's error recovery (long videos
   // outlive the 15-minute signed URL; see HostedPlayer.onRefreshUri).
@@ -153,7 +154,20 @@ export const HostedWatchPlayer = forwardRef<HostedPlayerHandle, HostedWatchPlaye
             </Pressable>
           </>
         ) : (
-          <Text style={styles.message}>{state.message}</Text>
+          <>
+            <Text style={styles.message}>{state.message}</Text>
+            {/* Retry (audit P2, 28 Nov 2026): a transient mint
+                failure used to strand the viewer on this poster
+                until they left and re-entered. */}
+            <Pressable
+              style={styles.signinButton}
+              onPress={() => setMintAttempt((n) => n + 1)}
+              accessibilityRole="button"
+              accessibilityLabel="Retry loading this recording"
+            >
+              <Text style={styles.signinButtonText}>Retry</Text>
+            </Pressable>
+          </>
         )}
       </View>
     </View>

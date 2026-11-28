@@ -506,8 +506,8 @@ export function SearchResultsScreen({ route, navigation }: Props) {
 
   const navItems: BottomNavItem[] = [
     { key: 'Home', label: 'Home', icon: 'home' },
+    { key: 'Shorts', label: 'Shorts', kind: 'shorts' },
     { key: 'Subscriptions', label: 'Subscriptions', icon: 'subscriptions' },
-    { key: 'Channel', label: 'Official channel', kind: 'create' },
     {
       key: 'Library',
       label: 'You',
@@ -625,8 +625,8 @@ export function SearchResultsScreen({ route, navigation }: Props) {
         items={navItems}
         activeKey=""
         onPress={(key) => {
-          if (key === 'Channel') navigation.navigate('Channel', {});
-          else if (key === 'Home') goHome();
+          if (key === 'Home') goHome();
+          else if (key === 'Shorts') navigation.navigate('MainTabs', { screen: 'Shorts' });
           else if (key === 'Subscriptions') navigation.navigate('MainTabs', { screen: 'Subscriptions' });
           else navigation.navigate('MainTabs', { screen: 'Library' });
         }}

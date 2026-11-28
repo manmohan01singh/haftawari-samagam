@@ -175,6 +175,7 @@ export function useVideoEngagement(
     try {
       const page = await fetchVideoComments(engagementKey, {
         beforeCreatedAt: commentsData.comments[commentsData.comments.length - 1].created_at,
+        beforeId: commentsData.comments[commentsData.comments.length - 1].id,
         ownUserId: userId,
         ownName: userName,
       });
@@ -279,6 +280,12 @@ export function useVideoEngagement(
   const toggleLike = useCallback(async (): Promise<ToggleLikeOutcome> => {
     if (!engagementKey || !userId || likeBusyRef.current) return 'failed';
     if (likeData.status === 'unavailable') return 'unavailable';
+    // Never toggle from a not-yet-loaded state (audit P2, 28 Nov
+    // 2026): the optimistic apply() no-ops against the placeholder
+    // entry, the DB write still lands, and the in-flight initial
+    // fetch then resolves with pre-toggle state — the like visibly
+    // vanished until reload even though the row existed.
+    if (likeData.status !== 'ready') return 'failed';
     likeBusyRef.current = true;
     const next = !likeData.likedByMe;
     const apply = (liked: boolean, countDelta: number, status?: EngagementStatus) =>

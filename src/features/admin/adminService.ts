@@ -382,6 +382,24 @@ export async function createSession(
   actorId: string,
 ): Promise<SamagamSession> {
   const supabase = requireSupabase();
+  // Duplicate guard (audit P2, 28 Nov 2026): the twin-session
+  // incident (two sessions for the same video 4 s apart) happened
+  // AFTER the first submit completed, so the form's busy flag could
+  // never catch it. Refuse a second non-cancelled session for the
+  // same video at the same start time.
+  const { data: existing, error: dupError } = await supabase
+    .from('sessions')
+    .select('id')
+    .eq('video_id', input.videoId)
+    .eq('scheduled_start_at', input.scheduledStartAt)
+    .neq('status', 'cancelled')
+    .limit(1);
+  if (dupError) throw dupError;
+  if (existing && existing.length > 0) {
+    throw new Error(
+      'A session for this video at this start time already exists — not creating a duplicate.',
+    );
+  }
   const { data, error } = await supabase
     .from('sessions')
     .insert({

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { supabase } from '../../../lib/supabase';
 import { authRedirectUrl, friendlyAuthError } from '../authHelpers';
 import { radii, spacing, useTheme, type ThemeColors } from '../../../theme';
@@ -25,9 +25,19 @@ interface GoogleSignInButtonProps {
  * is surfaced by AuthContext's linkError on the sign-in screen.
  */
 export function GoogleSignInButton({ onError }: GoogleSignInButtonProps) {
+  // Native gate (audit P1, 28 Nov 2026): on the APK, supabase-js
+  // returns the OAuth URL without opening a browser, so the button
+  // dead-ended on a permanent 'Opening Google…' spinner. The native
+  // flow (app scheme + openAuthSessionAsync) ships with the Google
+  // Sign-in step; until then the button renders only on web, where
+  // the redirect flow genuinely works. Hooks run before this early
+  // return in the same order every render — the gate is static per
+  // platform, so the order never changes.
+  const isWeb = Platform.OS === 'web';
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [busy, setBusy] = useState(false);
+  if (!isWeb) return null;
 
   const handlePress = async () => {
     if (busy) return;

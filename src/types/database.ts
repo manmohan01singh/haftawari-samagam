@@ -179,6 +179,10 @@ export interface WatchHistoryEntry {
   video_id: string;
   last_position_seconds: number;
   watched_at: string;
+  /** Real channel title captured at watch time (migration 0007).
+   *  Optional: rows written before the migration have none, and
+   *  the column itself is absent until 0007 is applied. */
+  channel_title?: string | null;
 }
 
 export interface SavedVideo {

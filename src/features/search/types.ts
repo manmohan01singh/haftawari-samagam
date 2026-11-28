@@ -88,6 +88,13 @@ export interface SearchOptions {
    * must re-run the failed leg and not the whole search.
    */
   youtubeOnly?: boolean;
+  /**
+   * Skip ONLY the global YouTube-search leg (the uploads scans and
+   * local legs still run) — used by the typo-correction re-run when
+   * the first run's global leg already succeeded, so a thin search
+   * does not burn the shared 100/day search bucket twice.
+   */
+  skipGlobalLeg?: boolean;
 }
 
 export interface Suggestion {

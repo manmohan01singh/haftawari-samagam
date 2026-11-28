@@ -106,7 +106,7 @@ export const YouTubeEmbed = memo(
       <View style={styles.wrap}>
         <WebView
           ref={setWebViewRef}
-          source={{ html, baseUrl: 'https://www.youtube.com' }}
+          source={{ html, baseUrl: 'https://com.haftawarisamagam.app' }}
           originWhitelist={['*']}
           javaScriptEnabled
           domStorageEnabled
@@ -152,7 +152,7 @@ function buildEmbedHtml(videoId: string, startSeconds: number, autoplay: boolean
     'function onYouTubeIframeAPIReady(){',
     '  window.__sessionPlayer = new YT.Player("player", {',
     '    videoId: CFG.videoId,',
-    '    playerVars: { start: CFG.start, autoplay: CFG.autoplay, rel: 0, playsinline: 1 },',
+    '    playerVars: { start: CFG.start, autoplay: CFG.autoplay, rel: 0, playsinline: 1, origin: "https://com.haftawarisamagam.app", widget_referrer: "https://com.haftawarisamagam.app" },',
     '    events: { onReady: function(){ post("ready"); },',
     '              onStateChange: function(e){ post("state:" + e.data); } }',
     '  });',

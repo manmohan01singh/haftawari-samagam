@@ -223,7 +223,14 @@ export function ChannelScreen({ route, navigation }: Props) {
     setLoadingMore(true);
     getUploadsPageCached(channel.uploadsPlaylistId, nextPage)
       .then((page) => {
-        setUploads((prev) => [...prev, ...page.videos]);
+        // Dedupe against what's already shown (audit P2, 28 Nov
+        // 2026): a new upload between page fetches shifts every
+        // page boundary, and the overlap used to append duplicate
+        // rows whose keyExtractor ids collided.
+        setUploads((prev) => {
+          const seen = new Set(prev.map((v) => v.youtubeVideoId));
+          return [...prev, ...page.videos.filter((v) => !seen.has(v.youtubeVideoId))];
+        });
         setNextPage(page.nextPageToken);
       })
       .catch(() => undefined)

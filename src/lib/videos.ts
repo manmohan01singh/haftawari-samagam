@@ -96,17 +96,30 @@ export async function searchPublishedVideos(query: string, limit = 25): Promise<
  * host app, so the stored position stays 0 — the row records THAT the
  * recording was opened and when, which is all the history UI claims.
  */
-export async function recordWatchHistory(userId: string, videoRowId: string): Promise<void> {
+export async function recordWatchHistory(
+  userId: string,
+  videoRowId: string,
+  channelTitle?: string | null,
+): Promise<void> {
   const client = requireSupabase();
-  const { error } = await client.from('watch_history').upsert(
-    {
-      user_id: userId,
-      video_id: videoRowId,
-      last_position_seconds: 0,
-      watched_at: new Date().toISOString(),
-    },
-    { onConflict: 'user_id,video_id' },
-  );
+  const base = {
+    user_id: userId,
+    video_id: videoRowId,
+    last_position_seconds: 0,
+    watched_at: new Date().toISOString(),
+  };
+  // channel_title exists only after migration 0007 is applied; if
+  // the column is not there yet, fall back to the plain upsert so
+  // history recording never breaks before the migration lands.
+  if (channelTitle) {
+    const { error } = await client
+      .from('watch_history')
+      .upsert({ ...base, channel_title: channelTitle }, { onConflict: 'user_id,video_id' });
+    if (!error) return;
+  }
+  const { error } = await client
+    .from('watch_history')
+    .upsert(base, { onConflict: 'user_id,video_id' });
   if (error) throw new Error(error.message);
 }
 

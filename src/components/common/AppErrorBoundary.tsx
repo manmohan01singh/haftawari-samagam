@@ -5,6 +5,10 @@ import { ThemeContext, radii, spacing, typography, type ThemeColors, type ThemeC
 
 interface AppErrorBoundaryProps {
   children: ReactNode;
+  /** When set, rendered INSTEAD of the full error screen on a throw
+   *  (used for non-critical chrome like the playback host: null =
+   *  fail invisible, keep the app alive). */
+  fallback?: ReactNode;
 }
 
 interface AppErrorBoundaryState {
@@ -51,6 +55,7 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
     const { colors } = this.context as ThemeContextValue;
     const styles = createStyles(colors);
     if (this.state.error) {
+      if (this.props.fallback !== undefined) return this.props.fallback;
       return (
         <View style={styles.container}>
           <MaterialIcons name="error-outline" size={44} color={colors.textSecondary} />

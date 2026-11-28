@@ -3,7 +3,7 @@ import { FlatList, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions,
 import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { CompositeScreenProps } from '@react-navigation/native';
-import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
+import { useIsFocused, useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppHeader } from '../../components/layout/AppHeader';
@@ -89,6 +89,18 @@ export function SubscriptionsScreen({ navigation }: Props) {
   const [filter, setFilter] = useState<UploadFilter>('all');
   const [sort, setSort] = useState<UploadSort>('latest');
   const [reloadKey, setReloadKey] = useState(0);
+  // Revalidate on tab focus (audit P2, 28 Nov 2026): the tab stays
+  // mounted all session, so without this a channel going live
+  // mid-session never appeared under the Live filter until a manual
+  // pull-refresh or an app restart. The loads are cache-backed, so
+  // a focus pass is nearly free.
+  const isFocused = useIsFocused();
+  const [focusPass, setFocusPass] = useState(0);
+  const wasFocused = useRef(false);
+  useEffect(() => {
+    if (isFocused && wasFocused.current) setFocusPass((n) => n + 1);
+    wasFocused.current = isFocused;
+  }, [isFocused]);
   const [refreshing, setRefreshing] = useState(false);
   const { toast, showToast } = useToast();
 
@@ -188,7 +200,7 @@ export function SubscriptionsScreen({ navigation }: Props) {
       active = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [followedIdsKey, reloadKey]);
+  }, [followedIdsKey, reloadKey, focusPass]);
 
   // Live checks — sequential (staggered) so N channels never burst
   // N×200 units at once; each result is cached 5 min.
@@ -198,16 +210,23 @@ export function SubscriptionsScreen({ navigation }: Props) {
     (async () => {
       for (const c of followedChannels) {
         if (!active) return;
-        const items = await getLiveCached(c.youtubeChannelId);
+        // A failed live check leaves this channel's entry unset (it
+        // retries on the next pass) instead of killing the loop for
+        // every channel after it.
+        const items = await getLiveCached(c.youtubeChannelId).catch(
+          () => null,
+        );
         if (!active) return;
-        setLiveByChannel((prev) => new Map(prev).set(c.youtubeChannelId, items));
+        if (items) {
+          setLiveByChannel((prev) => new Map(prev).set(c.youtubeChannelId, items));
+        }
       }
     })();
     return () => {
       active = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [followedIdsKey, reloadKey]);
+  }, [followedIdsKey, reloadKey, focusPass]);
 
   // Fill avatars the table snapshot lacks (e.g. the fallback channel)
   // from cached channel metadata (1 unit, 6h cache).

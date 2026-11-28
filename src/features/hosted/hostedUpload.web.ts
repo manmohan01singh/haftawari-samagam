@@ -115,18 +115,37 @@ export async function uploadOriginalToR2(
     for (let i = 0; i < partCount; i++) {
       const partNumber = i + 1;
       const slice = file.slice(i * PART_SIZE, Math.min(total, (i + 1) * PART_SIZE));
-      const { url } = await callR2Upload({
-        action: 'sign-part',
-        key,
-        upload_id: uploadId,
-        part_number: partNumber,
-      });
-      if (!url) throw new Error('The upload signer returned no part URL.');
-      const base = uploaded;
-      const etag = await xhrPut(url, slice, (loaded) =>
-        onProgress?.({ loadedBytes: base + loaded, totalBytes: total }),
-      );
-      if (!etag) throw new Error(`Part ${partNumber} returned no ETag (bucket CORS must expose ETag).`);
+      // Per-part retry (audit P1, 28 Nov 2026): one transient
+      // failure used to abort the WHOLE multipart upload, throwing
+      // away every completed part — a GB-size samagam upload from a
+      // phone could effectively never finish on a shaky connection.
+      // Each part now gets 3 attempts (fresh signed URL each time)
+      // before the upload as a whole gives up.
+      let etag: string | null = null;
+      let lastPartError: unknown = null;
+      for (let attempt = 0; attempt < 3 && !etag; attempt++) {
+        if (attempt > 0) {
+          await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+        }
+        try {
+          const { url } = await callR2Upload({
+            action: 'sign-part',
+            key,
+            upload_id: uploadId,
+            part_number: partNumber,
+          });
+          if (!url) throw new Error('The upload signer returned no part URL.');
+          const base = uploaded;
+          etag = await xhrPut(url, slice, (loaded) =>
+            onProgress?.({ loadedBytes: base + loaded, totalBytes: total }),
+          );
+          if (!etag) throw new Error(`Part ${partNumber} returned no ETag (bucket CORS must expose ETag).`);
+        } catch (e) {
+          lastPartError = e;
+          etag = null;
+        }
+      }
+      if (!etag) throw lastPartError instanceof Error ? lastPartError : new Error(`Part ${partNumber} failed after 3 attempts.`);
       parts.push({ partNumber, etag });
       uploaded += slice.size;
     }

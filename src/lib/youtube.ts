@@ -50,7 +50,19 @@ async function apiGet<T>(path: string, fetchImpl: typeof fetch = fetch): Promise
   // dead and the next key takes over, so one project's daily cap no
   // longer takes the whole app down.
   for (const key of keys) {
-    const response = await fetchImpl(`${API_BASE}/${path}${separator}key=${encodeURIComponent(key)}`);
+    // 12s timeout (audit P2, 28 Nov 2026): this client previously
+    // fetched with no abort at all, so a stalled connection hung a
+    // screen's load forever with no error and no failover.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12_000);
+    let response: Response;
+    try {
+      response = await fetchImpl(`${API_BASE}/${path}${separator}key=${encodeURIComponent(key)}`, {
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
     if (response.ok) {
       noteYouTubeKeyWorked(key);
       return (await response.json()) as T;
@@ -63,6 +75,19 @@ async function apiGet<T>(path: string, fetchImpl: typeof fetch = fetch): Promise
     // generic rather than guessing a cause.
     const body = await response.text().catch(() => '');
     if (body.includes('quotaExceeded') || body.includes('dailyLimitExceeded')) {
+      noteYouTubeKeyQuotaDead(key);
+      continue;
+    }
+    // Per-key failures (audit P1, 28 Nov 2026): an invalid key or a
+    // project where the API was never enabled must not poison the
+    // pool — mark the key dead and let the next key serve, exactly
+    // like quota. Only genuinely shared failures surface.
+    if (
+      body.includes('keyInvalid') ||
+      body.includes('accessNotConfigured') ||
+      body.includes('ipRefererBlocked') ||
+      body.includes('refererBlocked')
+    ) {
       noteYouTubeKeyQuotaDead(key);
       continue;
     }
@@ -526,16 +551,20 @@ export async function fetchChannelLiveAndUpcoming(
  * uploads filter with this too, not just Search.
  */
 export function isShortVideo(meta: YouTubeVideoMetadata): boolean {
+  // A live/upcoming broadcast is never a Short (audit fix, 28 Nov
+  // 2026): the #shorts tag check used to run FIRST, so a live stream
+  // whose description merely contained '#shorts' (channels stuff
+  // descriptions with hashtags) was served in the Shorts tab — the
+  // audit sweep found a full morning kirtan live stream there. The
+  // live check now gates everything.
+  if (meta.liveBroadcastContent !== 'none') return false;
+  // A KNOWN duration decides: a 3-hour video tagged #shorts is a
+  // mis-tagged long video, not a Short.
+  if (meta.durationSeconds !== null) {
+    return meta.durationSeconds > 0 && meta.durationSeconds <= 60;
+  }
+  // Duration unknown: fall back to the tag.
   if (meta.title.toLowerCase().includes('#shorts')) return true;
   if (meta.description.toLowerCase().includes('#shorts')) return true;
-  // A live/upcoming broadcast is never a Short: its duration parses
-  // from 'P0D' to 0, which the bare <= 60 check misclassified and the
-  // feeds silently dropped the sangat channels' 24/7 live streams
-  // (Phase 13 follow-up, found by the chips audit over 1,610 titles).
-  if (meta.liveBroadcastContent !== 'none') return false;
-  return (
-    meta.durationSeconds !== null &&
-    meta.durationSeconds > 0 &&
-    meta.durationSeconds <= 60
-  );
+  return false;
 }

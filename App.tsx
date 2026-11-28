@@ -155,8 +155,15 @@ function ThemedNavigation() {
       <AppErrorBoundary>
         <RootNavigator />
       </AppErrorBoundary>
-      <PlaybackHost navigationRef={navigationRef} />
-      <OrbOverlay />
+      {/* PlaybackHost gets its OWN boundary (audit P2, 28 Nov 2026):
+          it previously sat outside any boundary, so a render throw
+          in the persistent player unmounted the whole app to a blank
+          page. Its fallback renders nothing — the app keeps working
+          without the mini player rather than dying with it. */}
+      <AppErrorBoundary fallback={null}>
+        <PlaybackHost navigationRef={navigationRef} />
+        <OrbOverlay />
+      </AppErrorBoundary>
       <StatusBar style={isDark ? 'light' : 'dark'} />
     </NavigationContainer>
   );

@@ -97,6 +97,7 @@ export async function fetchVideoComments(
   youtubeVideoId: string,
   options: {
     beforeCreatedAt?: string;
+    beforeId?: string;
     ownUserId?: string | null;
     ownName?: string | null;
   } = {},
@@ -111,7 +112,12 @@ export async function fetchVideoComments(
     .order('id', { ascending: false })
     .limit(PAGE_SIZE);
   if (options.beforeCreatedAt) {
-    query = query.lt('created_at', options.beforeCreatedAt);
+    // (created_at, id) pair cursor — see chatService (audit P2).
+    query = options.beforeId
+      ? query.or(
+          `created_at.lt.${options.beforeCreatedAt},and(created_at.eq.${options.beforeCreatedAt},id.lt.${options.beforeId})`,
+        )
+      : query.lt('created_at', options.beforeCreatedAt);
   }
   const [page, countResult, authors] = await Promise.all([
     query,

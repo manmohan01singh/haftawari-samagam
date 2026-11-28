@@ -252,9 +252,13 @@ export async function getLiveCached(channelId: string): Promise<YouTubeVideoMeta
   const cached = await readCache<YouTubeVideoMetadata[]>(key, LIVE_TTL_MS);
   if (cached) return cached;
   return dedupe(key, async () => {
-    const items = await fetchChannelLiveAndUpcoming(channelId).catch(
-      () => [] as YouTubeVideoMetadata[],
-    );
+    // Only a SUCCESS is cached (audit P1, 28 Nov 2026): previously a
+    // failed check (quota death, network blip) was swallowed into []
+    // and persisted for the full TTL, so a genuinely-live channel
+    // showed as not-live for 10 minutes after one transient failure.
+    // Failures now propagate: callers fall back to their error/empty
+    // handling and the next call retries for real.
+    const items = await fetchChannelLiveAndUpcoming(channelId);
     await writeCache(key, items);
     return items;
   });

@@ -20,14 +20,29 @@ export class ServerClock {
     if (this.syncing) return this.syncing;
     this.syncing = (async () => {
       try {
-        const before = Date.now();
-        const serverMs = await getServerNow();
-        const after = Date.now();
-        // Assume the server timestamp corresponds to the midpoint of the
-        // round trip — halves the network-latency error.
-        const localMid = before + (after - before) / 2;
-        this.offsetMs = serverMs - localMid;
-        this.syncedFlag = true;
+        // Burst sampling (audit P2, 28 Nov 2026; the live-sync deep
+        // research recommended exactly this): a single sample lets
+        // one slow round trip skew every viewer's session offset.
+        // Take 5 samples and keep the LOWEST-RTT one — its midpoint
+        // estimate carries the least network error. (The Date header
+        // itself has 1 s resolution; this removes the network part
+        // of the error, which is the part that differs per viewer.)
+        let best: { offset: number; rtt: number } | null = null;
+        for (let i = 0; i < 5; i++) {
+          const before = Date.now();
+          const serverMs = await getServerNow();
+          const after = Date.now();
+          const rtt = after - before;
+          // Assume the server timestamp corresponds to the midpoint
+          // of the round trip — halves the network-latency error.
+          const localMid = before + rtt / 2;
+          const offset = serverMs - localMid;
+          if (!best || rtt < best.rtt) best = { offset, rtt };
+        }
+        if (best) {
+          this.offsetMs = best.offset;
+          this.syncedFlag = true;
+        }
       } finally {
         this.syncing = null;
       }

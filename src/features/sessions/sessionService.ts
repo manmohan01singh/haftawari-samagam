@@ -141,7 +141,12 @@ const JOINED_ALIVE_WINDOW_MS = 5 * 60 * 1000;
 
 export async function getJoinedParticipantCount(sessionId: string): Promise<number> {
   const supabase = requireSupabase();
-  const aliveSince = new Date(Date.now() - JOINED_ALIVE_WINDOW_MS).toISOString();
+  // The alive window is measured on the SERVER clock (audit P2,
+  // 28 Nov 2026): last_seen_at is server-written, so a device whose
+  // clock runs fast counted every joined viewer as stale ("0
+  // joined") and a slow clock kept vanished viewers counted.
+  const serverNow = await getServerNow().catch(() => Date.now());
+  const aliveSince = new Date(serverNow - JOINED_ALIVE_WINDOW_MS).toISOString();
   const { count, error } = await supabase
     .from('session_participants')
     .select('*', { count: 'exact', head: true })

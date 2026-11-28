@@ -23,6 +23,11 @@ export interface LocalHistoryEntry {
   youtubeVideoId: string;
   /** Supabase catalogue row id when the recording is an archive row. */
   videoRowId: string | null;
+  /** The REAL channel that published the recording, captured at
+   *  watch time (audit fix, 28 Nov 2026). Entries recorded before
+   *  this field existed have none — the UI then shows no channel
+   *  line rather than a wrong one. */
+  channelTitle?: string | null;
   title: string;
   thumbnailUrl: string | null;
   durationSeconds: number | null;

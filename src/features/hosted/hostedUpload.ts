@@ -143,18 +143,34 @@ export async function uploadOriginalToR2(
         encoding: FileSystem.EncodingType.Base64,
       });
       try {
-        const { url } = await callR2Upload({
-          action: 'sign-part',
-          key,
-          upload_id: uploadId,
-          part_number: partNumber,
-        });
-        if (!url) throw new Error('The upload signer returned no part URL.');
-        const base = uploaded;
-        const etag = await putFile(url, tempUri, contentType, (loaded) =>
-          onProgress?.({ loadedBytes: base + loaded, totalBytes: total }),
-        );
-        if (!etag) throw new Error(`Part ${partNumber} returned no ETag.`);
+        // Per-part retry — see hostedUpload.web.ts (audit P1,
+        // 28 Nov 2026). The temp part file is reused across the
+        // attempts and deleted once, in the finally below.
+        let etag: string | null = null;
+        let lastPartError: unknown = null;
+        for (let attempt = 0; attempt < 3 && !etag; attempt++) {
+          if (attempt > 0) {
+            await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+          }
+          try {
+            const { url } = await callR2Upload({
+              action: 'sign-part',
+              key,
+              upload_id: uploadId,
+              part_number: partNumber,
+            });
+            if (!url) throw new Error('The upload signer returned no part URL.');
+            const base = uploaded;
+            etag = await putFile(url, tempUri, contentType, (loaded) =>
+              onProgress?.({ loadedBytes: base + loaded, totalBytes: total }),
+            );
+            if (!etag) throw new Error(`Part ${partNumber} returned no ETag.`);
+          } catch (e) {
+            lastPartError = e;
+            etag = null;
+          }
+        }
+        if (!etag) throw lastPartError instanceof Error ? lastPartError : new Error(`Part ${partNumber} failed after 3 attempts.`);
         parts.push({ partNumber, etag });
       } finally {
         await FileSystem.deleteAsync(tempUri, { idempotent: true }).catch(() => undefined);

@@ -1,5 +1,6 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { requireSupabase } from '../../lib/supabase';
+import { uniqueTopic } from '../sessions/sessionService';
 import type { ChatMessage, Profile } from '../../types/database';
 
 /**
@@ -55,6 +56,7 @@ export interface ListMessagesPageOptions {
   limit?: number;
   /** Cursor: only messages strictly older than this ISO timestamp. */
   beforeCreatedAt?: string;
+    beforeId?: string;
 }
 
 export interface ListMessagesPage {
@@ -82,9 +84,19 @@ export async function listMessagesPage(
     .eq('session_id', sessionId)
     .eq('is_removed', false)
     .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
     .limit(limit);
   if (options.beforeCreatedAt) {
-    query = query.lt('created_at', options.beforeCreatedAt);
+    // Page on the (created_at, id) PAIR (audit P2, 28 Nov 2026): a
+    // bare created_at cursor silently skips every message sharing
+    // the boundary row's exact timestamp — in a busy live chat,
+    // several messages land in the same instant and a slice of
+    // history became unreachable by scrolling.
+    query = options.beforeId
+      ? query.or(
+          `created_at.lt.${options.beforeCreatedAt},and(created_at.eq.${options.beforeCreatedAt},id.lt.${options.beforeId})`,
+        )
+      : query.lt('created_at', options.beforeCreatedAt);
   }
   const { data, error } = await query;
   if (error) throw error;
@@ -235,7 +247,7 @@ export function subscribeToChatEvents(
   handlers: ChatSubscriptionHandlers,
 ): RealtimeChannel {
   const supabase = requireSupabase();
-  const channel = supabase.channel(`chat:${sessionId}`);
+  const channel = supabase.channel(uniqueTopic(`chat:${sessionId}`));
   if (handlers.onInsert) {
     channel.on(
       'postgres_changes',
@@ -267,8 +279,23 @@ export function subscribeToChatEvents(
 
 /** Remove a channel created by subscribeToChat / subscribeToChatEvents. */
 export async function unsubscribeChat(channel: RealtimeChannel): Promise<void> {
+  // Teardown-safe, mirroring sessionService.unsubscribe (audit P1,
+  // 28 Nov 2026): a bare removeChannel whose async unsubscribe has
+  // not resolved leaves the channel registered, and the next visit's
+  // subscribe then throws or silently never goes live.
   const supabase = requireSupabase();
-  await supabase.removeChannel(channel);
+  try {
+    await supabase.removeChannel(channel);
+  } catch {
+    // Best-effort — the teardown fallback below still runs.
+  }
+  try {
+    if (supabase.getChannels().includes(channel)) {
+      channel.teardown();
+    }
+  } catch {
+    // Cleanup fallback only — never break unmount.
+  }
 }
 
 export function subscribeToChat(
@@ -277,7 +304,7 @@ export function subscribeToChat(
 ): RealtimeChannel {
   const supabase = requireSupabase();
   return supabase
-    .channel(`chat:${sessionId}`)
+    .channel(uniqueTopic(`chat:${sessionId}`))
     .on(
       'postgres_changes',
       {

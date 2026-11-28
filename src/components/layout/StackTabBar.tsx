@@ -4,8 +4,6 @@ import { BottomNav, type BottomNavItem } from './BottomNav';
 import { useAuth } from '../../features/auth';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
 
-const CREATE_KEY = '__create';
-
 interface StackTabBarProps {
   navigation: NavigationProp<RootStackParamList>;
   /** Which main tab this stack screen belongs to (highlighted slot). */
@@ -19,8 +17,7 @@ interface StackTabBarProps {
  * here they previously had none, so the only way back to a tab was
  * repeated Back taps (QA: "dead-end screens", "stranded without
  * Back/reload", "two Back taps to return"). One tap on any slot pops
- * back to MainTabs on that tab. The circled + keeps its MainTabs
- * meaning (official channel). NO Shorts slot, as everywhere.
+ * back to MainTabs on that tab.
  */
 export function StackTabBar({ navigation, activeTab = null }: StackTabBarProps) {
   const { user, profile } = useAuth();
@@ -31,19 +28,20 @@ export function StackTabBar({ navigation, activeTab = null }: StackTabBarProps) 
 
   const onPress = useCallback(
     (key: string) => {
-      if (key === CREATE_KEY) {
-        navigation.navigate('Channel', {});
-        return;
-      }
       navigation.navigate('MainTabs', { screen: key as keyof MainTabParamList });
     },
     [navigation],
   );
 
+  // The SAME four slots as MainTabs — Home, Shorts, Subscriptions,
+  // You (audit fix, 28 Nov 2026). This bar previously kept the old
+  // pre-Shorts set with a circled-+ 'Official channel' slot the user
+  // removed from the app, so stack screens showed a different nav
+  // than the tabs and Shorts vanished there.
   const items: BottomNavItem[] = [
     { key: 'Home', label: 'Home', icon: 'home' },
+    { key: 'Shorts', label: 'Shorts', kind: 'shorts' },
     { key: 'Subscriptions', label: 'Subscriptions', icon: 'subscriptions' },
-    { key: CREATE_KEY, label: 'Official channel', kind: 'create' },
     {
       key: 'Library',
       label: 'You',
