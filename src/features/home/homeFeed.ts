@@ -376,7 +376,7 @@ interface ChannelCursor {
 
 export interface HomeFeedPager {
   /** Pull the next batch (up to `count` items). `exhausted` = every source drained. */
-  next(count: number): Promise<{ items: HomeFeedItem[]; exhausted: boolean }>;
+  next(count: number): Promise<{ items: HomeFeedItem[]; exhausted: boolean; endOfReachable: boolean }>;
 }
 
 export interface HomeFeedPagerOptions {
@@ -667,7 +667,7 @@ export function createHomeFeedPager({ channels, filter }: HomeFeedPagerOptions):
 
   let nextCallCount = 0;
 
-  async function next(count: number): Promise<{ items: HomeFeedItem[]; exhausted: boolean }> {
+  async function next(count: number): Promise<{ items: HomeFeedItem[]; exhausted: boolean; endOfReachable: boolean }> {
     // A channel that failed during the previous call gets a fresh
     // chance on every new call (scroll / refresh); within one call
     // it is tried once, so a dead key cannot spin the round-robin.
@@ -751,11 +751,22 @@ export function createHomeFeedPager({ channels, filter }: HomeFeedPagerOptions):
     const exhausted =
       catalogueDrained &&
       cursors.every((c) => (c.exhausted || (c.failed && c.absorbedAny)) && c.buffer.length === 0);
+    // Everything REACHABLE is spent (fix round 6, #8): the
+    // catalogue is drained and every channel either exhausted or
+    // failed this call with an empty buffer. Strict `exhausted`
+    // above stays the retry/finality signal (a first-page failure
+    // must not declare a topic chip empty), but the end-of-feed
+    // MARKER may show on this looser truth — otherwise one dead
+    // channel key suppresses the marker forever and the feed just
+    // dissolves into blank space, which is what Chat 2 kept
+    // finding at the true end of the All feed.
+    const endOfReachable =
+      catalogueDrained && cursors.every((c) => (c.exhausted || c.failed) && c.buffer.length === 0);
     // Latest first per batch (live broadcasts lead, then newest
     // published): the round-robin above only GATHERS across sources
     // so no channel dominates; the visible order is recency, the
     // YouTube-home feel the user asked for.
-    return { items: latestFirst(collected), exhausted };
+    return { items: latestFirst(collected), exhausted, endOfReachable };
   }
 
   return { next };

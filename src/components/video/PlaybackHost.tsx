@@ -107,6 +107,15 @@ export function PlaybackHost({
   // Publish dock visibility for content insets (N-3): tab screens
   // pad their scroll content by the dock height while it shows.
   const setDockVisible = usePlaybackStore((s) => s.setDockVisible);
+  const rescuePosition = usePlaybackStore((s) => s.rescuePosition);
+  const setSuppressedKey = usePlaybackStore((s) => s.setSuppressedKey);
+  // Suppression hygiene (fix round 6, R5-2): a rescue suppression
+  // is only meaningful while a Watch screen is on top. Any other
+  // route means the rescue is gone or buried — clear the flag so
+  // it can never mute the host's own pause logic elsewhere.
+  React.useEffect(() => {
+    if (routeName !== 'Watch' && suppressedKey) setSuppressedKey(null);
+  }, [routeName, suppressedKey, setSuppressedKey]);
   useEffect(() => {
     if (usePlaybackStore.getState().dockVisible !== miniCardVisible) {
       setDockVisible(miniCardVisible);
@@ -210,18 +219,24 @@ export function PlaybackHost({
     // below reads it when it fires, long after this sync ran.
     visibleRef.current = playerVisible;
     if (!item || playerVisible) return;
-    // A rescue player owns this item on the Watch screen — visible
-    // there, so nothing here may pause it.
-    if (suppressed) return;
     const pauseNow = () => {
       if (item.kind === 'youtube') ytRef.current?.pause();
       else hostedRef.current?.pause();
       setPlaying(false);
     };
+    // Bar-hidden routes FIRST (fix round 6, R5-2): on a session,
+    // admin or auth page the player can never be visible, so the
+    // pause is unconditional — a leaked rescue suppression (a
+    // rescue whose screen vanished without its cleanup) must not
+    // be able to keep audio playing invisibly on the one page
+    // that says nothing can play.
     if (barHidden) {
       pauseNow();
       return;
     }
+    // A rescue player owns this item on the Watch screen — visible
+    // there, so nothing here may pause it.
+    if (suppressed) return;
     // On the Watch route the player belongs to that screen — its
     // slot may still be measuring, and the screen's own unmount
     // changes the route (which re-runs this effect). Never pause
@@ -366,7 +381,16 @@ export function PlaybackHost({
               key={item.key}
               ref={ytRef}
               youtubeVideoId={item.youtubeVideoId}
-              autoplay={autoplayEnabled}
+              autoplay={
+                // Rescue hand-back (fix round 6, R5-1): when this
+                // mount inherits a rescue player's position, it
+                // also inherits its play state — a video the user
+                // had PAUSED in the rescue must not auto-start in
+                // the dock just because the autoplay preference is
+                // on. The player captures this once at mount, so
+                // later state changes do not rebuild the embed.
+                rescuePosition && rescuePosition.key === item.key ? playing : autoplayEnabled
+              }
               onPlayingChange={setPlaying}
               onReady={() => {
                 // Rescue hand-back: if the Watch screen's rescue
@@ -404,6 +428,20 @@ export function PlaybackHost({
             accessibilityRole="button"
             accessibilityLabel="Expand player"
           />
+        ) : null}
+        {miniCardVisible ? (
+          // Title shade (fix round 6, N-2): the raw embed prints
+          // its own truncated title ("Tau Mai Aaya S…") across the
+          // top of the picture whenever it is paused or buffering —
+          // the dock already carries the real title beside the
+          // window, so a stepped black shade (YouTube's own
+          // miniplayer wears a top gradient too) hides the embed's
+          // text without touching the rest of the picture. It is
+          // pointer-transparent and sits under the expand target.
+          <View pointerEvents="none" style={styles.miniTitleShade}>
+            <View style={styles.miniTitleShadeTop} />
+            <View style={styles.miniTitleShadeBottom} />
+          </View>
         ) : null}
         {miniCardVisible ? (
           // The card body expands (the dock beside it carries the
@@ -452,6 +490,9 @@ const createStyles = (colors: ThemeColors) =>
     // inside the 200×113 card window (top-anchored; the card clips
     // the black void). Every other mode: fill the placement box.
     miniStage: { width: 200, height: 200 },
+    miniTitleShade: { position: 'absolute', top: 0, left: 0, right: 0, height: 32 },
+    miniTitleShadeTop: { height: 16, backgroundColor: 'rgba(0,0,0,0.92)' },
+    miniTitleShadeBottom: { height: 16, backgroundColor: 'rgba(0,0,0,0.55)' },
     stageFill: { flex: 1 },
     // The mini dock (fix round 4 #20): a solid strip docked above
     // the bottom nav — spacer where the player window sits, then

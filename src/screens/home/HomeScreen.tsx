@@ -2,6 +2,7 @@ import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from '
 import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import { useScrollToTop } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
@@ -65,6 +66,49 @@ const ALL_CHIP = 'All';
  * Module scope survives remounts for the whole app session.
  */
 const SHARED_CHIP_CACHE = new Map<string, { items: HomeFeedItem[]; exhausted: boolean }>();
+
+/**
+ * The same chip cache, PERSISTED (fix round 6, #1/R5-4): module
+ * scope survives remounts but not a fresh page load — and a shared
+ * watch link IS a fresh load, so minimising out of it rebuilt Home
+ * from the network and the full loader ran for 6–8 s (and the
+ * first page's contents varied with whichever channels answered
+ * before the deadline). Each chip's settled list now also lives
+ * in AsyncStorage for 30 minutes; startFeed hydrates from it
+ * before touching the network and revalidates in the background,
+ * so returns — and post-deep-link Homes — paint instantly with
+ * the SAME list the user last saw.
+ */
+const CHIP_STORE_PREFIX = 'haftawari.homeChip.v1.';
+const CHIP_STORE_TTL_MS = 30 * 60 * 1000;
+let chipStoreHydrated = false;
+async function hydrateChipCacheFromStore(): Promise<void> {
+  if (chipStoreHydrated) return;
+  chipStoreHydrated = true;
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const mine = keys.filter((k) => k.startsWith(CHIP_STORE_PREFIX));
+    const pairs = await AsyncStorage.multiGet(mine);
+    for (const [key, raw] of pairs) {
+      if (!raw) continue;
+      const parsed = JSON.parse(raw) as { savedAt: number; items: HomeFeedItem[]; exhausted: boolean };
+      if (Date.now() - parsed.savedAt > CHIP_STORE_TTL_MS) continue;
+      const chip = key.slice(CHIP_STORE_PREFIX.length);
+      if (!SHARED_CHIP_CACHE.has(chip)) {
+        SHARED_CHIP_CACHE.set(chip, { items: parsed.items, exhausted: parsed.exhausted });
+      }
+    }
+  } catch {
+    // A broken store must never break the feed.
+  }
+}
+function writeChipCache(chip: string, entry: { items: HomeFeedItem[]; exhausted: boolean }): void {
+  SHARED_CHIP_CACHE.set(chip, entry);
+  AsyncStorage.setItem(
+    CHIP_STORE_PREFIX + chip,
+    JSON.stringify({ savedAt: Date.now(), items: entry.items, exhausted: entry.exhausted }),
+  ).catch(() => undefined);
+}
 
 /** "Today · 7:00 PM" / "Tomorrow · 4:00 PM" / "Sat, 5 Dec · 4:00 PM" — device-local. */
 function formatSessionStart(startAtMs: number): string {
@@ -206,6 +250,7 @@ export function HomeScreen({ navigation }: Props) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [exhausted, setExhausted] = useState(false);
+  const [endReached, setEndReached] = useState(false);
   const [playlistVideoId, setPlaylistVideoId] = useState<string | null>(null);
   // Guest menu actions (Save / playlist) explain themselves here
   // instead of vanishing from the card menu (fault 27).
@@ -251,35 +296,63 @@ export function HomeScreen({ navigation }: Props) {
     }
   }, [channels]);
 
+  // Live COUNT refresh (fix round 6, #5): discovery (which videos
+  // are live) rides search.list — the scarce 100/day bucket — so it
+  // stays on its 10-minute cache. But the COUNT itself lives in
+  // videos.list (general bucket, 1 unit for every live id at
+  // once), and Chat 2 caught the card frozen at "8.3K watching"
+  // across 11 minutes of reloads because every reload re-served
+  // the cached discovery snapshot, count included. Now the counts
+  // are re-read cheaply on mount and on every 60 s tick, so a card
+  // can disagree with the Watch page by at most a minute.
+  const refreshLiveCounts = useCallback(async () => {
+    const live = [...liveMapRef.current.values()].filter(
+      (m) => m.liveBroadcastContent === 'live',
+    );
+    if (live.length === 0) return;
+    const fresh = await fetchVideosMetadata(live.map((m) => m.youtubeVideoId)).catch(
+      () => null,
+    );
+    if (!fresh) return;
+    setLiveMap((prev) => {
+      const next = new Map(prev);
+      for (const m of fresh) {
+        const old = next.get(m.youtubeVideoId);
+        if (old) {
+          next.set(m.youtubeVideoId, {
+            ...old,
+            concurrentViewers: m.concurrentViewers,
+            viewCount: m.viewCount ?? old.viewCount,
+          });
+        }
+      }
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     void refreshLive(false);
   }, [refreshLive]);
 
-  // Live counts keep breathing (fix round 5, #5): while Home is
-  // mounted, re-check the channels that currently have a live
-  // broadcast every 60 s so card counts track the Watch page's
-  // instead of freezing at first paint.
   const liveMapRef = useRef(liveMap);
   liveMapRef.current = liveMap;
   useEffect(() => {
+    // Counts move on mount too — not only on the tick — because a
+    // reload otherwise shows the cached snapshot's count for a
+    // full minute (Chat 2's reload test).
+    if (liveMap.size > 0) void refreshLiveCounts();
+  }, [liveMap.size, refreshLiveCounts]);
+  useEffect(() => {
+    let ticks = 0;
     const t = setInterval(() => {
-      const channelIds = [...new Set([...liveMapRef.current.values()].map((m) => m.channelId))];
-      if (channelIds.length === 0) return;
-      void (async () => {
-        const lists = await Promise.all(
-          channelIds.map((id) => getLiveFresh(id).catch(() => [] as YouTubeVideoMetadata[])),
-        );
-        setLiveMap((prev) => {
-          const next = new Map(prev);
-          for (const list of lists) {
-            for (const m of list) next.set(m.youtubeVideoId, m);
-          }
-          return next;
-        });
-      })();
+      ticks++;
+      void refreshLiveCounts();
+      // Full rediscovery (search.list) only every 5th tick — its
+      // cache already bounds it to one real call per 10 minutes.
+      if (ticks % 5 === 0) void refreshLive(false);
     }, 60_000);
     return () => clearInterval(t);
-  }, []);
+  }, [refreshLiveCounts, refreshLive]);
 
   // NOW PLAYING Samagam session, if one is really running right now:
   // derived from the real sessions table + server clock (the same
@@ -308,6 +381,19 @@ export function HomeScreen({ navigation }: Props) {
   useEffect(() => {
     if (!isSupabaseConfigured) return;
     let active = true;
+    void (async () => {
+      try {
+        const raw = await AsyncStorage.getItem('haftawari.homeUpcomingSession.v1');
+        if (!raw || !active) return;
+        const stored = JSON.parse(raw) as { id: string; title: string; thumbnailUrl: string | null; startAtMs: number };
+        // Only a card whose start is still ahead (or just passed)
+        // may paint from storage; the live check below replaces it
+        // with the truth either way.
+        if (stored.startAtMs > Date.now() - 60 * 60 * 1000) setUpcomingSession(stored);
+      } catch {
+        // Storage is a paint accelerator, never a dependency.
+      }
+    })();
     const check = async () => {
       try {
         await serverClock.sync();
@@ -349,19 +435,30 @@ export function HomeScreen({ navigation }: Props) {
           )
           .sort((a, b) => a.session.scheduled_start_at.localeCompare(b.session.scheduled_start_at));
         const next = upcomingRows[0];
-        setUpcomingSession(
-          next
-            ? {
-                id: next.session.id,
-                title: next.session.title ?? next.video?.title ?? 'Samagam',
-                thumbnailUrl: listThumbnailUrl(
-                  next.video?.youtube_video_id ?? null,
-                  next.video?.thumbnail_url ?? null,
-                ),
-                startAtMs: Date.parse(next.session.scheduled_start_at),
-              }
-            : null,
-        );
+        const nextValue = next
+          ? {
+              id: next.session.id,
+              title: next.session.title ?? next.video?.title ?? 'Samagam',
+              thumbnailUrl: listThumbnailUrl(
+                next.video?.youtube_video_id ?? null,
+                next.video?.thumbnail_url ?? null,
+              ),
+              startAtMs: Date.parse(next.session.scheduled_start_at),
+            }
+          : null;
+        setUpcomingSession(nextValue);
+        // Persist the card (fix round 6, R5-4): the Upcoming card
+        // "came and went" between loads because it waited on this
+        // fetch every time. The last known card is stored and
+        // painted instantly on the next mount; this check remains
+        // the truth that replaces or clears it.
+        if (nextValue) {
+          AsyncStorage.setItem('haftawari.homeUpcomingSession.v1', JSON.stringify(nextValue)).catch(
+            () => undefined,
+          );
+        } else {
+          AsyncStorage.removeItem('haftawari.homeUpcomingSession.v1').catch(() => undefined);
+        }
       } catch {
         // Sessions presence on Home is an entry-point nicety; a failed
         // check must never break the feed — the row just stays plain.
@@ -410,6 +507,8 @@ export function HomeScreen({ navigation }: Props) {
   const startFeed = useCallback(async () => {
     const generation = ++generationRef.current;
     loadingRef.current = true;
+    await hydrateChipCacheFromStore();
+    if (generationRef.current !== generation) return;
     // keepPreviousData (blueprint round 2, fault 1/N2): a chip
     // visited before renders its cached items INSTANTLY and
     // revalidates in the background; a new chip keeps the current
@@ -420,6 +519,7 @@ export function HomeScreen({ navigation }: Props) {
     if (cached) {
       setItems(cached.items);
       setExhausted(cached.exhausted);
+      setEndReached(cached.exhausted);
       setLoading(false);
     } else {
       // Chip discipline (fix round 5, #9): a chip with no cache
@@ -427,8 +527,15 @@ export function HomeScreen({ navigation }: Props) {
       // items under this chip's name. "Sakhi" appeared to show the
       // full unfiltered feed because the All items stayed on screen
       // while Sakhi's first page loaded.
+      // Fix round 6 (#9): the loading flag must go UP here too —
+      // round 5 cleared the items but left `loading` false, so the
+      // render gate fell straight through to the "Nothing in this
+      // filter yet" empty state and the app told the user, falsely
+      // for 5–11 s, that no videos exist. Skeleton, not a lie.
       setItems([]);
       setExhausted(false);
+      setEndReached(false);
+      setLoading(true);
     }
     const resolved = resolveChipFilter(selectedChip, channels);
     const pager = createHomeFeedPager({
@@ -447,13 +554,14 @@ export function HomeScreen({ navigation }: Props) {
       while (first.items.length === 0 && !first.exhausted && extraPulls < 3) {
         extraPulls++;
         const more = await pager.next(PAGE_SIZE);
-        first = { items: more.items, exhausted: more.exhausted };
+        first = { items: more.items, exhausted: more.exhausted, endOfReachable: more.endOfReachable };
       }
       if (generationRef.current !== generation) return;
       const sortedFirst = sortFeedItems(first.items);
-      chipCacheRef.current.set(selectedChip, { items: sortedFirst, exhausted: first.exhausted });
+      writeChipCache(selectedChip, { items: sortedFirst, exhausted: first.exhausted });
       setItems(sortedFirst);
       setExhausted(first.exhausted);
+      setEndReached(first.endOfReachable);
     } catch {
       if (generationRef.current !== generation) return;
       if (!cached) {
@@ -538,7 +646,7 @@ export function HomeScreen({ navigation }: Props) {
             // order is a pure function of the gathered set, so it
             // cannot reshuffle between visits.
             const next = sortFeedItems([...prev, ...page.items]);
-            chipCacheRef.current.set(selectedChip, { items: next, exhausted: page.exhausted });
+            writeChipCache(selectedChip, { items: next, exhausted: page.exhausted });
             return next;
           });
         }
@@ -546,6 +654,7 @@ export function HomeScreen({ navigation }: Props) {
         // IS the end, whatever the pager believes — the footer must
         // appear instead of the loading skeleton running forever.
         setExhausted(page.exhausted || page.items.length === 0);
+        setEndReached(page.endOfReachable || page.items.length === 0);
       })
       .catch(() => undefined)
       .finally(() => {
@@ -1014,7 +1123,7 @@ export function HomeScreen({ navigation }: Props) {
                 // Skeleton footer (audit A11): a bare spinner row is
                 // shorter than a card and makes the list end jump.
                 <SkeletonCard variant="feed" />
-              ) : exhausted ? (
+              ) : exhausted || endReached ? (
                 <View style={styles.endOfFeed}>
                   <MaterialIcons name="check-circle" size={18} color={colors.textSecondary} />
                   <Text style={styles.endOfFeedText}>
