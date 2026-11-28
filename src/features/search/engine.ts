@@ -199,12 +199,31 @@ async function runLegs(query: string, options: SearchOptions): Promise<LegsOutco
       }
     }),
   );
-  let youtubeVideos = legs.flatMap((leg) => leg.results);
+  let youtubeVideos = legs.flatMap((leg) =>
+    leg.results.map((r) => {
+      const identity = targets.find((t) => t.id === leg.channelId);
+      return {
+        ...r,
+        channelId: r.channelId ?? leg.channelId,
+        channelTitle: r.channelTitle ?? identity?.title,
+      };
+    }),
+  );
   // Channel-name query: the named channel's recent videos ride
-  // under its card (YouTube behaviour for a channel search).
+  // under its card (YouTube behaviour for a channel search), scored
+  // just under an exact title match so they interleave with the
+  // query matches instead of sinking below one big channel's flood.
   if (bestMatch) {
     try {
-      const recent = await fetchChannelRecentResults(bestMatch.channelId, 10, options.signal);
+      const identity = targets.find((t) => t.id === bestMatch.channelId);
+      const recent = (await fetchChannelRecentResults(bestMatch.channelId, 10, options.signal)).map(
+        (r) => ({
+          ...r,
+          score: 0.99,
+          channelId: r.channelId ?? bestMatch.channelId,
+          channelTitle: r.channelTitle ?? identity?.title,
+        }),
+      );
       youtubeVideos = [...youtubeVideos, ...recent];
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') throw error;
