@@ -949,14 +949,6 @@ export function WatchScreen({ route, navigation }: Props) {
     const metaText = [handle, resolved.metaLine].filter(Boolean).join(' · ');
     return (
       <View style={styles.headerWrap}>
-        {/* Seam (round-3, ref-watch-live): for a video the API itself
-            reports live, a thin red line sits exactly at the
-            player/sheet seam — the live edge, as in the real app.
-            Recorded videos get no line: their progress position is
-            not ours to invent. The strip is absolutely positioned at
-            the seam (header top + 17..20 — the list is pulled 20px up
-            over the player, see styles.list). */}
-        {resolved.isLive ? <View style={styles.seamLine} /> : null}
         <View style={styles.sheet}>
           {/* Mini-player gesture zone: drag DOWN on this header strip
               (back row + title) collapses to the mini bar; the
@@ -1526,19 +1518,6 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     marginLeft: -6,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  // Seam line (round-3): 3dp red strip absolutely positioned at the
-  // player/sheet seam. The header starts 20px above the player's
-  // bottom edge (the list overlaps it), so top:17 puts the strip at
-  // the player's bottom 3px, above the sheet (zIndex 2).
-  seamLine: {
-    position: 'absolute',
-    top: 17,
-    left: 0,
-    right: 0,
-    height: 3,
-    backgroundColor: colors.accent,
-    zIndex: 2,
   },
   chatWrap: { marginTop: spacing.lg },
   chatBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },

@@ -274,8 +274,31 @@ export function SessionWatchScreen({ route, navigation }: Props) {
     return () => clearInterval(heartbeat);
   }, [joined, sessionId, user]);
 
-  const seekToSessionPosition = useCallback(() => {
+  // Viewer-scrubbed-back state (hosted live sessions): the viewer
+  // may scrub back over the part already played; while they are
+  // intentionally behind, drift correction and reconnect re-seeks
+  // must NOT yank them forward — the LIVE pill in the player or the
+  // Sync pill below is how they return to the group position.
+  const [behindLive, setBehindLive] = useState(false);
+  const behindLiveRef = useRef(false);
+  useEffect(() => {
+    behindLiveRef.current = behindLive;
+  }, [behindLive]);
+  // The live edge (seconds of the Samagam played so far), ticking
+  // every 5 s while NOW PLAYING — the hosted player's seek cap.
+  const [liveEdge, setLiveEdge] = useState(0);
+  // Leaving NOW PLAYING (the Samagam ended) clears the behind state —
+  // replay seeks the whole recording freely. Render-phase reset, the
+  // React pattern for state that tracks another value.
+  const [prevStatus, setPrevStatus] = useState(status);
+  if (status !== prevStatus) {
+    setPrevStatus(status);
+    if (status !== 'now_playing') setBehindLive(false);
+  }
+
+  const seekToSessionPosition = useCallback((force = false) => {
     if (status !== 'now_playing') return;
+    if (behindLiveRef.current && !force) return;
     const target = deriveOffsetSeconds({
       scheduledStartAt: session?.scheduled_start_at ?? '',
       durationSeconds,
@@ -311,9 +334,25 @@ export function SessionWatchScreen({ route, navigation }: Props) {
     return () => sub.remove();
   }, [seekToSessionPosition]);
 
+  // ── Live edge ticker (hosted, NOW PLAYING) ─────────────────────────
+  useEffect(() => {
+    if (status !== 'now_playing' || !isHosted) return;
+    const update = () =>
+      setLiveEdge(
+        deriveOffsetSeconds({
+          scheduledStartAt: session?.scheduled_start_at ?? '',
+          durationSeconds,
+          nowMs: serverClock.nowMs(),
+        }),
+      );
+    update();
+    const timer = setInterval(update, 5000);
+    return () => clearInterval(timer);
+  }, [status, isHosted, session, durationSeconds]);
+
   // ── Drift correction while playing ──────────────────────────────────
   useEffect(() => {
-    if (status !== 'now_playing' || !playerReady) return;
+    if (status !== 'now_playing' || !playerReady || behindLive) return;
     const tolerance = isHosted ? HOSTED_DRIFT_TOLERANCE_SECONDS : DRIFT_TOLERANCE_SECONDS;
     const checkMs = isHosted ? HOSTED_DRIFT_CHECK_MS : 5000;
     const timer = setInterval(() => {
@@ -332,7 +371,7 @@ export function SessionWatchScreen({ route, navigation }: Props) {
     return () => clearInterval(timer);
     // activeSeekTo dispatches on isHosted (in deps).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, playerReady, session, durationSeconds, isHosted]);
+  }, [status, playerReady, session, durationSeconds, isHosted, behindLive]);
 
   // ── Hosted playback URL (signed, short-lived, members only) ───────
   useEffect(() => {
@@ -535,7 +574,18 @@ export function SessionWatchScreen({ route, navigation }: Props) {
                   return null;
                 }
               }}
-              showScrubber={!isPlaying}
+              showScrubber
+              liveEdgeSeconds={isPlaying ? liveEdge : null}
+              lockRate={isPlaying}
+              onUserSeek={(target) => {
+                if (!isPlaying) return;
+                const edge = deriveOffsetSeconds({
+                  scheduledStartAt: session?.scheduled_start_at ?? '',
+                  durationSeconds,
+                  nowMs: serverClock.nowMs(),
+                });
+                setBehindLive(target < edge - 2);
+              }}
             />
           ) : (
             <View style={styles.thumbnailWrap}>
@@ -714,7 +764,10 @@ export function SessionWatchScreen({ route, navigation }: Props) {
 
         {isPlaying && canControlPlayer ? (
           <Pressable
-            onPress={seekToSessionPosition}
+            onPress={() => {
+              setBehindLive(false);
+              seekToSessionPosition(true);
+            }}
             style={({ pressed }) => [styles.syncButton, pressed && styles.pressed]}
             accessibilityRole="button"
           >

@@ -50,6 +50,19 @@ type Props = CompositeScreenProps<
 const PAGE_SIZE = 25;
 const ALL_CHIP = 'All';
 
+/** "Today · 7:00 PM" / "Tomorrow · 4:00 PM" / "Sat, 5 Dec · 4:00 PM" — device-local. */
+function formatSessionStart(startAtMs: number): string {
+  const start = new Date(startAtMs);
+  const now = new Date();
+  const time = start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  if (start.toDateString() === now.toDateString()) return `Today · ${time}`;
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  if (start.toDateString() === tomorrow.toDateString()) return `Tomorrow · ${time}`;
+  const day = start.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+  return `${day} · ${time}`;
+}
+
 interface HomeFeedCellProps {
   item: HomeFeedItem;
   data: CardVideoData;
@@ -204,6 +217,18 @@ export function HomeScreen({ navigation }: Props) {
     thumbnailUrl: string | null;
   } | null>(null);
 
+  // The NEXT upcoming session, derived in the same 60s check: Home
+  // shows it as a normal feed card with an UPCOMING chip and the real
+  // scheduled start in its meta line (user order, 28 Nov 2026 — the
+  // sangat should SEE the session coming, with its full title, and
+  // when the time comes the same check flips it to NOW PLAYING).
+  const [upcomingSession, setUpcomingSession] = useState<{
+    id: string;
+    title: string;
+    thumbnailUrl: string | null;
+    startAtMs: number;
+  } | null>(null);
+
   useEffect(() => {
     if (!isSupabaseConfigured) return;
     let active = true;
@@ -232,6 +257,32 @@ export function HomeScreen({ navigation }: Props) {
                   playing.video?.youtube_video_id ?? null,
                   playing.video?.thumbnail_url ?? null,
                 ),
+              }
+            : null,
+        );
+        const upcomingRows = rows
+          .filter(
+            (row) =>
+              deriveStatus({
+                storedStatus: row.session.status,
+                scheduledStartAt: row.session.scheduled_start_at,
+                scheduledEndAt: row.session.scheduled_end_at,
+                durationSeconds: row.video?.duration_seconds ?? null,
+                nowMs,
+              }) === 'upcoming',
+          )
+          .sort((a, b) => a.session.scheduled_start_at.localeCompare(b.session.scheduled_start_at));
+        const next = upcomingRows[0];
+        setUpcomingSession(
+          next
+            ? {
+                id: next.session.id,
+                title: next.session.title ?? next.video?.title ?? 'Samagam',
+                thumbnailUrl: listThumbnailUrl(
+                  next.video?.youtube_video_id ?? null,
+                  next.video?.thumbnail_url ?? null,
+                ),
+                startAtMs: Date.parse(next.session.scheduled_start_at),
               }
             : null,
         );
@@ -410,6 +461,28 @@ export function HomeScreen({ navigation }: Props) {
     };
   }, [liveSession, channel, avatarUrl]);
 
+  // The NEXT upcoming session as a NORMAL feed card too (same user
+  // order): full title + thumbnail, a neutral UPCOMING chip on the
+  // thumbnail, and the real start in the meta line — "Starts Today ·
+  // 7:00 PM". When the start time arrives, the 60s check above flips
+  // this card to the NOW PLAYING one on its own.
+  const upcomingCardData = useMemo<CardVideoData | null>(() => {
+    if (!upcomingSession) return null;
+    return {
+      key: `session-upcoming-${upcomingSession.id}`,
+      title: upcomingSession.title,
+      thumbnailUrl: upcomingSession.thumbnailUrl,
+      durationSeconds: null,
+      broadcastState: 'none',
+      upcomingSession: true,
+      channelLine: channel?.title ?? 'Bhai Gursharan Singh Ji',
+      metaLine: `Starts ${formatSessionStart(upcomingSession.startAtMs)}`,
+      channelAvatarUrl: avatarUrl,
+      youtubeVideoId: null,
+      channelId: channel?.channelId ?? OFFICIAL_CHANNEL_ID,
+    };
+  }, [upcomingSession, channel, avatarUrl]);
+
   // Mirror of savedIds for the stable toggle handler below.
   const savedIdsRef = useRef(savedIds);
   useEffect(() => {
@@ -499,10 +572,18 @@ export function HomeScreen({ navigation }: Props) {
         onPress={() =>
           liveSession
             ? navigation.navigate('SessionWatch', { sessionId: liveSession.id })
-            : navigation.navigate('Sessions')
+            : upcomingSession
+              ? navigation.navigate('SessionWatch', { sessionId: upcomingSession.id })
+              : navigation.navigate('Sessions')
         }
         accessibilityRole="button"
-        accessibilityLabel={liveSession ? `Now playing: ${liveSession.title}` : 'Samagam Sessions'}
+        accessibilityLabel={
+          liveSession
+            ? `Now playing: ${liveSession.title}`
+            : upcomingSession
+              ? `Upcoming Samagam: ${upcomingSession.title}`
+              : 'Samagam Sessions'
+        }
       >
         <MaterialIcons name="groups" size={24} color={colors.text} />
         <View style={styles.sessionsLines}>
@@ -510,13 +591,15 @@ export function HomeScreen({ navigation }: Props) {
           <Text style={styles.sessionsSub} numberOfLines={1}>
             {liveSession
               ? `NOW PLAYING · ${liveSession.title}`
-              : 'Watch together at the scheduled time'}
+              : upcomingSession
+                ? `UPCOMING · ${formatSessionStart(upcomingSession.startAtMs)} · ${upcomingSession.title}`
+                : 'Watch together at the scheduled time'}
           </Text>
         </View>
         <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
       </Pressable>
     ),
-    [navigation, liveSession, colors, styles],
+    [navigation, liveSession, upcomingSession, colors, styles],
   );
 
   const renderItem = useCallback(
@@ -621,14 +704,28 @@ export function HomeScreen({ navigation }: Props) {
             // cover them at the end of the list.
             contentContainerStyle={[styles.feedContent, { paddingBottom: layout.bottomNavHeight + insets.bottom + 24 }]}
             ListHeaderComponent={
-              sessionCardData && liveSession && (selectedChip === ALL_CHIP || selectedChip === 'Live') ? (
-                <FeedCard
-                  data={sessionCardData}
-                  onPress={() => navigation.navigate('SessionWatch', { sessionId: liveSession.id })}
-                  onChannelPress={() =>
-                    navigation.navigate('Channel', { channelId: channel?.channelId ?? OFFICIAL_CHANNEL_ID })
-                  }
-                />
+              (sessionCardData && liveSession && (selectedChip === ALL_CHIP || selectedChip === 'Live')) ||
+              (upcomingCardData && upcomingSession && selectedChip === ALL_CHIP) ? (
+                <View>
+                  {sessionCardData && liveSession && (selectedChip === ALL_CHIP || selectedChip === 'Live') ? (
+                    <FeedCard
+                      data={sessionCardData}
+                      onPress={() => navigation.navigate('SessionWatch', { sessionId: liveSession.id })}
+                      onChannelPress={() =>
+                        navigation.navigate('Channel', { channelId: channel?.channelId ?? OFFICIAL_CHANNEL_ID })
+                      }
+                    />
+                  ) : null}
+                  {upcomingCardData && upcomingSession && selectedChip === ALL_CHIP ? (
+                    <FeedCard
+                      data={upcomingCardData}
+                      onPress={() => navigation.navigate('SessionWatch', { sessionId: upcomingSession.id })}
+                      onChannelPress={() =>
+                        navigation.navigate('Channel', { channelId: channel?.channelId ?? OFFICIAL_CHANNEL_ID })
+                      }
+                    />
+                  ) : null}
+                </View>
               ) : undefined
             }
             onEndReached={onEndReached}

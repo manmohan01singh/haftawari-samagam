@@ -55,11 +55,23 @@ export interface HostedPlayerProps {
    */
   onRefreshUri?: () => Promise<string | null>;
   /**
-   * Show the seek timeline. Session screens hide it while a session
-   * is NOW PLAYING (the group position is authoritative) and show it
-   * for COMPLETED replay.
+   * Show the seek timeline. During a NOW PLAYING session the timeline
+   * stays visible but is capped at the live edge (see
+   * liveEdgeSeconds); COMPLETED replay seeks the full duration.
    */
   showScrubber?: boolean;
+  /**
+   * Live-edge cap in seconds for a NOW PLAYING session: the seekable
+   * range ends at the edge — the viewer can scrub BACK over the part
+   * already played but never past the edge into the unplayed future
+   * (real live behaviour, user order 28 Nov 2026). Null/absent means
+   * the full duration is seekable (replay / plain watch).
+   */
+  liveEdgeSeconds?: number | null;
+  /** Lock the settings sheet's Playback speed row (a live Samagam plays at 1× for everyone). */
+  lockRate?: boolean;
+  /** Fired when the VIEWER commits a seek (scrub release, ∓10 s buttons, double-tap, LIVE pill). */
+  onUserSeek?: (seconds: number) => void;
   /** The player's own transport state, as it changes. */
   onPlayingChange?: (playing: boolean) => void;
   /**
@@ -106,6 +118,9 @@ export const HostedPlayer = memo(
       onError,
       onRefreshUri,
       showScrubber = true,
+      liveEdgeSeconds = null,
+      lockRate,
+      onUserSeek,
       onPlayingChange,
       mini = false,
     },
@@ -116,8 +131,8 @@ export const HostedPlayer = memo(
     const viewRef = useRef<VideoView>(null);
     const readyHandledFor = useRef<string | null>(null);
     const durationReportedFor = useRef<string | null>(null);
-    const callbacks = useRef({ onTimeUpdate, onReady, onDuration, onError, onRefreshUri, onPlayingChange });
-    callbacks.current = { onTimeUpdate, onReady, onDuration, onError, onRefreshUri, onPlayingChange };
+    const callbacks = useRef({ onTimeUpdate, onReady, onDuration, onError, onRefreshUri, onPlayingChange, onUserSeek });
+    callbacks.current = { onTimeUpdate, onReady, onDuration, onError, onRefreshUri, onPlayingChange, onUserSeek };
     // Signed-URL refresh bookkeeping (see onRefreshUri): last known
     // position / play state for a seamless resume, plus attempt caps.
     const positionRef = useRef(0);
@@ -156,6 +171,18 @@ export const HostedPlayer = memo(
     const { status } = useEvent(player, 'statusChange', { status: player.status });
     const [currentTime, setCurrentTime] = useState(0);
     const duration = player.duration > 0 ? player.duration : 0;
+    // Live-edge plumbing: while a session is NOW PLAYING, every seek
+    // surface (scrub bar, ∓10 s, double-tap, the imperative handle)
+    // clamps to seekCap instead of the full duration, and the
+    // progress bar fills toward the edge — the unplayed future
+    // simply does not exist on the bar, exactly like a real live
+    // stream. The speed lock decouples from the scrubber here:
+    // a live session HAS a scrubber now but still plays at 1×.
+    const liveEdge = liveEdgeSeconds != null ? Math.max(0, liveEdgeSeconds) : null;
+    const seekCap =
+      liveEdge != null ? (duration > 0 ? Math.min(liveEdge, duration) : liveEdge) : duration;
+    const rateLocked = lockRate ?? !showScrubber;
+    const scrubTargetRef = useRef<number | null>(null);
 
     useEventListener(player, 'timeUpdate', ({ currentTime: t }) => {
       positionRef.current = t;
@@ -228,7 +255,8 @@ export const HostedPlayer = memo(
 
     useImperativeHandle(ref, () => ({
       seekTo: (seconds: number) => {
-        player.currentTime = Math.max(0, seconds);
+        const upper = liveEdge != null && seekCap > 0 ? seekCap : Number.MAX_SAFE_INTEGER;
+        player.currentTime = Math.min(Math.max(0, seconds), upper);
       },
       play: () => player.play(),
       pause: () => player.pause(),
@@ -241,36 +269,43 @@ export const HostedPlayer = memo(
 
     const seekFromTrackX = useCallback(
       (x: number) => {
-        if (duration <= 0 || trackWidth.current <= 0) return;
+        if (seekCap <= 0 || trackWidth.current <= 0) return;
         const ratio = Math.min(1, Math.max(0, x / trackWidth.current));
-        const target = ratio * duration;
+        const target = ratio * seekCap;
+        scrubTargetRef.current = target;
         setScrubbing(target);
         return target;
       },
-      [duration],
+      [seekCap],
     );
 
     const scrubResponder = useMemo(
       () =>
         PanResponder.create({
-          onStartShouldSetPanResponder: () => duration > 0,
-          onMoveShouldSetPanResponder: () => duration > 0,
+          onStartShouldSetPanResponder: () => seekCap > 0,
+          onMoveShouldSetPanResponder: () => seekCap > 0,
           onPanResponderGrant: (e: GestureResponderEvent) =>
             seekFromTrackX(e.nativeEvent.locationX),
           onPanResponderMove: (e: GestureResponderEvent) =>
             seekFromTrackX(e.nativeEvent.locationX),
           onPanResponderRelease: () => {
-            setScrubbing((target) => {
-              if (target != null) player.currentTime = target;
-              return null;
-            });
+            const target = scrubTargetRef.current;
+            scrubTargetRef.current = null;
+            setScrubbing(null);
+            if (target != null) {
+              player.currentTime = target;
+              positionRef.current = target;
+              setCurrentTime(target);
+              callbacks.current.onUserSeek?.(target);
+            }
           },
         }),
-      [duration, player, seekFromTrackX],
+      [seekCap, player, seekFromTrackX],
     );
 
     const displayTime = scrubbing ?? currentTime;
-    const progress = duration > 0 ? Math.min(1, displayTime / duration) : 0;
+    const progress = seekCap > 0 ? Math.min(1, displayTime / seekCap) : 0;
+    const behindLive = liveEdge != null && seekCap - displayTime > 2;
     const buffering = status === 'loading' || refreshing;
 
     // ── YouTube-style chrome behaviour ─────────────────────────────
@@ -299,14 +334,24 @@ export const HostedPlayer = memo(
 
     const seekBy = useCallback(
       (delta: number) => {
-        const upper = duration > 0 ? duration : Number.MAX_SAFE_INTEGER;
+        const upper = seekCap > 0 ? seekCap : Number.MAX_SAFE_INTEGER;
         const target = Math.min(Math.max(0, positionRef.current + delta), upper);
         player.currentTime = target;
         positionRef.current = target;
         setCurrentTime(target);
+        callbacks.current.onUserSeek?.(target);
       },
-      [player, duration],
+      [player, seekCap],
     );
+
+    const goToLiveEdge = useCallback(() => {
+      if (seekCap <= 0) return;
+      player.currentTime = seekCap;
+      positionRef.current = seekCap;
+      setCurrentTime(seekCap);
+      callbacks.current.onUserSeek?.(seekCap);
+      pokeControls();
+    }, [player, seekCap, pokeControls]);
 
     const tapWidthRef = useRef(0);
     const handleVideoTap = useCallback(
@@ -319,8 +364,8 @@ export const HostedPlayer = memo(
         const last = lastTapRef.current;
         if (showScrubber && side !== 'mid' && last && last.side === side && now - last.at < 300) {
           // Double-tap seek ∓10 s (the YouTube gesture). Only where
-          // seeking is allowed at all (showScrubber) — during a live
-          // Samagam the group position is authoritative.
+          // seeking is allowed at all (showScrubber); during a live
+          // Samagam seekBy clamps the target at the live edge.
           lastTapRef.current = null;
           if (toggleTimerRef.current) {
             clearTimeout(toggleTimerRef.current);
@@ -427,9 +472,25 @@ export const HostedPlayer = memo(
         ) : null}
         {controlsVisible ? (
           <>
-            {/* Top bar: mute + the settings gear (YouTube places its
+            {/* Top bar: the LIVE pill at the left during a live
+                session (bright red and tappable while the viewer is
+                behind the edge — it jumps back to the edge, YouTube's
+                own pattern; calm dark once at the edge), then mute +
+                the settings gear at the right (YouTube places its
                 player actions top-right). */}
             <View style={styles.topBar} pointerEvents="box-none">
+              {liveEdge != null ? (
+                <Pressable
+                  onPress={goToLiveEdge}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={behindLive ? 'Go to live' : 'Live'}
+                  style={[styles.livePill, behindLive ? styles.livePillBehind : styles.livePillAtEdge]}
+                >
+                  <View style={styles.liveDot} />
+                  <Text style={styles.livePillText}>LIVE</Text>
+                </Pressable>
+              ) : null}
               <Pressable
                 onPress={() => {
                   player.muted = !player.muted;
@@ -511,7 +572,9 @@ export const HostedPlayer = memo(
         {controlsVisible ? (
           <View style={styles.controls}>
             <Text style={styles.timeText}>
-              {formatClock(displayTime)} / {formatClock(duration)}
+              {liveEdge != null
+                ? formatClock(displayTime)
+                : `${formatClock(displayTime)} / ${formatClock(duration)}`}
             </Text>
             {showScrubber ? (
               <View
@@ -581,9 +644,9 @@ export const HostedPlayer = memo(
                     <MaterialIcons name="chevron-right" size={20} color="#AAAAAA" />
                   </Pressable>
                   <Pressable
-                    style={[styles.sheetRow, !showScrubber && styles.sheetRowDim]}
+                    style={[styles.sheetRow, rateLocked && styles.sheetRowDim]}
                     onPress={() => {
-                      if (showScrubber) setSheetView('speed');
+                      if (!rateLocked) setSheetView('speed');
                     }}
                     accessibilityRole="button"
                     accessibilityLabel="Playback speed"
@@ -591,7 +654,7 @@ export const HostedPlayer = memo(
                     <MaterialIcons name="slow-motion-video" size={22} color="#FFFFFF" />
                     <Text style={styles.sheetRowLabel}>Playback speed</Text>
                     <Text style={styles.sheetRowValue}>
-                      {showScrubber ? `${RATES[rateIndex]}×` : 'Locked'}
+                      {rateLocked ? 'Locked' : `${RATES[rateIndex]}×`}
                     </Text>
                     <MaterialIcons name="chevron-right" size={20} color="#AAAAAA" />
                   </Pressable>
@@ -741,6 +804,19 @@ const createStyles = (colors: ThemeColors) =>
       paddingHorizontal: spacing.sm,
       paddingVertical: spacing.xs,
     },
+    livePill: {
+      marginRight: 'auto',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      borderRadius: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+    },
+    livePillBehind: { backgroundColor: '#FF0000' },
+    livePillAtEdge: { backgroundColor: 'rgba(0,0,0,0.55)' },
+    liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#FFFFFF' },
+    livePillText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700', letterSpacing: 0.5 },
     centerRow: {
       position: 'absolute',
       top: 0,

@@ -24,6 +24,13 @@ export interface CardVideoData {
    * YouTube broadcast (those use broadcastState 'live').
    */
   nowPlayingSession?: boolean;
+  /**
+   * This card IS the app's own Samagam session, scheduled but not yet
+   * started: the thumbnail carries a neutral UPCOMING chip and the
+   * meta line carries the real scheduled start ("Today · 7:00 PM").
+   * Set only by HomeScreen for the derived upcoming session.
+   */
+  upcomingSession?: boolean;
   /** @handle or channel name line. */
   channelLine: string;
   /** Real metadata line ("▷ 12K · 21 hr ago", "591 watching", a date…). */

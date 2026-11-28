@@ -95,6 +95,11 @@ export const FeedCard = memo(function FeedCard({
         <View style={styles.liveBadge} pointerEvents="none">
           <Text style={styles.liveText}>NOW PLAYING</Text>
         </View>
+      ) : data.upcomingSession ? (
+        <View style={styles.upcomingBadge} pointerEvents="none">
+          <MaterialIcons name="schedule" size={13} color="#FFFFFF" />
+          <Text style={styles.liveText}>UPCOMING</Text>
+        </View>
       ) : data.durationSeconds != null ? (
         <View style={styles.durationBadge} pointerEvents="none">
           <Text style={styles.durationText}>{formatDuration(data.durationSeconds)}</Text>
@@ -317,6 +322,18 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingVertical: 4,
   },
   liveText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
+  upcomingBadge: {
+    position: 'absolute',
+    right: nativeApp.feedCard.badgeInset,
+    bottom: nativeApp.feedCard.badgeInset,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    borderRadius: radii.liveBadge,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+  },
   durationBadge: {
     position: 'absolute',
     right: nativeApp.feedCard.badgeInset,
