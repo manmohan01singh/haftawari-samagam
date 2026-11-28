@@ -850,7 +850,7 @@ export function WatchScreen({ route, navigation }: Props) {
           </>
         ) : playerReady ? (
           resolved.source === 'hosted' && resolved.row ? (
-            <HostedWatchPlayer videoId={resolved.row.id} thumbnailUrl={resolved.thumbnailUrl} />
+            <HostedWatchPlayer videoId={resolved.row.id} thumbnailUrl={resolved.thumbnailUrl} title={resolved.title} />
           ) : resolved.youtubeVideoId ? (
             <YouTubePlayer youtubeVideoId={resolved.youtubeVideoId} />
           ) : (

@@ -564,6 +564,7 @@ export function SessionWatchScreen({ route, navigation }: Props) {
               key={`hosted-${video.id}-${isPlaying ? 'playing' : 'replay'}`}
               ref={hostedRef}
               uri={hostedUrl}
+              title={title}
               startSeconds={isPlaying ? offsetSeconds : 0}
               autoplay={isPlaying}
               onReady={handlePlayerReady}
@@ -724,111 +725,105 @@ export function SessionWatchScreen({ route, navigation }: Props) {
             the Channel page — the live feels like it comes from this
             channel because in this app's catalogue it does (same
             official-channel source as the Watch screen). */}
-        {officialChannel ? (
-          <Pressable
-            style={({ pressed }) => [styles.channelRow, pressed && styles.pressed]}
-            onPress={() => navigation.navigate('Channel', { channelId: officialChannel.channelId })}
-            accessibilityRole="button"
-            accessibilityLabel={`View channel ${officialChannel.title}`}
-          >
-            <View style={styles.channelAvatarClip}>
-              {officialChannel.avatarUrl ? (
-                <Image
-                  source={{ uri: officialChannel.avatarUrl }}
-                  style={styles.channelAvatar}
-                  contentFit="cover"
-                  cachePolicy="memory-disk"
-                />
-              ) : (
-                <View style={[styles.channelAvatar, styles.avatarFallback]}>
-                  <Text style={styles.avatarInitial}>
-                    {officialChannel.title.charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-              )}
-            </View>
-            <View style={styles.channelLines}>
-              <Text style={styles.channelNameText} numberOfLines={1} ellipsizeMode="tail">
-                {officialChannel.title}
-              </Text>
-              {officialChannel.subscriberCount != null ? (
-                <Text style={styles.channelMeta} numberOfLines={1}>
-                  {`${formatCount(officialChannel.subscriberCount)} subscribers`}
+        {/* The channel band — YouTube's live page lays this out as
+            ONE row (user's reference screenshots, 28 Nov 2026):
+            channel avatar + name at the left, the bare action icons,
+            and the primary pill (Subscribe there, Join here) at the
+            right end. Share sends THIS app's session deep link —
+            sangat opening it land in this same live Samagam. There
+            are deliberately no Like/Dislike icons: this app has no
+            real like counts for its own sessions, and dead icons
+            would be theatre. */}
+        <View style={styles.channelBand}>
+          {officialChannel ? (
+            <Pressable
+              style={({ pressed }) => [styles.channelPress, pressed && styles.pressed]}
+              onPress={() => navigation.navigate('Channel', { channelId: officialChannel.channelId })}
+              accessibilityRole="button"
+              accessibilityLabel={`View channel ${officialChannel.title}`}
+            >
+              <View style={styles.channelAvatarClip}>
+                {officialChannel.avatarUrl ? (
+                  <Image
+                    source={{ uri: officialChannel.avatarUrl }}
+                    style={styles.channelAvatar}
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                  />
+                ) : (
+                  <View style={[styles.channelAvatar, styles.avatarFallback]}>
+                    <Text style={styles.avatarInitial}>
+                      {officialChannel.title.charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <View style={styles.channelLines}>
+                <Text style={styles.channelNameText} numberOfLines={1} ellipsizeMode="tail">
+                  {officialChannel.title}
                 </Text>
-              ) : null}
-            </View>
-          </Pressable>
-        ) : null}
-
-        {/* Action row (YouTube-live parity): Share + Sync side by
-            side as pills, not stacked full-width buttons. Share sends
-            THIS app's session deep link — sangat opening it land in
-            this same live Samagam. */}
-        <View style={styles.liveActionRow}>
-        <Pressable
-          onPress={onShareSession}
-          style={({ pressed }) => [styles.syncButton, pressed && styles.pressed]}
-          accessibilityRole="button"
-          accessibilityLabel="Share this Samagam"
-        >
-          <View style={styles.shareInner}>
-            <MaterialIcons name="share" size={16} color={colors.text} />
-            <Text style={styles.syncButtonText}>Share</Text>
+                {officialChannel.subscriberCount != null ? (
+                  <Text style={styles.channelMeta} numberOfLines={1}>
+                    {`${formatCount(officialChannel.subscriberCount)} subscribers`}
+                  </Text>
+                ) : null}
+              </View>
+            </Pressable>
+          ) : (
+            <View style={styles.channelPress} />
+          )}
+          <View style={styles.bandActions}>
+            <Pressable
+              onPress={onShareSession}
+              style={({ pressed }) => [styles.bandIcon, pressed && styles.bandIconPressed]}
+              accessibilityRole="button"
+              accessibilityLabel="Share this Samagam"
+            >
+              <MaterialIcons name="share" size={22} color={colors.text} />
+            </Pressable>
+            {isPlaying && canControlPlayer ? (
+              <Pressable
+                onPress={() => {
+                  setBehindLive(false);
+                  seekToSessionPosition(true);
+                }}
+                style={({ pressed }) => [styles.bandIcon, pressed && styles.bandIconPressed]}
+                accessibilityRole="button"
+                accessibilityLabel="Sync to the Samagam's live position"
+              >
+                <MaterialIcons name="sync" size={22} color={colors.text} />
+              </Pressable>
+            ) : null}
+            {isCompleted && canControlPlayer ? (
+              <Pressable
+                onPress={() => {
+                  activeSeekTo(0);
+                  playerTimeRef.current = 0;
+                  activePlay();
+                }}
+                style={({ pressed }) => [styles.bandIcon, pressed && styles.bandIconPressed]}
+                accessibilityRole="button"
+                accessibilityLabel="Watch again from the start"
+              >
+                <MaterialIcons name="replay" size={22} color={colors.text} />
+              </Pressable>
+            ) : null}
+            {user && !isCompleted && status !== 'cancelled' ? (
+              <Pressable
+                onPress={() => void onToggleJoin()}
+                disabled={joinBusy}
+                style={({ pressed }) => [
+                  joined ? styles.joinedPill : styles.joinPill,
+                  (pressed || joinBusy) && styles.pressed,
+                ]}
+                accessibilityRole="button"
+              >
+                <Text style={joined ? styles.joinedPillText : styles.joinPillText}>
+                  {joinBusy ? 'Working…' : joined ? 'Joined' : 'Join Samagam'}
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
-        </Pressable>
-
-        {isPlaying && canControlPlayer ? (
-          <Pressable
-            onPress={() => {
-              setBehindLive(false);
-              seekToSessionPosition(true);
-            }}
-            style={({ pressed }) => [styles.syncButton, pressed && styles.pressed]}
-            accessibilityRole="button"
-            accessibilityLabel="Sync to the Samagam's live position"
-          >
-            <View style={styles.shareInner}>
-              <MaterialIcons name="sync" size={16} color={colors.text} />
-              <Text style={styles.syncButtonText}>Sync to live</Text>
-            </View>
-          </Pressable>
-        ) : null}
-
-        {isCompleted && canControlPlayer ? (
-          <Pressable
-            onPress={() => {
-              activeSeekTo(0);
-              playerTimeRef.current = 0;
-              activePlay();
-            }}
-            style={({ pressed }) => [styles.syncButton, pressed && styles.pressed]}
-            accessibilityRole="button"
-          >
-            <View style={styles.shareInner}>
-              <MaterialIcons name="replay" size={16} color={colors.text} />
-              <Text style={styles.syncButtonText}>Watch again</Text>
-            </View>
-          </Pressable>
-        ) : null}
-
-        {/* Join rides IN the action row for signed-in users (the
-            YouTube pattern: the page's primary action sits with the
-            other actions, not in a separate block further down). */}
-        {user && !isCompleted && status !== 'cancelled' ? (
-          <Pressable
-            onPress={() => void onToggleJoin()}
-            disabled={joinBusy}
-            style={({ pressed }) => [
-              joined ? styles.joinedPill : styles.joinPill,
-              (pressed || joinBusy) && styles.pressed,
-            ]}
-            accessibilityRole="button"
-          >
-            <Text style={joined ? styles.joinedPillText : styles.joinPillText}>
-              {joinBusy ? 'Working…' : joined ? 'Joined' : 'Join Samagam'}
-            </Text>
-          </Pressable>
-        ) : null}
         </View>
 
         {/* Signed-out users get the Sign in block here (the signed-in
@@ -1029,12 +1024,6 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.textSecondary,
   },
   watchingText: { fontSize: 13, fontWeight: '600', color: colors.text },
-  channelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: spacing.lg,
-    gap: spacing.md,
-  },
   channelAvatarClip: {
     width: 40,
     height: 40,
@@ -1051,29 +1040,33 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   channelLines: { flex: 1, minWidth: 0 },
   channelNameText: { fontSize: 15, fontWeight: '600', color: colors.text },
   channelMeta: { fontSize: 13, color: colors.textSecondary, marginTop: 1 },
-  liveActionRow: {
+  channelBand: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
+    marginTop: spacing.lg,
     gap: spacing.sm,
-    marginTop: spacing.md,
   },
+  channelPress: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    minWidth: 0,
+  },
+  bandActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  bandIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radii.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bandIconPressed: { backgroundColor: colors.surfaceVariant },
   scheduleLine: {
     ...typography.channelName,
     color: colors.textSecondary,
     marginTop: spacing.xs,
   },
-  syncButton: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  syncButtonText: { fontSize: 13, fontWeight: '600', color: colors.text },
-  shareInner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   actionRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.lg },
   joinPill: {
     backgroundColor: colors.subscribeBackground,

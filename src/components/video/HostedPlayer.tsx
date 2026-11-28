@@ -72,6 +72,8 @@ export interface HostedPlayerProps {
   lockRate?: boolean;
   /** Fired when the VIEWER commits a seek (scrub release, ∓10 s buttons, double-tap, LIVE pill). */
   onUserSeek?: (seconds: number) => void;
+  /** Video title shown at the player's top-left while chrome is up (YouTube's player carries the title there). */
+  title?: string;
   /** The player's own transport state, as it changes. */
   onPlayingChange?: (playing: boolean) => void;
   /**
@@ -122,6 +124,7 @@ export const HostedPlayer = memo(
       lockRate,
       onUserSeek,
       onPlayingChange,
+      title,
       mini = false,
     },
     ref,
@@ -515,9 +518,15 @@ export const HostedPlayer = memo(
         ) : null}
         {controlsVisible ? (
           <>
-            {/* Top bar: mute + the settings gear (YouTube places its
-                player actions top-right). */}
+            {/* Top bar: the video title at the left (YouTube's player
+                carries it there), mute + the settings gear at the
+                right (YouTube places its player actions top-right). */}
             <View style={styles.topBar} pointerEvents="box-none">
+              {title ? (
+                <Text style={styles.playerTitle} numberOfLines={1} ellipsizeMode="tail">
+                  {title}
+                </Text>
+              ) : null}
               <Pressable
                 onPress={() => {
                   player.muted = !player.muted;
@@ -846,6 +855,16 @@ const createStyles = (colors: ThemeColors) =>
       gap: spacing.xs,
       paddingHorizontal: spacing.sm,
       paddingVertical: spacing.xs,
+    },
+    playerTitle: {
+      flex: 1,
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: '500',
+      marginRight: spacing.sm,
+      textShadowColor: 'rgba(0,0,0,0.7)',
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 4,
     },
     livePill: {
       flexDirection: 'row',

@@ -1,6 +1,5 @@
 import React, { useMemo, useRef, useState, type RefObject } from 'react';
-import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
-import { Image } from 'expo-image';
+import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { NavigationContainerRef } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,11 +20,15 @@ import type { RootStackParamList } from '../../navigation/types';
  *   exactly as the in-screen player always did — but it is not
  *   inside the screen.
  * - mode 'mini', YouTube: Google's embed rules require a ≥200×200
- *   viewport, so the embed is PARKED at 356×200 off-screen (still
- *   mounted, still playing — never unmounted, so no reload and the
- *   position survives), and the visible surface is YouTube's mini
- *   bar: thumbnail, title, play/pause (driven through the IFrame
- *   API), close.
+ *   viewport, so the smallest honest mini is a floating 200×200
+ *   card (bottom-right, rounded) with the REAL embed visible and
+ *   playing inside it — the shape of YouTube's own mini player
+ *   (user comparison, 28 Nov 2026: the old thumbnail bar did not
+ *   read as a mini player at all). Overlay controls: tap the card
+ *   to expand back to Watch, play/pause bottom-left, close
+ *   top-right. On routes where the mini must not show (a session
+ *   watch, admin, auth) the embed parks at 356×200 off-screen
+ *   instead — still mounted, still playing, position preserved.
  * - mode 'mini', hosted: expo-video has no minimum size, so the
  *   real video shrinks into a small floating view (bottom-right)
  *   with expand/close — a true picture mini.
@@ -76,7 +79,7 @@ export function PlaybackHost({
   const barHidden =
     (routeName != null && (BAR_HIDDEN_ROUTES.has(routeName) || routeName.startsWith('Admin'))) ||
     (isWatchRoute && watchKind === 'session');
-  const showBar = mode === 'mini' && !barHidden;
+  const miniCardVisible = mode === 'mini' && item.kind === 'youtube' && !barHidden;
   const bottomOffset = layout.bottomNavHeight + Math.max(insets.bottom, 12) + 8;
 
   const togglePlay = () => {
@@ -125,6 +128,24 @@ export function PlaybackHost({
       borderRadius: 8,
       overflow: 'hidden',
     };
+  } else if (miniCardVisible) {
+    // The YouTube mini card: exactly the embed's 200×200 minimum,
+    // floating bottom-right like YouTube's own mini player.
+    playerStyle = {
+      position: 'absolute',
+      right: 8,
+      bottom: bottomOffset + 8,
+      width: 200,
+      height: 200,
+      borderRadius: 12,
+      overflow: 'hidden',
+      backgroundColor: '#000000',
+      shadowColor: '#000000',
+      shadowOpacity: 0.35,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 8,
+    };
   } else {
     // Parked: YouTube embed keeps its ≥200-tall viewport (356×200
     // at 16:9), mounted and playing, far off-screen. Also used for
@@ -141,7 +162,7 @@ export function PlaybackHost({
 
   return (
     <>
-      <View style={playerStyle} pointerEvents={fullVisible || (mode === 'mini' && item.kind === 'hosted') ? 'auto' : 'none'}>
+      <View style={playerStyle} pointerEvents={fullVisible || (mode === 'mini' && item.kind === 'hosted') || miniCardVisible ? 'auto' : 'none'}>
         {item.kind === 'youtube' && item.youtubeVideoId ? (
           <YouTubePlayer
             ref={ytRef}
@@ -167,6 +188,38 @@ export function PlaybackHost({
             accessibilityRole="button"
             accessibilityLabel="Expand player"
           />
+        ) : null}
+        {miniCardVisible ? (
+          // The card body expands; the two corner buttons ride
+          // above it (rendered after = on top). The embed under the
+          // overlay never sees mini-mode taps, same bargain as the
+          // hosted mini.
+          <>
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              onPress={expandToWatch}
+              accessibilityRole="button"
+              accessibilityLabel="Expand player"
+            />
+            <Pressable
+              style={[styles.miniClose, styles.miniCardClose]}
+              onPress={close}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Close player"
+            >
+              <MaterialIcons name="close" size={16} color="#FFFFFF" />
+            </Pressable>
+            <Pressable
+              style={[styles.miniClose, styles.miniCardPlay]}
+              onPress={togglePlay}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel={playing ? 'Pause' : 'Play'}
+            >
+              <MaterialIcons name={playing ? 'pause' : 'play-arrow'} size={16} color="#FFFFFF" />
+            </Pressable>
+          </>
         ) : null}
       </View>
 
@@ -194,85 +247,14 @@ export function PlaybackHost({
         </Pressable>
       ) : null}
 
-      {showBar && item.kind === 'youtube' ? (
-        <View style={[styles.bar, { bottom: bottomOffset }]}>
-          <Pressable style={styles.barMain} onPress={expandToWatch} accessibilityRole="button" accessibilityLabel="Expand player">
-            {item.thumbnailUrl ? (
-              <Image
-                source={{ uri: item.thumbnailUrl }}
-                style={styles.barThumb}
-                contentFit="cover"
-                cachePolicy="memory-disk"
-              />
-            ) : (
-              <View style={[styles.barThumb, styles.barThumbEmpty]}>
-                <Image
-                  source={require('../../../assets/icon.png')}
-                  style={styles.barThumbMark}
-                  contentFit="contain"
-                />
-              </View>
-            )}
-            <View style={styles.barText}>
-              <Text style={styles.barTitle} numberOfLines={1} ellipsizeMode="tail">
-                {item.title}
-              </Text>
-              <Text style={styles.barChannel} numberOfLines={1} ellipsizeMode="tail">
-                {item.channelLine}
-              </Text>
-            </View>
-          </Pressable>
-          <Pressable
-            style={styles.barButton}
-            onPress={togglePlay}
-            hitSlop={6}
-            accessibilityRole="button"
-            accessibilityLabel={playing ? 'Pause' : 'Play'}
-          >
-            <MaterialIcons name={playing ? 'pause' : 'play-arrow'} size={26} color={colors.text} />
-          </Pressable>
-          <Pressable
-            style={styles.barButton}
-            onPress={close}
-            hitSlop={6}
-            accessibilityRole="button"
-            accessibilityLabel="Close player"
-          >
-            <MaterialIcons name="close" size={22} color={colors.text} />
-          </Pressable>
-        </View>
-      ) : null}
     </>
   );
 }
 
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    bar: {
-      position: 'absolute',
-      left: 8,
-      right: 8,
-      height: 56,
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: colors.surface,
-      borderRadius: 8,
-      paddingLeft: 6,
-      paddingRight: 4,
-      shadowColor: '#000000',
-      shadowOpacity: 0.25,
-      shadowRadius: 8,
-      shadowOffset: { width: 0, height: 2 },
-      elevation: 6,
-    },
-    barMain: { flex: 1, flexDirection: 'row', alignItems: 'center', minWidth: 0 },
-    barThumb: { width: 80, height: 45, borderRadius: 4, backgroundColor: colors.playerBackground },
-    barThumbEmpty: { alignItems: 'center', justifyContent: 'center' },
-    barThumbMark: { width: 28, height: 28 },
-    barText: { flex: 1, marginLeft: 10, minWidth: 0 },
-    barTitle: { fontSize: 13, lineHeight: 17, fontWeight: '500', color: colors.text },
-    barChannel: { fontSize: 11, lineHeight: 14, color: colors.textSecondary, marginTop: 1 },
-    barButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+    miniCardClose: { position: 'absolute', top: 6, right: 6 },
+    miniCardPlay: { position: 'absolute', left: 6, bottom: 6 },
     miniClose: {
       position: 'absolute',
       width: 24,

@@ -15,6 +15,8 @@ import { layout, spacing, useTheme, type ThemeColors } from '../../theme';
 interface HostedWatchPlayerProps {
   videoId: string;
   thumbnailUrl: string | null;
+  /** Shown at the player's top-left while its chrome is up. */
+  title?: string;
   autoplay?: boolean;
   /** The player's own transport state, as it changes. */
   onPlayingChange?: (playing: boolean) => void;
@@ -34,7 +36,7 @@ export type { HostedPlayerHandle };
  * a member session), instead of showing a dead black box.
  */
 export const HostedWatchPlayer = forwardRef<HostedPlayerHandle, HostedWatchPlayerProps>(
-  function HostedWatchPlayer({ videoId, thumbnailUrl, autoplay = true, onPlayingChange, mini = false, onReady }, ref) {
+  function HostedWatchPlayer({ videoId, thumbnailUrl, title, autoplay = true, onPlayingChange, mini = false, onReady }, ref) {
   const { colors } = useTheme();
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -97,6 +99,7 @@ export const HostedWatchPlayer = forwardRef<HostedPlayerHandle, HostedWatchPlaye
       <HostedPlayer
         ref={ref}
         uri={state.url}
+        title={title}
         autoplay={autoplay}
         mini={mini}
         onPlayingChange={onPlayingChange}

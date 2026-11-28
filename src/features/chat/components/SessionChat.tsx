@@ -369,19 +369,21 @@ export function SessionChat({
       </View>
       </View>
 
-      {canChat ? (
-        <View style={styles.noticeBar}>
-          <Text style={styles.noticeText} numberOfLines={2}>
-            Welcome to the Samagam chat. Please keep messages respectful — moderators may
-            remove messages.
-          </Text>
-        </View>
-      ) : null}
-
       <View style={styles.listArea}>{body}</View>
 
       {canChat ? (
         <>
+          {/* The welcome notice sits directly above the composer —
+              where YouTube puts its "Welcome to live chat!" box
+              (user's reference screenshot, 28 Nov 2026); it used to
+              sit under the header, where it read as a banner instead
+              of part of the chat-entry moment. */}
+          <View style={styles.noticeBar}>
+            <Text style={styles.noticeText} numberOfLines={2}>
+              Welcome to the Samagam chat. Please keep messages respectful — moderators may
+              remove messages.
+            </Text>
+          </View>
           {chat.sendError ? (
             <Text style={styles.errorText} accessibilityRole="alert">
               {chat.sendError} Your draft is kept below — tap Send to retry.
