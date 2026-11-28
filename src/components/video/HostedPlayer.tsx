@@ -472,25 +472,9 @@ export const HostedPlayer = memo(
         ) : null}
         {controlsVisible ? (
           <>
-            {/* Top bar: the LIVE pill at the left during a live
-                session (bright red and tappable while the viewer is
-                behind the edge — it jumps back to the edge, YouTube's
-                own pattern; calm dark once at the edge), then mute +
-                the settings gear at the right (YouTube places its
+            {/* Top bar: mute + the settings gear (YouTube places its
                 player actions top-right). */}
             <View style={styles.topBar} pointerEvents="box-none">
-              {liveEdge != null ? (
-                <Pressable
-                  onPress={goToLiveEdge}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel={behindLive ? 'Go to live' : 'Live'}
-                  style={[styles.livePill, behindLive ? styles.livePillBehind : styles.livePillAtEdge]}
-                >
-                  <View style={styles.liveDot} />
-                  <Text style={styles.livePillText}>LIVE</Text>
-                </Pressable>
-              ) : null}
               <Pressable
                 onPress={() => {
                   player.muted = !player.muted;
@@ -571,6 +555,22 @@ export const HostedPlayer = memo(
         ) : null}
         {controlsVisible ? (
           <View style={styles.controls}>
+            {/* The LIVE pill leads the bottom bar during a live
+                session, where YouTube puts it: bright red and
+                tappable while the viewer is behind the edge (it
+                jumps back to the edge); calm dark once at the edge. */}
+            {liveEdge != null ? (
+              <Pressable
+                onPress={goToLiveEdge}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={behindLive ? 'Go to live' : 'Live'}
+                style={[styles.livePill, behindLive ? styles.livePillBehind : styles.livePillAtEdge]}
+              >
+                <View style={styles.liveDot} />
+                <Text style={styles.livePillText}>LIVE</Text>
+              </Pressable>
+            ) : null}
             <Text style={styles.timeText}>
               {liveEdge != null
                 ? formatClock(displayTime)
@@ -805,7 +805,6 @@ const createStyles = (colors: ThemeColors) =>
       paddingVertical: spacing.xs,
     },
     livePill: {
-      marginRight: 'auto',
       flexDirection: 'row',
       alignItems: 'center',
       gap: 5,

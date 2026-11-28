@@ -650,8 +650,12 @@ export function SessionWatchScreen({ route, navigation }: Props) {
           ) : (
             <Text style={styles.statusText}>CANCELLED</Text>
           )}
-          {isPlaying && presenceCount != null ? (
-            <Text style={styles.watchingText}>{presenceCount} watching</Text>
+          {isPlaying ? (
+            <Text style={styles.watchingText}>
+              {presenceCount != null
+                ? `${presenceCount} watching · ${formatStartedAgo(session.scheduled_start_at, nowMs)}`
+                : formatStartedAgo(session.scheduled_start_at, nowMs)}
+            </Text>
           ) : null}
         </View>
 
@@ -662,9 +666,9 @@ export function SessionWatchScreen({ route, navigation }: Props) {
             things and are never merged into one number. While NOW
             PLAYING the presence count already reads as "N watching"
             in the meta line, so its chip is not repeated here. */}
-        {(!isPlaying && presenceCount != null) || joinedCount != null ? (
+        {!isPlaying && (presenceCount != null || joinedCount != null) ? (
           <View style={styles.countsRow}>
-            {!isPlaying && presenceCount != null ? (
+            {presenceCount != null ? (
               <View style={styles.countChip}>
                 <View style={styles.presenceDot} />
                 <Text style={styles.countChipText}>{presenceCount} here now</Text>
@@ -679,10 +683,9 @@ export function SessionWatchScreen({ route, navigation }: Props) {
           </View>
         ) : null}
 
+        {!isPlaying ? (
         <Text style={styles.scheduleLine}>
-          {isPlaying
-            ? formatStartedAgo(session.scheduled_start_at, nowMs)
-            : status === 'upcoming'
+          {status === 'upcoming'
               ? `${formatSessionDateTime(session.scheduled_start_at)} · ${formatCountdown(session.scheduled_start_at, nowMs)}`
               : isCompleted
                 ? // YouTube's post-live wording: once the recording's
@@ -703,6 +706,7 @@ export function SessionWatchScreen({ route, navigation }: Props) {
                   )
                 : formatSessionDateTime(session.scheduled_start_at)}
         </Text>
+        ) : null}
 
         {/* Channel row (YouTube-live parity): round-clipped avatar,
             channel name, real subscriber count; the whole row opens
@@ -758,7 +762,7 @@ export function SessionWatchScreen({ route, navigation }: Props) {
         >
           <View style={styles.shareInner}>
             <MaterialIcons name="share" size={16} color={colors.text} />
-            <Text style={styles.syncButtonText}>Share this Samagam</Text>
+            <Text style={styles.syncButtonText}>Share</Text>
           </View>
         </Pressable>
 
@@ -770,8 +774,12 @@ export function SessionWatchScreen({ route, navigation }: Props) {
             }}
             style={({ pressed }) => [styles.syncButton, pressed && styles.pressed]}
             accessibilityRole="button"
+            accessibilityLabel="Sync to the Samagam's live position"
           >
-            <Text style={styles.syncButtonText}>Sync to Samagam position</Text>
+            <View style={styles.shareInner}>
+              <MaterialIcons name="sync" size={16} color={colors.text} />
+              <Text style={styles.syncButtonText}>Sync to live</Text>
+            </View>
           </Pressable>
         ) : null}
 
@@ -785,48 +793,53 @@ export function SessionWatchScreen({ route, navigation }: Props) {
             style={({ pressed }) => [styles.syncButton, pressed && styles.pressed]}
             accessibilityRole="button"
           >
-            <Text style={styles.syncButtonText}>Watch again from the start</Text>
+            <View style={styles.shareInner}>
+              <MaterialIcons name="replay" size={16} color={colors.text} />
+              <Text style={styles.syncButtonText}>Watch again</Text>
+            </View>
+          </Pressable>
+        ) : null}
+
+        {/* Join rides IN the action row for signed-in users (the
+            YouTube pattern: the page's primary action sits with the
+            other actions, not in a separate block further down). */}
+        {user && !isCompleted && status !== 'cancelled' ? (
+          <Pressable
+            onPress={() => void onToggleJoin()}
+            disabled={joinBusy}
+            style={({ pressed }) => [
+              joined ? styles.joinedPill : styles.joinPill,
+              (pressed || joinBusy) && styles.pressed,
+            ]}
+            accessibilityRole="button"
+          >
+            <Text style={joined ? styles.joinedPillText : styles.joinPillText}>
+              {joinBusy ? 'Working…' : joined ? 'Joined' : 'Join Samagam'}
+            </Text>
           </Pressable>
         ) : null}
         </View>
 
-        {/* Join / Leave — real session_participants rows. The pill is
-            only offered while joining is meaningful (upcoming / now
-            playing): a completed or cancelled session used to show a
-            permanently disabled "Join Samagam" button. Signed-out
-            users get a working Sign in button, not just a note. */}
-        {status === 'cancelled' || isCompleted ? null : (
+        {/* Signed-out users get the Sign in block here (the signed-in
+            Join pill lives in the action row above). A completed or
+            cancelled session shows neither — joining is only
+            meaningful while upcoming / now playing. */}
+        {status === 'cancelled' || isCompleted || user ? null : (
           <View style={styles.actionRow}>
-            {user ? (
+            <View>
               <Pressable
-                onPress={() => void onToggleJoin()}
-                disabled={joinBusy}
-                style={({ pressed }) => [
-                  joined ? styles.joinedPill : styles.joinPill,
-                  (pressed || joinBusy) && styles.pressed,
-                ]}
+                onPress={() => navigation.navigate('SignIn')}
+                style={styles.joinPill}
                 accessibilityRole="button"
               >
-                <Text style={joined ? styles.joinedPillText : styles.joinPillText}>
-                  {joinBusy ? 'Working…' : joined ? 'Joined — tap to leave' : 'Join Samagam'}
-                </Text>
+                <Text style={styles.joinPillText}>Sign in to join</Text>
               </Pressable>
-            ) : (
-              <View>
-                <Pressable
-                  onPress={() => navigation.navigate('SignIn')}
-                  style={styles.joinPill}
-                  accessibilityRole="button"
-                >
-                  <Text style={styles.joinPillText}>Sign in to join</Text>
-                </Pressable>
-                <Text style={styles.signInExplain}>
-                  You can watch this Samagam without an account. Joining
-                  (so sangat can see you are here) and chatting need you
-                  to sign in first.
-                </Text>
-              </View>
-            )}
+              <Text style={styles.signInExplain}>
+                You can watch this Samagam without an account. Joining
+                (so sangat can see you are here) and chatting need you
+                to sign in first.
+              </Text>
+            </View>
           </View>
         )}
         {joinError ? <Text style={styles.joinError}>{joinError}</Text> : null}
