@@ -24,7 +24,7 @@
  * never a loop. The SKIP_WAITING message handler is kept for older
  * app bundles that still send it.
  */
-const CACHE_VERSION = 'haftawari-shell-v12';
+const CACHE_VERSION = 'haftawari-shell-v13';
 /* The web build is served under a base path (experiments.baseUrl, e.g.
  * GitHub Pages /haftawari-samagam/). Shell paths stay relative to this
  * worker's own URL — root-absolute paths would 404 under a subpath. */
