@@ -2,7 +2,7 @@
   "expo": {
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#000000",
+        "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/android-icon-foreground.png"
       },
       "package": "com.haftawarisamagam.app",
@@ -39,9 +39,9 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 180,
           "resizeMode": "contain",
-          "backgroundColor": "#000000",
+          "backgroundColor": "#FFFFFF",
           "dark": {
-            "backgroundColor": "#000000"
+            "backgroundColor": "#FFFFFF"
           }
         }
       ],
