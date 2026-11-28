@@ -440,9 +440,10 @@ interface VideosFullDetailsResponse {
 }
 
 /**
- * One channel's latest 100 uploads (2 playlistItems pages = 2 units),
- * cached 6h per channel. This is the fallback's raw material: real
- * API data, newest first — NOT a query-matched set on its own.
+ * One channel's latest ~200 uploads (4 playlistItems pages = 4
+ * units), cached 6h per channel. This is the search engine's raw
+ * material: real API data, newest first — NOT a query-matched set
+ * on its own.
  */
 async function fetchRecentUploadsFor(channelId: string, signal?: AbortSignal): Promise<UploadItem[]> {
   const cacheKey =
@@ -453,7 +454,7 @@ async function fetchRecentUploadsFor(channelId: string, signal?: AbortSignal): P
   const playlistId = uploadsPlaylistId(channelId);
   const uploads: UploadItem[] = [];
   let pageToken = '';
-  for (let page = 0; page < 2; page++) {
+  for (let page = 0; page < 4; page++) {
     const tokenPart = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '';
     const data = await apiGet<PlaylistSnippetResponse>(
       `playlistItems?part=snippet&playlistId=${playlistId}&maxResults=50${tokenPart}`,
@@ -477,13 +478,15 @@ async function fetchRecentUploadsFor(channelId: string, signal?: AbortSignal): P
 }
 
 /**
- * Degraded fallback for a failed search.list leg: fuzzy-match the
- * query over the latest uploads' titles with the engine's OWN scorer
- * and threshold (rankByTitle / DEFAULT_THRESHOLD), then enrich the
- * matches with one videos.list call (durations → Shorts filter, real
- * live state). Coverage is inherently partial — only the latest ~100
- * uploads — so callers MUST label these results as fallback matches
- * (the engine does, via `youtubeFallback`).
+ * The channels leg of search (user, 28 Nov 2026 — search runs ONLY
+ * over the app's added channels): fuzzy-match the query over the
+ * channel's latest ~200 uploads with the engine's OWN scorer and
+ * threshold (rankByTitle / DEFAULT_THRESHOLD), then enrich the
+ * matches with one videos.list call (durations → Shorts filter,
+ * real live state). This used to be only the degraded fallback for
+ * the search.list leg; it is now the primary route — no search.list
+ * quota is spent at all, and results can only ever come from the
+ * app's own channels.
  */
 export async function searchUploadsFallbackFor(
   channelId: string,
@@ -521,6 +524,50 @@ export async function searchUploadsFallbackFor(
       liveBroadcastContent: detail?.snippet.liveBroadcastContent ?? 'none',
       score,
       matchKind: kind,
+    });
+  }
+  return results;
+}
+
+/**
+ * A channel's most recent uploads as plain results (no query
+ * filter) — merged in when the query NAMES the channel (YouTube
+ * shows the channel's videos under its card for a channel search).
+ * Same enrichment and Shorts filter as the query leg.
+ */
+export async function fetchChannelRecentResults(
+  channelId: string,
+  limit = 10,
+  signal?: AbortSignal,
+): Promise<VideoResult[]> {
+  const uploads = await fetchRecentUploadsFor(channelId, signal);
+  const top = uploads.slice(0, limit);
+  if (top.length === 0) return [];
+  const ids = top.map((u) => u.videoId).join(',');
+  const details = await apiGet<VideosFullDetailsResponse>(
+    `videos?part=contentDetails,snippet&id=${encodeURIComponent(ids)}`,
+    signal,
+  );
+  const byId = new Map((details.items ?? []).map((item) => [item.id, item]));
+  const results: VideoResult[] = [];
+  for (const item of top) {
+    const detail = byId.get(item.videoId);
+    const durationSeconds = detail ? parseIso8601Duration(detail.contentDetails.duration) : null;
+    const taggedShort =
+      item.title.toLowerCase().includes('#shorts') || item.description.toLowerCase().includes('#shorts');
+    if (taggedShort || (durationSeconds !== null && durationSeconds <= 60)) continue;
+    results.push({
+      kind: 'video',
+      source: 'youtube',
+      videoRowId: null,
+      youtubeVideoId: item.videoId,
+      title: item.title,
+      thumbnailUrl: item.thumbnailUrl,
+      durationSeconds,
+      publishedAt: item.publishedAt,
+      liveBroadcastContent: detail?.snippet.liveBroadcastContent ?? 'none',
+      score: 0.5,
+      matchKind: 'fuzzy',
     });
   }
   return results;

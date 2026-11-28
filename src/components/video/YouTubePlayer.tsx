@@ -21,6 +21,10 @@ interface YouTubePlayerProps {
    * reports the embed's true state via the IFrame API.
    */
   onPlayingChange?: (playing: boolean) => void;
+  /** Fill the parent completely instead of holding a 16:9 box (Shorts). */
+  fill?: boolean;
+  /** Loop the video when it ends (Shorts behaviour). */
+  loop?: boolean;
 }
 
 /**
@@ -47,7 +51,7 @@ interface YouTubePlayerProps {
  * outside PiP still pauses per YouTube policy.
  */
 export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(
-  function YouTubePlayer({ youtubeVideoId, onReady }, ref) {
+  function YouTubePlayer({ youtubeVideoId, onReady, fill, loop }, ref) {
     const { colors } = useTheme();
     const styles = useMemo(() => createStyles(colors), [colors]);
     // Same loading facade as the web player (QA issues 5/6): the real
@@ -94,10 +98,10 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
     // `widget_referrer` carry the same app identity for the JS-API
     // channel. The player itself remains YouTube's own, untouched.
     const APP_ORIGIN = 'https://com.haftawarisamagam.app';
-    const embedUrl = `https://www.youtube.com/embed/${encodeURIComponent(youtubeVideoId)}?rel=0&playsinline=1&enablejsapi=1&origin=${APP_ORIGIN}&widget_referrer=${APP_ORIGIN}`;
+    const embedUrl = `https://www.youtube.com/embed/${encodeURIComponent(youtubeVideoId)}?rel=0&playsinline=1&enablejsapi=1&origin=${APP_ORIGIN}&widget_referrer=${APP_ORIGIN}` + (loop ? `&loop=1&playlist=${encodeURIComponent(youtubeVideoId)}` : '');
     const embedHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"><style>html,body{margin:0;padding:0;background:#000;height:100%;overflow:hidden}iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:0}</style></head><body><iframe src="${embedUrl}" allow="accelerometer; autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></body></html>`;
     return (
-      <View style={styles.wrap}>
+      <View style={fill ? styles.wrapFill : styles.wrap}>
         <WebView
           ref={setWebViewRef}
           source={{ html: embedHtml, baseUrl: APP_ORIGIN }}
@@ -138,6 +142,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     aspectRatio: layout.thumbnailAspectRatio,
     backgroundColor: colors.playerBackground,
   },
+  wrapFill: { flex: 1, width: '100%', height: '100%', backgroundColor: colors.playerBackground },
   webview: { flex: 1, backgroundColor: colors.playerBackground },
   facade: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   poster: { width: '100%', height: '100%' },

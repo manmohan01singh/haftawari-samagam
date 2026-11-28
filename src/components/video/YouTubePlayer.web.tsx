@@ -18,6 +18,11 @@ export interface YouTubePlayerHandle {
 
 interface YouTubePlayerProps {
   youtubeVideoId: string;
+  /** Fill the parent completely instead of holding a 16:9 box
+   *  (Shorts: the player IS the full screen). */
+  fill?: boolean;
+  /** Loop the video when it ends (Shorts behaviour). */
+  loop?: boolean;
   /** The embed's own API reported 'ready'. */
   onReady?: () => void;
   /**
@@ -51,7 +56,7 @@ const Iframe = 'iframe' as unknown as React.ElementType;
  * or its ads once playback is possible.
  */
 export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(
-  function YouTubePlayer({ youtubeVideoId, onReady, onPlayingChange }, ref) {
+  function YouTubePlayer({ youtubeVideoId, onReady, onPlayingChange, fill, loop }, ref) {
     const { colors } = useTheme();
     const styles = useMemo(() => createStyles(colors), [colors]);
     const [loaded, setLoaded] = useState(false);
@@ -96,10 +101,11 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
 
     const embedUrl =
       `https://www.youtube.com/embed/${encodeURIComponent(youtubeVideoId)}` +
-      `?rel=0&playsinline=1&enablejsapi=1`;
+      `?rel=0&playsinline=1&enablejsapi=1` +
+      (loop ? `&loop=1&playlist=${encodeURIComponent(youtubeVideoId)}` : '');
 
     return (
-      <View style={styles.wrap}>
+      <View style={fill ? styles.wrapFill : styles.wrap}>
         <Iframe
           ref={frameRef}
           src={embedUrl}
@@ -139,6 +145,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     aspectRatio: layout.thumbnailAspectRatio,
     backgroundColor: colors.playerBackground,
   },
+  wrapFill: { flex: 1, width: '100%', height: '100%', backgroundColor: colors.playerBackground },
   facade: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   poster: { width: '100%', height: '100%' },
   spinnerWrap: {

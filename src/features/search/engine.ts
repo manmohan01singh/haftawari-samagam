@@ -7,9 +7,12 @@
  *      card data from channels.list (1 unit, cached 6h per channel).
  *   2. Local catalogue — the app's published videos, fuzzy-ranked.
  *      Zero quota; always runs.
- *   3. Channel uploads — YouTube search.list scoped to each active
- *      channel (100 units per channel, capped at
- *      MAX_YOUTUBE_SEARCH_CHANNELS, cached 10 min per channel+query).
+ *   3. Channel uploads — a fuzzy scan of each active channel's
+ *      latest ~200 uploads (playlistItems, cached 6h). NO search.list
+ *      is used at all (user, 28 Nov 2026): results come ONLY from
+ *      the app's added channels, and no search quota can kill it.
+ *      When the query names a channel, that channel's recent videos
+ *      are merged in under its card, like YouTube does.
  *
  * Ranking contract (see docs/SEARCH.md):
  *   exact/phrase local  >  acronym local  >  fuzzy local  >  YouTube leg,
@@ -24,9 +27,9 @@ import { fetchPublishedVideos, searchLocalCatalogue } from './localCatalogue';
 import { loadSearchChannels, MAX_YOUTUBE_SEARCH_CHANNELS } from './channelRegistry';
 import {
   fetchChannelCard,
+  fetchChannelRecentResults,
   fetchChannelTitlesFor,
   matchChannel,
-  searchChannelVideosFor,
   searchUploadsFallbackFor,
 } from './youtubeSearch';
 import { YouTubeApiError, type YouTubeErrorClass } from './youtubeError';
@@ -57,12 +60,10 @@ function compareResults(a: VideoResult, b: VideoResult): number {
  * its best fuzzy token match (similarity ≥ 0.8, and actually different);
  * if no token changes, there is no correction (null).
  *
- * Why this exists (QA issue 91): the YouTube search.list leg is literal
- * — for the typo "haftawri" it returns NOTHING, and the fuzzy scorer
- * only ever ranked the local catalogue, so the live search came back
- * empty even though the engine's own tests pass for that typo. The
- * correction lets searchAll retry the YouTube leg with the real word
- * "haftawari", which the channel's search does answer.
+ * Why this exists (QA issue 91): a typo'd token ("haftawri") scores
+ * weakly against real titles, so a thin result set re-runs once with
+ * the corrected query derived from REAL known vocabulary — the same
+ * trick that let the old search.list leg answer "haftawari".
  */
 export async function deriveCorrection(queryText: string): Promise<string | null> {
   const queryTokens = tokenize(queryText);
@@ -174,52 +175,40 @@ async function runLegs(query: string, options: SearchOptions): Promise<LegsOutco
     };
   }
 
-  // Fan out per channel (capped for quota), merging every leg. Each
-  // leg's failure is classified (never collapsed into one generic
-  // failure); the search counts as skipped only when EVERY channel's
-  // leg failed AND the degraded fallback found nothing. Legs throw
-  // only on abort, which must propagate (a superseded search is not a
-  // failed search and must not light the degraded banner).
-  const targets = channels.slice(0, MAX_YOUTUBE_SEARCH_CHANNELS);
+  // Fan out per channel over the uploads scan — ALL active
+  // channels, in parallel (playlistItems rides the general quota
+  // bucket and the pages are cached 6h; the old search.list burst
+  // problem does not apply). Each channel's failure is classified
+  // (never collapsed into one generic failure); the search counts
+  // as skipped only when EVERY channel's scan failed. Legs throw
+  // only on abort, which must propagate (a superseded search is not
+  // a failed search and must not light the degraded banner).
+  const targets = channels;
   let firstError: YouTubeErrorClass | null = null;
-  // SEQUENTIAL, not Promise.all: Google throttles this project's
-  // search.list in bursts (separate "Search Queries" rate metric,
-  // diagnosed 2026-11-27), so firing every channel's search in the
-  // same instant risks losing all of them; spaced calls succeed.
-  // (This fix was lost once in a union merge — keep it.)
-  const legs: { ok: boolean; channelId: string; results: VideoResult[] }[] = [];
-  for (const identity of targets) {
+  const legs = await Promise.all(
+    targets.map(async (identity) => {
+      try {
+        const results = await searchUploadsFallbackFor(identity.id, query, options.signal);
+        return { ok: true, channelId: identity.id, results };
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') throw error;
+        if (error instanceof YouTubeApiError && firstError === null) {
+          firstError = error.errorClass;
+        }
+        return { ok: false, channelId: identity.id, results: [] as VideoResult[] };
+      }
+    }),
+  );
+  let youtubeVideos = legs.flatMap((leg) => leg.results);
+  // Channel-name query: the named channel's recent videos ride
+  // under its card (YouTube behaviour for a channel search).
+  if (bestMatch) {
     try {
-      const results = await searchChannelVideosFor(identity.id, query, options.signal);
-      legs.push({ ok: true, channelId: identity.id, results });
+      const recent = await fetchChannelRecentResults(bestMatch.channelId, 10, options.signal);
+      youtubeVideos = [...youtubeVideos, ...recent];
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') throw error;
-      if (error instanceof YouTubeApiError && firstError === null) {
-        firstError = error.errorClass;
-      }
-      legs.push({ ok: false, channelId: identity.id, results: [] });
-    }
-  }
-  let youtubeVideos = legs.flatMap((leg) => leg.results);
-  let youtubeFallback = false;
-  // Degraded fallback, PER FAILED CHANNEL (Phase 11): fuzzy-match
-  // each failed channel's latest uploads (playlistItems, 1 unit/page,
-  // cached 6h) so its real results can still appear when search.list
-  // is down or rate-limited. This used to run ONLY for the official
-  // channel — a failed Amritvela/Sakhiyan leg silently returned
-  // nothing even though the same cheap fallback could have covered
-  // it. Sequential, like the legs, for burst discipline.
-  for (const leg of legs) {
-    if (leg.ok) continue;
-    try {
-      const fallbackVideos = await searchUploadsFallbackFor(leg.channelId, query, options.signal);
-      if (fallbackVideos.length > 0) {
-        youtubeVideos = [...youtubeVideos, ...fallbackVideos];
-        youtubeFallback = true;
-      }
-    } catch (fallbackError) {
-      if (fallbackError instanceof Error && fallbackError.name === 'AbortError') throw fallbackError;
-      console.warn('[search] Uploads fallback also failed; continuing with the archive only.');
+      // Best-effort garnish; the card and the query matches stand.
     }
   }
   const allFailed = targets.length > 0 && legs.every((leg) => !leg.ok);
@@ -227,9 +216,9 @@ async function runLegs(query: string, options: SearchOptions): Promise<LegsOutco
   return {
     channel,
     videos: mergeRanked(local, youtubeVideos, options.limit ?? 25),
-    youtubeSkipped: allFailed && !youtubeFallback,
+    youtubeSkipped: allFailed,
     youtubeError: firstError,
-    youtubeFallback,
+    youtubeFallback: false,
   };
 }
 
@@ -271,12 +260,11 @@ export async function searchAll(queryText: string, options: SearchOptions = {}):
   if (!options.localOnly) {
     didYouMean = await deriveCorrection(query).catch(() => null);
     if (didYouMean && videos.length < 3) {
-      // Burst discipline: when the first channel leg already failed
-      // with a classified error, do NOT fire a second search.list for
-      // the corrected query into the same dead/throttled leg — that
-      // doubles the burst that caused 429s. The correction re-run then
-      // covers the local + channel-card legs only; the screen's Retry
-      // re-runs the channel leg once things recover.
+      // When the first channel scan already failed with a
+      // classified error, do NOT fire the corrected query into the
+      // same dead leg. The correction re-run then covers the local +
+      // channel-card legs only; the screen's Retry re-runs the
+      // channel scan once things recover.
       const legDead = youtubeError !== null && !youtubeFallback;
       const second = await runLegs(didYouMean, legDead ? { ...options, localOnly: true } : options).catch(
         () => null,
