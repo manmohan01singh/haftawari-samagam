@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { IkOnkarMark } from '../../components/layout/IkOnkarMark';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -486,7 +487,13 @@ export function ChannelScreen({ route, navigation }: Props) {
               aspect, 88dp avatar, name/handle/count lines, pill row) —
               the screen never shows a grey blank or a lone spinner
               while the channel loads. */}
-          <View style={styles.skelBanner} />
+          <View style={styles.skelBanner}>
+            {/* The app's own mark centred in the banner strip (fix
+                round 5, #36): the flat block read as a broken grey
+                void for the seconds the channel takes to load —
+                this reads as the app loading, on purpose. */}
+            <IkOnkarMark size={40} />
+          </View>
           <View style={styles.skelIdentity}>
             <View style={styles.skelAvatar} />
             <View style={styles.skelLines}>
@@ -798,6 +805,8 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     marginHorizontal: -spacing.lg,
     aspectRatio: 1546 / 256,
     backgroundColor: colors.surfaceVariant,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   skelIdentity: { flexDirection: 'row', gap: spacing.lg, paddingTop: spacing.lg },
   skelAvatar: {

@@ -42,13 +42,14 @@ import {
 import { sessionShareUrl, watchShareUrl } from '../../navigation/linking';
 import { useCurrentChatUser } from '../../features/chat/useSessionChat';
 import { joinPresence, leavePresence } from '../../features/presence/presenceService';
-import { useChannelFollow, useOfficialChannel } from '../../features/channel';
+import { ensureDefaultFollowsSeeded, useChannelFollow, useOfficialChannel } from '../../features/channel';
 import { uploadsPlaylistIdFor } from '../../features/channels/channelsService';
 import { getChannelInfoCached, getLiveCached, getUploadsPageCached } from '../../features/channels/channelCache';
 import { usePlaybackStore, type PlaybackItem } from '../../features/playback/playbackStore';
 import { usePreferencesStore } from '../../features/settings/preferencesStore';
 import { AddToPlaylistSheet } from '../../features/library';
 import { formatCount } from '../../lib/format';
+import { contentKeyFor } from '../../lib/contentDedupe';
 import { FEED_LIST_PERF } from '../../lib/listPerf';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import {
@@ -142,7 +143,19 @@ export function WatchScreen({ route, navigation }: Props) {
   // so this drives the honest DEVICE-LOCAL follow state shared with
   // the Channel/Search screens (useChannelFollow): it never claims a
   // YouTube subscription and never changes any subscriber count.
-  const { following, toggleFollow } = useChannelFollow(channel?.channelId ?? OFFICIAL_CHANNEL_ID);
+  // The pill follows the WATCHED video's channel (fix round 5,
+  // #18): resolved.channelId wins over the fetched channel info,
+  // which wins over the official default — and the seed-then-reload
+  // below matches the Channel screen, so both pages always agree.
+  const { following, toggleFollow, reload: reloadFollow } = useChannelFollow(
+    resolved?.channelId ?? channel?.channelId ?? OFFICIAL_CHANNEL_ID,
+  );
+  useEffect(() => {
+    void ensureDefaultFollowsSeeded().then(() => reloadFollow());
+    // Once per mount: seeding is idempotent and reload reads the
+    // post-seed value for whichever channel the pill then shows.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [menuOpen, setMenuOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   // Mini player (round-4, user's direct ask): collapsing the watch
@@ -522,6 +535,7 @@ export function WatchScreen({ route, navigation }: Props) {
                 } else if (m2.viewCount != null) {
                   parts.push(`▷ ${formatCount(m2.viewCount)} views`);
                 }
+                if (m2.likeCount != null) parts.push(`${formatCount(m2.likeCount)} likes on YouTube`);
                 parts.push(formatDateLine(m2.publishedAt));
                 return {
                   key: watchKey,
@@ -586,6 +600,15 @@ export function WatchScreen({ route, navigation }: Props) {
             // prefix ("▷ 3.3 lakh", "▷332 watching").
             metaParts.push(`▷ ${formatCount(meta.viewCount)} views`);
           }
+          // YouTube's own like count, labelled as YouTube's (fix
+          // round 5, #13): the Like BUTTON below carries the
+          // sangat's own count (real app data, often 0 on a new
+          // app) — shown side by side without labels the two read
+          // as one broken number. The meta line now states the
+          // YouTube figure plainly; the button stays the sangat's.
+          if (meta.likeCount != null) {
+            metaParts.push(`${formatCount(meta.likeCount)} likes on YouTube`);
+          }
           // ONE date format everywhere: formatDateLine (en-IN,
           // "30 Nov 2020") — the same helper the cards use.
           metaParts.push(formatDateLine(meta.publishedAt));
@@ -602,7 +625,14 @@ export function WatchScreen({ route, navigation }: Props) {
             youtubeVideoId: ytId,
             source: 'youtube',
             title: row?.title ?? meta?.title ?? '',
-            description: row?.description ?? meta?.description ?? '',
+            // The API's description wins over the catalogue row's
+            // (fix round 5, B10): several seeded rows carry
+            // TRUNCATED excerpts that end mid-sentence ("…BANK
+            // ACCOUNT DETAILS : I") with no way to read the rest —
+            // YouTube serves the full text, and the row stays as
+            // the quota-dead fallback. Nothing is rewritten; the
+            // channel's own full text replaces its own excerpt.
+            description: meta?.description ?? row?.description ?? '',
             channelId: meta?.channelId ?? null,
             channelTitle: meta?.channelTitle ?? officialChannel?.title ?? '',
             metaLine: metaParts.filter(Boolean).join(' · '),
@@ -668,10 +698,13 @@ export function WatchScreen({ route, navigation }: Props) {
       // recordings on every watch, related or not. Now the watched
       // video's own channel's recent uploads lead (up to 8), and
       // catalogue rows fill the rest.
+      // The official channel's uploads lead ONLY when the watched
+      // video is one of its own (a catalogue row / its channel) —
+      // never as a substitute for an unknown channel (fix round 5,
+      // #16: an SGPC live was "led" entirely by another channel).
       const upNextPlaylistId =
         (resolved?.channelId ? uploadsPlaylistIdFor(resolved.channelId) : null) ??
-        officialChannel?.uploadsPlaylistId ??
-        null;
+        (resolved?.row ? (officialChannel?.uploadsPlaylistId ?? null) : null);
       const items: UpNextItem[] = [];
       if (upNextPlaylistId) {
         const page = await getUploadsPageCached(upNextPlaylistId).catch(() => null);
@@ -703,8 +736,26 @@ export function WatchScreen({ route, navigation }: Props) {
       const uploadIds = new Set(
         items.flatMap((i) => (i.kind === 'api' ? [i.meta.youtubeVideoId] : [])),
       );
+      // One validity + dedupe contract for EVERY source (fix
+      // round 5, #16): catalogue rows used to bypass the gates the
+      // uploads pass through, so Up Next could carry an untitled
+      // "Live now" row and the same "Waheguru Simran" twice (a row
+      // and its twin). Rows are also never the current video.
+      const contentSeen = new Set<string>();
+      for (const item of items) {
+        if (item.kind === 'api') {
+          const k = contentKeyFor(item.meta.channelId, item.meta.title, item.meta.durationSeconds);
+          if (k) contentSeen.add(k);
+        }
+      }
       for (const video of rows) {
+        if (!video.title || video.title.trim().length === 0) continue;
+        if (resolved?.row?.id && video.id === resolved.row.id) continue;
+        if (video.youtube_video_id && video.youtube_video_id === currentYtId) continue;
         if (video.youtube_video_id && uploadIds.has(video.youtube_video_id)) continue;
+        const k = contentKeyFor('catalogue', video.title, video.duration_seconds);
+        if (k && contentSeen.has(k)) continue;
+        if (k) contentSeen.add(k);
         items.push({ kind: 'row' as const, video });
       }
       if (active) {
@@ -716,17 +767,23 @@ export function WatchScreen({ route, navigation }: Props) {
     return () => {
       active = false;
     };
-  }, [videoRowId, officialChannel, currentYtId]);
+    // resolved.channelId IS a dep (fix round 5, #16): when the
+    // background metadata retry fills it in seconds after a bare-ID
+    // resolve, Up Next must rebuild around the watched video's OWN
+    // channel — without it, the list stayed led by the official
+    // channel's uploads on an SGPC watch.
+  }, [videoRowId, officialChannel, currentYtId, resolved?.channelId, resolved?.row?.id]);
 
   // "Load more" (P10): fetch the NEXT page of channel uploads —
   // page 1 when the catalogue alone filled the list and uploads
   // paging has not started, otherwise the stored next page — and
   // append only videos not already shown and not the current one.
-  const upNextHasMore = !!officialChannel?.uploadsPlaylistId && (!upNextStarted || upNextToken != null);
+  const upNextHasMore =
+    (!!resolved?.channelId || !!resolved?.row) && (!upNextStarted || upNextToken != null);
   const loadMoreUpNext = useCallback(() => {
     const playlistId =
       (resolved?.channelId ? uploadsPlaylistIdFor(resolved.channelId) : null) ??
-      officialChannel?.uploadsPlaylistId;
+      (resolved?.row ? officialChannel?.uploadsPlaylistId : null);
     if (!playlistId || upNextLoadingMore || !upNextHasMore) return;
     setUpNextLoadingMore(true);
     getUploadsPageCached(playlistId, upNextStarted ? (upNextToken ?? undefined) : undefined)
@@ -736,9 +793,22 @@ export function WatchScreen({ route, navigation }: Props) {
         for (const item of upNextItems) {
           seen.add(item.kind === 'row' ? (item.video.youtube_video_id ?? `row:${item.video.id}`) : item.meta.youtubeVideoId);
         }
-        const fresh = page.videos.filter(
-          (meta) => !seen.has(meta.youtubeVideoId) && !isShortVideo(meta) && meta.title.trim().length > 0,
-        );
+        const contentSeen = new Set<string>();
+        for (const item of upNextItems) {
+          const k =
+            item.kind === 'api'
+              ? contentKeyFor(item.meta.channelId, item.meta.title, item.meta.durationSeconds)
+              : contentKeyFor('catalogue', item.video.title, item.video.duration_seconds);
+          if (k) contentSeen.add(k);
+        }
+        const fresh = page.videos.filter((meta) => {
+          if (seen.has(meta.youtubeVideoId) || isShortVideo(meta)) return false;
+          if (meta.liveBroadcastContent === 'live' || meta.title.trim().length === 0) return false;
+          const k = contentKeyFor(meta.channelId, meta.title, meta.durationSeconds);
+          if (k && contentSeen.has(k)) return false;
+          if (k) contentSeen.add(k);
+          return true;
+        });
         if (fresh.length > 0) {
           setUpNextItems((prev) => [...prev, ...fresh.map((meta) => ({ kind: 'api' as const, meta }))]);
         }
