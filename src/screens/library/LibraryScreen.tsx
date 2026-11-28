@@ -455,7 +455,10 @@ export function LibraryScreen({ navigation }: Props) {
           </Pressable>
         </ScrollView>
 
-        {/* Playlists — stacked rows */}
+        {/* Playlists — stacked rows. A guest's rows are PUBLIC
+            playlists from the sangat, never the guest's own —
+            the heading says which (Chat 2 fault 28). */}
+        <Text style={styles.rowsHeading}>{user ? 'Your playlists' : 'Public playlists from the sangat'}</Text>
         <View style={styles.rowsBlock}>
           {playlistPreview.map((summary) => (
             <PlaylistRow key={summary.playlist.id} summary={summary} onPress={openPlaylist} />
@@ -772,6 +775,14 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   channelRowText: { flex: 1, fontSize: 15, fontWeight: '500', color: colors.text },
   chipText: { fontSize: 14, fontWeight: '500', color: colors.text },
+  rowsHeading: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+    paddingHorizontal: 16,
+    marginTop: 18,
+    marginBottom: 2,
+  },
   rowsBlock: { paddingHorizontal: spacing.lg },
   sectionLoading: {
     flexDirection: 'row',

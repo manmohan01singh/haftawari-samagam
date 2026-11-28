@@ -18,6 +18,8 @@ import { goBackOrTab } from '../../navigation/safeBack';
 import { StackHeader } from '../../components/layout/StackHeader';
 import { StackTabBar } from '../../components/layout/StackTabBar';
 import { Toast, useToast } from '../../components/common/Toast';
+import { clearLocalHistory } from '../../features/library/localHistory';
+import { clearSearchHistory } from '../../features/search/history';
 import { UserAvatar } from '../../components/common/UserAvatar';
 import type { RootStackParamList } from '../../navigation/types';
 import {
@@ -322,6 +324,28 @@ export function SettingsScreen({ navigation }: Props) {
           <MaterialIcons name="help-outline" size={24} color={colors.text} />
           <Text style={styles.rowText}>Help</Text>
           <MaterialIcons name="chevron-right" size={22} color={colors.textSecondary} />
+        </Pressable>
+
+        <Text style={styles.sectionLabel}>Data &amp; privacy</Text>
+        <Pressable
+          style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+          onPress={() => {
+            void clearLocalHistory().then(() => showToast('Watch history on this device cleared'));
+          }}
+          accessibilityRole="button"
+        >
+          <MaterialIcons name="history" size={24} color={colors.text} />
+          <Text style={styles.rowText}>Clear watch history on this device</Text>
+        </Pressable>
+        <Pressable
+          style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+          onPress={() => {
+            void clearSearchHistory(user?.id ?? null).then(() => showToast('Search history cleared'));
+          }}
+          accessibilityRole="button"
+        >
+          <MaterialIcons name="search-off" size={24} color={colors.text} />
+          <Text style={styles.rowText}>Clear search history</Text>
         </Pressable>
 
         <Text style={styles.sectionLabel}>About</Text>

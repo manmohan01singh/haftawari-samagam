@@ -583,7 +583,7 @@ export function SessionWatchScreen({ route, navigation }: Props) {
     );
   }
 
-  const title = session.title ?? video?.title ?? 'Samagam';
+  const title = session.title?.trim() || video?.title?.trim() || 'Samagam';
   const thumbnailUrl =
     video?.thumbnail_url ??
     (video?.youtube_video_id

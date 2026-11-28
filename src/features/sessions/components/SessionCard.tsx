@@ -26,7 +26,7 @@ export const SessionCard = memo(function SessionCard({ item, effectiveStatus, no
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { session, video } = item;
-  const title = session.title ?? video?.title ?? 'Samagam';
+  const title = session.title?.trim() || video?.title?.trim() || 'Samagam';
   // List-sized thumbnail (hqdefault) — the stored URL is the full-res
   // original and was being loaded for every card in the list.
   const thumbnailUrl = video

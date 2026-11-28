@@ -9,6 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -40,6 +41,7 @@ import { sessionShareUrl, watchShareUrl } from '../../navigation/linking';
 import { useCurrentChatUser } from '../../features/chat/useSessionChat';
 import { joinPresence, leavePresence } from '../../features/presence/presenceService';
 import { useChannelFollow, useOfficialChannel } from '../../features/channel';
+import { uploadsPlaylistIdFor } from '../../features/channels/channelsService';
 import { getChannelInfoCached, getUploadsPageCached } from '../../features/channels/channelCache';
 import { usePlaybackStore, type PlaybackItem } from '../../features/playback/playbackStore';
 import { AddToPlaylistSheet } from '../../features/library';
@@ -332,6 +334,20 @@ export function WatchScreen({ route, navigation }: Props) {
   // holds. Dislike remains that honest toast: there is no dislike
   // backend and YouTube shows no dislike count either.
   const [authAction, setAuthAction] = useState<string | null>(null);
+  const [adNoteVisible, setAdNoteVisible] = useState(false);
+  useEffect(() => {
+    let active = true;
+    void AsyncStorage.getItem('haftawari.adNoteSeen').then((v) => {
+      if (active && v !== '1') setAdNoteVisible(true);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+  const dismissAdNote = useCallback(() => {
+    setAdNoteVisible(false);
+    void AsyncStorage.setItem('haftawari.adNoteSeen', '1');
+  }, []);
   const [commentsOpen, setCommentsOpen] = useState(false);
   // "Save to playlist" target row id (P10): the main ⋮ menu targets
   // the current video's row; an Up Next row's ⋮ menu targets THAT
@@ -488,8 +504,18 @@ export function WatchScreen({ route, navigation }: Props) {
       const items: UpNextItem[] = rows.map((video) => ({ kind: 'row' as const, video }));
       let token: string | null = null;
       let started = false;
-      if (items.length < 4 && officialChannel?.uploadsPlaylistId) {
-        const page = await getUploadsPageCached(officialChannel.uploadsPlaylistId).catch(() => null);
+      // Same-channel first (Chat 2 fault 16, 28 Nov 2026): the
+      // fallback used to read the OFFICIAL channel's uploads no
+      // matter what was being watched, so an Amritvela video's
+      // Up Next was another channel's old uploads. The current
+      // video's own channel leads; the official channel is only
+      // the last resort.
+      const upNextPlaylistId =
+        (resolved?.channelId ? uploadsPlaylistIdFor(resolved.channelId) : null) ??
+        officialChannel?.uploadsPlaylistId ??
+        null;
+      if (items.length < 4 && upNextPlaylistId) {
+        const page = await getUploadsPageCached(upNextPlaylistId).catch(() => null);
         if (page) {
           started = true;
           // P10: KEEP the page token — "Load more" (footer below)
@@ -500,7 +526,8 @@ export function WatchScreen({ route, navigation }: Props) {
           for (const meta of page.videos) {
             // NO Shorts anywhere (locked rule) — uploads pages are
             // filtered with the app's established isShortVideo rule.
-            if (!seen.has(meta.youtubeVideoId) && !isShortVideo(meta)) {
+            // Validity gate: a card with no title never renders.
+            if (!seen.has(meta.youtubeVideoId) && !isShortVideo(meta) && meta.title.trim().length > 0) {
               items.push({ kind: 'api' as const, meta });
             }
           }
@@ -523,7 +550,9 @@ export function WatchScreen({ route, navigation }: Props) {
   // append only videos not already shown and not the current one.
   const upNextHasMore = !!officialChannel?.uploadsPlaylistId && (!upNextStarted || upNextToken != null);
   const loadMoreUpNext = useCallback(() => {
-    const playlistId = officialChannel?.uploadsPlaylistId;
+    const playlistId =
+      (resolved?.channelId ? uploadsPlaylistIdFor(resolved.channelId) : null) ??
+      officialChannel?.uploadsPlaylistId;
     if (!playlistId || upNextLoadingMore || !upNextHasMore) return;
     setUpNextLoadingMore(true);
     getUploadsPageCached(playlistId, upNextStarted ? (upNextToken ?? undefined) : undefined)
@@ -534,7 +563,7 @@ export function WatchScreen({ route, navigation }: Props) {
           seen.add(item.kind === 'row' ? (item.video.youtube_video_id ?? `row:${item.video.id}`) : item.meta.youtubeVideoId);
         }
         const fresh = page.videos.filter(
-          (meta) => !seen.has(meta.youtubeVideoId) && !isShortVideo(meta),
+          (meta) => !seen.has(meta.youtubeVideoId) && !isShortVideo(meta) && meta.title.trim().length > 0,
         );
         if (fresh.length > 0) {
           setUpNextItems((prev) => [...prev, ...fresh.map((meta) => ({ kind: 'api' as const, meta }))]);
@@ -996,6 +1025,21 @@ export function WatchScreen({ route, navigation }: Props) {
                 <MaterialIcons name="expand-more" size={24} color={colors.text} />
               </Pressable>
             </View>
+            {adNoteVisible && resolved.source === 'youtube' ? (
+              <View style={styles.adNote}>
+                <Text style={styles.adNoteText}>
+                  Videos play via YouTube, which may show an ad first.
+                </Text>
+                <Pressable
+                  onPress={dismissAdNote}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Dismiss"
+                >
+                  <MaterialIcons name="close" size={16} color={colors.textSecondary} />
+                </Pressable>
+              </View>
+            ) : null}
             <Text style={styles.title} numberOfLines={expanded ? undefined : 2}>
               {resolved.title}
             </Text>
@@ -1599,6 +1643,17 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     zIndex: 1,
   },
   title: { fontSize: 20, lineHeight: 26, fontWeight: '600', color: colors.text },
+  adNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.surfaceVariant,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 10,
+  },
+  adNoteText: { flex: 1, fontSize: 13, color: colors.textSecondary },
   metaLine: { fontSize: 14, color: colors.textSecondary, marginTop: spacing.md },
   moreText: { color: colors.text, fontWeight: '600' },
   channelRow: {

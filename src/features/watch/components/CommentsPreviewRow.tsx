@@ -55,7 +55,7 @@ export function CommentsPreviewRow({
       accessibilityLabel="Open comments"
     >
       <View style={styles.headerRow}>
-        <Text style={styles.headerLabel}>Comments</Text>
+        <Text style={styles.headerLabel}>Sangat comments</Text>
         {status === 'ready' && count != null ? (
           <Text style={styles.headerCount}>{formatCount(count)}</Text>
         ) : null}

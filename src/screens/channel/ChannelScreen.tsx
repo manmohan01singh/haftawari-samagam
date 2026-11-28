@@ -388,7 +388,18 @@ export function ChannelScreen({ route, navigation }: Props) {
       <View style={styles.identityActions}>
         <Pressable
           style={[styles.subscribePill, following && styles.subscribePillActive]}
-          onPress={toggleFollow}
+          onPress={() => {
+            // Never silent (Chat 2 faults 18/34, 28 Nov 2026):
+            // unfollowing speaks and names its own undo; following
+            // explains once what "follow" means in this app.
+            if (following) {
+              toggleFollow();
+              showToast(`Unfollowed ${channel?.title ?? 'this channel'} — tap Subscribe to undo`);
+            } else {
+              toggleFollow();
+              showToast("Following in this app — this doesn't subscribe you on YouTube");
+            }
+          }}
           accessibilityRole="button"
           accessibilityState={{ selected: following }}
           accessibilityLabel={following ? 'Subscribed on this device' : 'Subscribe on this device'}

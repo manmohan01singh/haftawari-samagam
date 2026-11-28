@@ -229,7 +229,7 @@ export function VideoCommentsSheet({
         <View style={styles.dragHandle} />
       </View>
       <View style={styles.headerRow}>
-        <Text style={styles.title}>Comments</Text>
+        <Text style={styles.title}>Sangat comments</Text>
         {commentsStatus === 'ready' && commentCount != null ? (
           <Text style={styles.headerCount}>{formatCount(commentCount)}</Text>
         ) : null}

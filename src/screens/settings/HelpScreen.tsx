@@ -56,8 +56,9 @@ export function HelpScreen({ navigation }: Props) {
 
         <Text style={styles.sectionTitle}>Comments</Text>
         <Text style={styles.body}>
-          On most recordings you can read the sangat&apos;s own comments in this app —
-          sign in to add yours.
+          Every recording has a Sangat comments section in this app — the
+          sangat&apos;s own comments, separate from YouTube. Many recordings are
+          still quiet; sign in to share the first comment.
         </Text>
 
         <Text style={styles.sectionTitle}>Appearance</Text>
