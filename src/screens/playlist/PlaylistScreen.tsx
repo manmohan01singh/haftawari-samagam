@@ -164,6 +164,8 @@ export function PlaylistScreen({ navigation, route }: Props) {
         <ScreenMessage
           title="Playlist not available"
           message="This playlist doesn't exist, or it is private and not shared with you."
+          actionLabel="Go back"
+          onAction={() => goBackOrTab(navigation, 'Library')}
         />
       ) : (
         <FlatList
