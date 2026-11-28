@@ -300,9 +300,10 @@ export function LibraryScreen({ navigation }: Props) {
                 <MaterialIcons name="person" size={32} color={colors.textSecondary} />
               </View>
               <View style={styles.signInLines}>
-                <Text style={styles.signInTitle}>Sign in to see your library</Text>
+                <Text style={styles.signInTitle}>Sign in to sync your library</Text>
                 <Text style={styles.signInText}>
-                  Your history, saved samagams and playlists are kept with your account.
+                  Recordings you watch on this device are shown below. Sign in to keep your
+                  history, saved samagams and playlists with your account on every device.
                 </Text>
               </View>
             </View>

@@ -171,6 +171,20 @@ export const UPLOADS_SWR_MS = 6 * 60 * 60 * 1000;
  * drain on the app's daily YouTube quota. Failures are never
  * cached; a failed background refresh simply keeps the stale page.
  */
+/**
+ * Drop the cached FIRST uploads page for the given playlists
+ * (manual pull-to-refresh): the next read then fetches fresh from
+ * the API instead of serving the SWR copy. Deeper pages keep their
+ * cache — a refresh is about what's new at the top.
+ */
+export async function invalidateUploadsFirstPages(uploadsPlaylistIds: string[]): Promise<void> {
+  await Promise.all(
+    uploadsPlaylistIds.map((id) =>
+      AsyncStorage.removeItem(`${PREFIX}page:${id}:first`).catch(() => undefined),
+    ),
+  );
+}
+
 export async function getUploadsPageCached(
   uploadsPlaylistId: string,
   pageToken?: string,

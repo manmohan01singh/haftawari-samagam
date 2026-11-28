@@ -1,5 +1,5 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { CompositeScreenProps } from '@react-navigation/native';
@@ -19,7 +19,7 @@ import { SkeletonCard } from '../../components/video/SkeletonCard';
 import { apiCardData, listThumbnailUrl, supabaseCardData, type CardVideoData } from '../../components/video/cardData';
 import { useAuth } from '../../features/auth';
 import { useOfficialChannel } from '../../features/channel';
-import { useActiveChannels } from '../../features/channels/channelsService';
+import { uploadsPlaylistIdFor, useActiveChannels } from '../../features/channels/channelsService';
 import {
   HOME_CHIPS,
   createHomeFeedPager,
@@ -34,7 +34,7 @@ import {
   isYouTubeConfigured,
   type YouTubeVideoMetadata,
 } from '../../lib/youtube';
-import { getLiveCached } from '../../features/channels/channelCache';
+import { getLiveCached, invalidateUploadsFirstPages } from '../../features/channels/channelCache';
 import { fetchSavedVideoIds, setVideoSaved } from '../../lib/videos';
 import { FEED_LIST_PERF } from '../../lib/listPerf';
 import { listSessionsWithVideos, uniqueTopic } from '../../features/sessions/sessionService';
@@ -172,6 +172,13 @@ export function HomeScreen({ navigation }: Props) {
   // QA 89: tapping the Home tab while already on Home scrolls the
   // feed back to the top (useScrollToTop hooks the tab re-press).
   const feedRef = useRef<FlatList<HomeFeedItem>>(null);
+  // Responsive columns (audit sweep fix, 28 Nov 2026): the same
+  // breakpoints the Channel page already uses. On a phone this is
+  // 1 — the exact mobile layout the user approved; on a wide
+  // screen the feed becomes a real grid instead of one giant
+  // stretched column with pixelated thumbnails.
+  const { width: windowWidth } = useWindowDimensions();
+  const columns = windowWidth >= 1024 ? 3 : windowWidth >= 640 ? 2 : 1;
   useScrollToTop(feedRef);
   const channel = useOfficialChannel();
   const { channels, loading: channelsLoading } = useActiveChannels();
@@ -392,8 +399,18 @@ export function HomeScreen({ navigation }: Props) {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    void startFeed();
-  }, [startFeed]);
+    // A manual pull means "show me what's new" (audit P2, 28 Nov
+    // 2026): drop the cached first pages first, so the rebuilt
+    // pager fetches fresh uploads instead of re-serving the SWR
+    // copy it already had (the gesture visibly changed nothing).
+    void (async () => {
+      const playlistIds = channels
+        .map((c) => (c.youtubeChannelId ? uploadsPlaylistIdFor(c.youtubeChannelId) : null))
+        .filter((x): x is string => !!x);
+      await invalidateUploadsFirstPages(playlistIds).catch(() => undefined);
+      await startFeed();
+    })();
+  }, [startFeed, channels]);
 
   // Web pull-to-refresh (gestures round): react-native-web's
   // RefreshControl is a no-op stub, so the FlatList's own
@@ -639,24 +656,49 @@ export function HomeScreen({ navigation }: Props) {
       // The Sessions entry strip renders after the SECOND card (or
       // after the only card), never above card 1.
       const stripAfter = Math.min(1, items.length - 1);
+      if (columns > 1) {
+        // Grid mode (wide screens): cells only — the Sessions strip
+        // moves to the list header, since a full-width strip inside
+        // a grid cell would break the row.
+        return (
+          <View style={styles.gridCell}>
+            <HomeFeedCell
+              item={item}
+              data={
+                cardDataByKey.get(item.key) ??
+                (item.kind === 'catalogue'
+                  ? supabaseCardData(item.video, avatarUrl, item.video.youtube_video_id ? (liveMap.get(item.video.youtube_video_id) ?? null) : null)
+                  : apiCardData(item.meta, item.channel.avatarUrl))
+              }
+              saved={item.kind === 'catalogue' && savedIds.has(item.video.id)}
+              canSave={!!user}
+              onPressItem={handlePressItem}
+              onToggleSaveItem={handleToggleSaveItem}
+              onShareItem={handleShareItem}
+              onChannelPressItem={handleChannelPressItem}
+              onOpenPlaylistItem={handleOpenPlaylistItem}
+            />
+          </View>
+        );
+      }
       return (
         <>
-          <HomeFeedCell
-            item={item}
-            data={
-              cardDataByKey.get(item.key) ??
-              (item.kind === 'catalogue'
-                ? supabaseCardData(item.video, avatarUrl, item.video.youtube_video_id ? (liveMap.get(item.video.youtube_video_id) ?? null) : null)
-                : apiCardData(item.meta, item.channel.avatarUrl))
-            }
-            saved={item.kind === 'catalogue' && savedIds.has(item.video.id)}
-            canSave={!!user}
-            onPressItem={handlePressItem}
-            onToggleSaveItem={handleToggleSaveItem}
-            onShareItem={handleShareItem}
-            onChannelPressItem={handleChannelPressItem}
-            onOpenPlaylistItem={handleOpenPlaylistItem}
-          />
+            <HomeFeedCell
+              item={item}
+              data={
+                cardDataByKey.get(item.key) ??
+                (item.kind === 'catalogue'
+                  ? supabaseCardData(item.video, avatarUrl, item.video.youtube_video_id ? (liveMap.get(item.video.youtube_video_id) ?? null) : null)
+                  : apiCardData(item.meta, item.channel.avatarUrl))
+              }
+              saved={item.kind === 'catalogue' && savedIds.has(item.video.id)}
+              canSave={!!user}
+              onPressItem={handlePressItem}
+              onToggleSaveItem={handleToggleSaveItem}
+              onShareItem={handleShareItem}
+              onChannelPressItem={handleChannelPressItem}
+              onOpenPlaylistItem={handleOpenPlaylistItem}
+            />
           {index === stripAfter ? feedStrip : null}
         </>
       );
@@ -674,6 +716,8 @@ export function HomeScreen({ navigation }: Props) {
       handleOpenPlaylistItem,
       items.length,
       feedStrip,
+      columns,
+      styles,
     ],
   );
 
@@ -734,6 +778,9 @@ export function HomeScreen({ navigation }: Props) {
           {ptr.indicator}
           <FlatList
             {...ptr.listProps}
+            key={`cols-${columns}`}
+            numColumns={columns}
+            columnWrapperStyle={columns > 1 ? styles.gridRow : undefined}
             ref={feedRef}
             data={items}
             renderItem={renderItem}
@@ -745,7 +792,8 @@ export function HomeScreen({ navigation }: Props) {
             contentContainerStyle={[styles.feedContent, { paddingBottom: layout.bottomNavHeight + insets.bottom + 24 }]}
             ListHeaderComponent={
               (sessionCardData && liveSession && (selectedChip === ALL_CHIP || selectedChip === 'Live')) ||
-              (upcomingCardData && upcomingSession && selectedChip === ALL_CHIP) ? (
+              (upcomingCardData && upcomingSession && selectedChip === ALL_CHIP) ||
+              columns > 1 ? (
                 <View>
                   {sessionCardData && liveSession && (selectedChip === ALL_CHIP || selectedChip === 'Live') ? (
                     <FeedCard
@@ -765,6 +813,9 @@ export function HomeScreen({ navigation }: Props) {
                       }
                     />
                   ) : null}
+                  {/* In grid mode the Sessions strip lives here
+                      (in 1-column mode it sits after the 2nd card). */}
+                  {columns > 1 ? feedStrip : null}
                 </View>
               ) : undefined
             }
@@ -832,6 +883,8 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   sessionsTitle: { ...typography.channelName, fontWeight: '600', color: colors.text },
   sessionsSub: { ...typography.metadata, color: colors.textSecondary, marginTop: 1 },
   feedContent: { paddingBottom: layout.bottomNavHeight + 24 },
+  gridCell: { flex: 1, paddingHorizontal: 6 },
+  gridRow: { paddingHorizontal: 10 },
   footerSpinner: { paddingVertical: spacing.lg },
   endOfFeed: {
     flexDirection: 'row',

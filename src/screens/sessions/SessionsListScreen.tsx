@@ -5,6 +5,7 @@ import {
   SectionList,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { goBackOrTab } from '../../navigation/safeBack';
@@ -176,6 +177,14 @@ export function SessionsListScreen({ navigation, route }: Props) {
     [navigation],
   );
 
+  // Wide screens (audit sweep fix, 28 Nov 2026): SectionList has
+  // no multi-column mode in this RN version, so the list instead
+  // sits in a centred, width-capped column — session cards stop
+  // stretching ~1900px wide with 650px-tall thumbnails. Phones
+  // (under the cap) are untouched.
+  const { width: windowWidth } = useWindowDimensions();
+  const wideCap = windowWidth >= 900;
+
   const renderItem = useCallback(
     ({ item, section }: { item: SessionWithVideo; section: Section }) => (
       <SessionCard
@@ -274,7 +283,7 @@ export function SessionsListScreen({ navigation, route }: Props) {
       sections={sections}
       keyExtractor={(item) => item.session.id}
       style={styles.list}
-      contentContainerStyle={sections.length === 0 ? styles.emptyContainer : styles.content}
+      contentContainerStyle={sections.length === 0 ? styles.emptyContainer : wideCap ? [styles.content, styles.contentWide] : styles.content}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -319,6 +328,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   list: { flex: 1, backgroundColor: colors.background },
   content: { paddingTop: spacing.lg, paddingBottom: spacing.xxl },
+  contentWide: { width: '100%', maxWidth: 1100, alignSelf: 'center' },
   emptyContainer: { flexGrow: 1 },
   center: {
     flex: 1,

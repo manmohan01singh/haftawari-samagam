@@ -415,7 +415,12 @@ export async function searchChannelVideosFor(channelId: string, queryText: strin
   const existing = inFlight.get(cacheKey);
   if (existing) return existing;
 
-  const promise = withRetry(() => searchChannelUncached(channelId, queryText, signal), signal)
+  // The shared fetch runs WITHOUT any one caller's signal (audit
+  // P2, 28 Nov 2026): previously the first caller's abort (a screen
+  // unmounting, a superseded search) failed every other waiter on
+  // the same cache key. apiGet's own 10 s timeout still bounds it.
+  void signal;
+  const promise = withRetry(() => searchChannelUncached(channelId, queryText, undefined), undefined)
     .then(async (results) => {
       memCache.set(cacheKey, { fetchedAt: Date.now(), value: results });
       await writeCache(cacheKey, results);
@@ -668,6 +673,8 @@ export async function searchYouTubeGlobalFiltered(
   if (existing) return existing;
 
   const allowed = new Set(allowedChannelIds);
+  // Shared fetch without a caller signal — see searchChannelVideosFor.
+  void signal;
   const promise = withRetry(async () => {
     const params = new URLSearchParams({
       part: 'snippet',
@@ -676,14 +683,14 @@ export async function searchYouTubeGlobalFiltered(
       maxResults: '50',
       order: 'relevance',
     });
-    const data = await apiGet<SearchResponse>(`search?${params.toString()}`, signal);
+    const data = await apiGet<SearchResponse>(`search?${params.toString()}`, undefined);
     const items = (data.items ?? []).filter((item) => allowed.has(item.snippet.channelId));
     if (items.length === 0) return [] as VideoResult[];
 
     const ids = items.map((item) => item.id.videoId).join(',');
     const details = await apiGet<VideosFullDetailsResponse>(
       `videos?part=contentDetails,snippet&id=${encodeURIComponent(ids)}`,
-      signal,
+      undefined,
     );
     const byId = new Map((details.items ?? []).map((item) => [item.id, item]));
 

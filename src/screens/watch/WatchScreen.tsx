@@ -1184,6 +1184,7 @@ export function WatchScreen({ route, navigation }: Props) {
             topComment={comments[0] ?? null}
             ownUserId={chatUser?.id ?? null}
             ownAvatarUrl={chatUser?.avatarUrl ?? null}
+            signedIn={!!user}
             onPress={() => setCommentsOpen(true)}
           />
 

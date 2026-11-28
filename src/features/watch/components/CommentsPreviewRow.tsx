@@ -16,6 +16,9 @@ export interface CommentsPreviewRowProps {
   topComment: VideoCommentWithAuthor | null;
   /** The signed-in user's own photo, only for their own preview row. */
   ownUserId: string | null;
+  /** Whether a user is signed in — the empty state must not invite
+   *  a guest to "be the first" when commenting needs an account. */
+  signedIn?: boolean;
   ownAvatarUrl: string | null;
   onPress: () => void;
 }
@@ -35,6 +38,7 @@ export function CommentsPreviewRow({
   topComment,
   ownUserId,
   ownAvatarUrl,
+  signedIn = true,
   onPress,
 }: CommentsPreviewRowProps) {
   const { colors } = useTheme();
@@ -76,7 +80,9 @@ export function CommentsPreviewRow({
           </Text>
         </View>
       ) : status === 'ready' ? (
-        <Text style={styles.noteText}>No comments yet — be the first to share.</Text>
+        <Text style={styles.noteText}>
+          {signedIn ? 'No comments yet — be the first to share.' : 'No comments yet — sign in to share the first.'}
+        </Text>
       ) : status === 'unavailable' ? (
         <Text style={styles.noteText}>Comments are not available yet.</Text>
       ) : status === 'error' ? (
