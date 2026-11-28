@@ -152,6 +152,22 @@ export function SessionsListScreen({ navigation, route }: Props) {
       if (effective === 'cancelled') continue;
       grouped[effective].push(item);
     }
+    // Completed repeats of the same video collapse to the EARLIEST
+    // run (fault 30): the same recording scheduled over and over
+    // (test sessions) filled the history with identical rows. A
+    // finished samagam is history — it is shown once. Upcoming
+    // repeats are NOT deduped: a future re-run is a real event.
+    grouped.completed.sort((a, b) =>
+      a.session.scheduled_start_at.localeCompare(b.session.scheduled_start_at),
+    );
+    const seenCompletedVideos = new Set<string>();
+    grouped.completed = grouped.completed.filter((item) => {
+      const videoId = item.session.video_id;
+      if (!videoId) return true;
+      if (seenCompletedVideos.has(videoId)) return false;
+      seenCompletedVideos.add(videoId);
+      return true;
+    });
     // Deterministic in-section order: playing/upcoming soonest first
     // (the server query order is not relied on after grouping),
     // completed most-recent first.

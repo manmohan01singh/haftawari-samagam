@@ -264,6 +264,17 @@ export function SessionWatchScreen({ route, navigation }: Props) {
     () => `guest-${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`,
   );
   useEffect(() => {
+    // A finished or cancelled session has no live room (N8): do
+    // not join presence for it at all — the viewer themselves
+    // would otherwise become a phantom "1 here now" on a recording
+    // that ended hours ago. Status is null until the session
+    // loads; the effect re-runs when it resolves.
+    if (status === 'completed' || status === 'cancelled') {
+      // Via a promise callback, matching the codebase's
+      // no-sync-setState-in-effect pattern.
+      void Promise.resolve().then(() => setPresenceCount(null));
+      return;
+    }
     const channel = joinPresence(
       sessionId,
       {
@@ -278,7 +289,7 @@ export function SessionWatchScreen({ route, navigation }: Props) {
       presenceChannelRef.current = null;
       void leavePresence(channel);
     };
-  }, [sessionId, presenceUserId, presenceDisplayName, guestPresenceId]);
+  }, [sessionId, presenceUserId, presenceDisplayName, guestPresenceId, status]);
 
   // ── Keep my participant row fresh while joined ──────────────────────
   useEffect(() => {
@@ -742,20 +753,19 @@ export function SessionWatchScreen({ route, navigation }: Props) {
             things and are never merged into one number. While NOW
             PLAYING the presence count already reads as "N watching"
             in the meta line, so its chip is not repeated here. */}
-        {!isPlaying && (presenceCount != null || joinedCount != null) ? (
+        {/* State discipline (blueprint round 2, N8): EVERYTHING on
+            this page derives from the session's own state. The
+            presence chip ("N here now" + green dot) must never
+            render for a COMPLETED session — presence is a live-room
+            concept, and while NOW PLAYING it already reads as
+            "N watching" in the meta line above. Outside the live
+            window the only honest count is the roster: joined. */}
+        {!isPlaying && joinedCount != null ? (
           <View style={styles.countsRow}>
-            {presenceCount != null ? (
-              <View style={styles.countChip}>
-                <View style={styles.presenceDot} />
-                <Text style={styles.countChipText}>{`${presenceCount} here now`}</Text>
-              </View>
-            ) : null}
-            {joinedCount != null ? (
-              <View style={styles.countChip}>
-                <MaterialIcons name="group" size={15} color={colors.textSecondary} />
-                <Text style={styles.countChipText}>{`${joinedCount} joined`}</Text>
-              </View>
-            ) : null}
+            <View style={styles.countChip}>
+              <MaterialIcons name="group" size={15} color={colors.textSecondary} />
+              <Text style={styles.countChipText}>{`${joinedCount} joined`}</Text>
+            </View>
           </View>
         ) : null}
 

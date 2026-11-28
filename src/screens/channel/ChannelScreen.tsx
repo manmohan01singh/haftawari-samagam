@@ -32,7 +32,7 @@ import {
   type YouTubeChannelInfo,
   type YouTubeVideoMetadata,
 } from '../../lib/youtube';
-import { getLiveCached, getLiveFresh, getUploadsPageCached } from '../../features/channels/channelCache';
+import { getLiveCached, getLiveFresh, getUploadsPageCached, invalidateUploadsFirstPages } from '../../features/channels/channelCache';
 import { apiCardData as baseApiCardData, formatDateLine } from '../../components/video/cardData';
 import { layout, nativeApp, radii, spacing, typography, useTheme, type ThemeColors } from '../../theme';
 import type { RootStackParamList } from '../../navigation/types';
@@ -222,7 +222,17 @@ export function ChannelScreen({ route, navigation }: Props) {
     setLiveError(false);
     setLiveLoaded(false);
     setLiveNonce((n) => n + 1);
-  }, [channelId]);
+    // The retry re-runs the UPLOADS leg too (blueprint round 2,
+    // fault 33): uploads metadata is the cheap, reliable live
+    // source Home reads. Re-running only the search leg — the one
+    // that just failed on its small daily quota bucket — could
+    // never succeed while the bucket was empty, which is why Try
+    // again felt dead while Home showed the same channel live.
+    if (channel?.uploadsPlaylistId) {
+      void invalidateUploadsFirstPages([channel.uploadsPlaylistId]).catch(() => undefined);
+    }
+    setReloadKey((k) => k + 1);
+  }, [channelId, channel]);
 
   const loadMore = useCallback(() => {
     if (!channel?.uploadsPlaylistId || !nextPage || loadingMore) return;
@@ -596,18 +606,21 @@ export function ChannelScreen({ route, navigation }: Props) {
           // skeleton rows — previously this was `undefined` (videos)
           // or a premature "No live…" message (live), i.e. a blank
           // white area / wrong state for the whole fetch.
-          (tab === 'videos' && loading) || (tab === 'live' && !liveLoaded) ? (
+          (tab === 'videos' && loading) || (tab === 'live' && (!liveLoaded || loading)) ? (
             <View>
               <SkeletonCard variant="shelf" />
               <SkeletonCard variant="shelf" />
               <SkeletonCard variant="shelf" />
             </View>
-          ) : tab === 'live' && liveError ? (
-            // The live check FAILED (e.g. API quota) — say so and
-            // offer Retry; never dress a failure up as "not live".
+          ) : tab === 'live' && liveError && mergedLive.length === 0 ? (
+            // The live check FAILED (e.g. API quota) AND no source
+            // — uploads metadata included — shows anything live.
+            // Only then is this an error state: if the uploads leg
+            // found a live broadcast, the tab lists it and the
+            // search leg's failure never contradicts it (fault 33).
             <EmptyState
               title="Couldn't check live status"
-              message="The live check failed, so this channel may still be live. Try again in a moment."
+              message="The extra live check failed. This channel's latest uploads show nothing live right now — try again in a moment."
               actionLabel="Try again"
               onAction={retryLive}
             />
