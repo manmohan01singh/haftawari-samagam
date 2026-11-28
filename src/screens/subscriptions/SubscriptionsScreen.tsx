@@ -18,6 +18,7 @@ import { SkeletonCard } from '../../components/video/SkeletonCard';
 import { useWebPullToRefresh } from '../../components/gesture/WebPullToRefresh';
 import { apiCardData, formatDateLine } from '../../components/video/cardData';
 import { useAuth } from '../../features/auth';
+import { useDockInset } from '../../features/playback/useDockInset';
 import { ensureDefaultFollows, readFollowedChannelIds } from '../../features/channel';
 import {
   getChannelInfoCached,
@@ -74,6 +75,7 @@ const FILTERS: { key: UploadFilter; label: string }[] = [
  */
 export function SubscriptionsScreen({ navigation }: Props) {
   const { colors } = useTheme();
+  const dockInset = useDockInset();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { user, profile } = useAuth();
@@ -518,7 +520,7 @@ export function SubscriptionsScreen({ navigation }: Props) {
           keyExtractor={keyExtractor}
           renderItem={renderItem}
           ListHeaderComponent={header}
-          contentContainerStyle={[styles.listPad, { paddingBottom: layout.bottomNavHeight + insets.bottom + 24 }]}
+          contentContainerStyle={[styles.listPad, { paddingBottom: layout.bottomNavHeight + insets.bottom + 24 + dockInset }]}
           columnWrapperStyle={columns > 1 ? styles.columnWrapper : undefined}
           ListEmptyComponent={
             <EmptyState

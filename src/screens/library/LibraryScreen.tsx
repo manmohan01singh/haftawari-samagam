@@ -39,6 +39,7 @@ import { listThumbnailUrl } from '../../components/video/cardData';
 import { SkeletonCard } from '../../components/video/SkeletonCard';
 import { UserAvatar } from '../../components/common/UserAvatar';
 import { removeLocalHistoryEntry, useLocalHistory } from '../../features/library/localHistory';
+import { useDockInset } from '../../features/playback/useDockInset';
 import { PlaylistRow } from '../../features/library/components/PlaylistRow';
 import { H_LIST_PERF } from '../../lib/listPerf';
 
@@ -62,6 +63,7 @@ const HISTORY_CARD_WIDTH = Math.round(Dimensions.get('window').width * 0.36);
  */
 export function LibraryScreen({ navigation }: Props) {
   const { colors } = useTheme();
+  const dockInset = useDockInset();
   // This tab has its own header row (not AppHeader): it must carry
   // the top inset itself, and the scroll content must clear the
   // overlay bottom bar INCLUDING the device inset (first-APK fix).
@@ -233,7 +235,7 @@ export function LibraryScreen({ navigation }: Props) {
         ref={scrollRef}
         {...ptr.listProps}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: layout.bottomNavHeight + insets.bottom + 24 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: layout.bottomNavHeight + insets.bottom + 24 + dockInset }]}
       >
         {!isSupabaseConfigured ? (
           <Text style={styles.emptyLine}>

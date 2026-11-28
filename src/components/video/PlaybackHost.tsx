@@ -104,6 +104,15 @@ export function PlaybackHost({
   const hostedMiniVisible = mode === 'mini' && item?.kind === 'hosted' && !barHidden;
   const playerVisible = fullVisible || miniCardVisible || hostedMiniVisible;
 
+  // Publish dock visibility for content insets (N-3): tab screens
+  // pad their scroll content by the dock height while it shows.
+  const setDockVisible = usePlaybackStore((s) => s.setDockVisible);
+  useEffect(() => {
+    if (usePlaybackStore.getState().dockVisible !== miniCardVisible) {
+      setDockVisible(miniCardVisible);
+    }
+  }, [miniCardVisible, setDockVisible]);
+
   // VISIBLE-FIRST MOUNT (blueprint round 2, A2): a brand-new item's
   // player is not mounted at all until it can appear in its slot (or
   // mini). An embed that first loads parked at left:-2000 tries to

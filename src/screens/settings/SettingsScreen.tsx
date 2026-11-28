@@ -13,6 +13,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import appJson from '../../../app.json';
 import { branding } from '../../config/branding';
 import { useAuth } from '../../features/auth';
+import { useDockInset } from '../../features/playback/useDockInset';
 import { usePreferencesStore } from '../../features/settings/preferencesStore';
 import { ConfirmModal } from '../../features/library/components/ConfirmModal';
 import { OFFICIAL_CHANNEL_ID } from '../../lib/youtube';
@@ -88,6 +89,7 @@ export function SettingsScreen({ navigation }: Props) {
   const { user, profile, isAdmin, signOut } = useAuth();
   const { toast, showToast } = useToast();
   const { colors, preference, setPreference } = useTheme();
+  const dockInset = useDockInset();
   const autoplay = usePreferencesStore((s) => s.autoplay);
   const setAutoplay = usePreferencesStore((s) => s.setAutoplay);
   const hostedSpeed = usePreferencesStore((s) => s.hostedSpeed);
@@ -145,7 +147,7 @@ export function SettingsScreen({ navigation }: Props) {
     <View style={styles.container}>
       <StackHeader title="Settings" onBack={() => goBackOrTab(navigation, 'Library')} />
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, dockInset ? { paddingBottom: dockInset + spacing.xxl } : null]}>
         <Text style={styles.sectionLabel}>Account</Text>
         {user ? (
           <Pressable

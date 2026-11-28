@@ -18,6 +18,7 @@ import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { YouTubePlayer, type YouTubePlayerHandle } from '../../components/video/YouTubePlayer';
 import { fetchShorts, type ShortItem } from '../../features/shorts/shortsFeed';
 import { usePreferencesStore } from '../../features/settings/preferencesStore';
+import { useDockInset } from '../../features/playback/useDockInset';
 import { useCurrentChatUser } from '../../features/chat/useSessionChat';
 import { useVideoEngagement } from '../../features/watch/useVideoEngagement';
 import { VideoCommentsSheet } from '../../features/watch/components/VideoCommentsSheet';
@@ -178,7 +179,8 @@ export function ShortsScreen({ navigation }: Props) {
   // layout height included the strip under it — and the embed's
   // own seek bar rendered across the nav, clipping its labels.
   const [rawH, setRawH] = useState(0);
-  const itemH = rawH > 0 ? Math.max(0, rawH - layout.bottomNavHeight) : 0;
+  const dockInset = useDockInset();
+  const itemH = rawH > 0 ? Math.max(0, rawH - layout.bottomNavHeight - dockInset) : 0;
   const [activeIndex, setActiveIndex] = useState(0);
   const [userPaused, setUserPaused] = useState(false);
   // Muted-autoplay pattern (blueprint round 2, fault 22): browsers

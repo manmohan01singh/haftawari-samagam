@@ -37,6 +37,7 @@ import {
   type YouTubeVideoMetadata,
 } from '../../lib/youtube';
 import { getLiveCached, getLiveFresh, invalidateUploadsFirstPages } from '../../features/channels/channelCache';
+import { useDockInset } from '../../features/playback/useDockInset';
 import { fetchSavedVideoIds, setVideoSaved } from '../../lib/videos';
 import { FEED_LIST_PERF } from '../../lib/listPerf';
 import { listSessionsWithVideos, uniqueTopic } from '../../features/sessions/sessionService';
@@ -170,6 +171,7 @@ const HomeFeedCell = memo(function HomeFeedCell({
  */
 export function HomeScreen({ navigation }: Props) {
   const { colors } = useTheme();
+  const dockInset = useDockInset();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { user, profile } = useAuth();
@@ -890,7 +892,7 @@ export function HomeScreen({ navigation }: Props) {
             // feed scrolls under it, so the last cards need clearance
             // ≥ the bar height (56) + breathing room, or the bar would
             // cover them at the end of the list.
-            contentContainerStyle={[styles.feedContent, { paddingBottom: layout.bottomNavHeight + insets.bottom + 24 }]}
+            contentContainerStyle={[styles.feedContent, { paddingBottom: layout.bottomNavHeight + insets.bottom + 24 + dockInset }]}
             ListHeaderComponent={
               (sessionCardData && liveSession && (selectedChip === ALL_CHIP || selectedChip === 'Live')) ||
               (upcomingCardData && upcomingSession && selectedChip === ALL_CHIP) ||

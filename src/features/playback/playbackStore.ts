@@ -88,6 +88,13 @@ interface PlaybackState {
    */
   rescuePosition: { key: string; seconds: number } | null;
   setRescuePosition: (position: { key: string; seconds: number } | null) => void;
+  /**
+   * Whether the mini DOCK is on screen right now (set by
+   * PlaybackHost). Tab screens add its height as bottom padding
+   * so the dock never covers content or eats its taps (N-3).
+   */
+  dockVisible: boolean;
+  setDockVisible: (visible: boolean) => void;
   open: (item: PlaybackItem) => void;
   minimize: () => void;
   expand: () => void;
@@ -111,6 +118,8 @@ export const usePlaybackStore = create<PlaybackState>((set) => ({
   setSuppressedKey: (suppressedKey) => set({ suppressedKey }),
   rescuePosition: null,
   setRescuePosition: (rescuePosition) => set({ rescuePosition }),
+  dockVisible: false,
+  setDockVisible: (dockVisible) => set({ dockVisible }),
   open: (item) =>
     set((s) => {
       const same = s.item?.key === item.key && s.mode !== 'closed';

@@ -23,6 +23,7 @@ import {
 } from '../../features/sessions/sessionService';
 import { deriveStatus } from '../../features/sessions/stateMachine';
 import { isSupabaseConfigured } from '../../lib/supabase';
+import { useDockInset } from '../../features/playback/useDockInset';
 import type { RootStackParamList } from '../../navigation/types';
 import { spacing, typography, useTheme, type ThemeColors } from '../../theme';
 import type { SessionStatus } from '../../types/database';
@@ -64,6 +65,7 @@ const SECTION_TITLES: Record<VisibleStatus, string> = {
  */
 export function SessionsListScreen({ navigation, route }: Props) {
   const { colors } = useTheme();
+  const dockInset = useDockInset();
   const styles = useMemo(() => createStyles(colors), [colors]);
   // Route param (Home "Live" tab / ?filter=live deep link): 'live' is
   // the ONLY recognised filter and it maps to the real NOW PLAYING
@@ -326,7 +328,7 @@ export function SessionsListScreen({ navigation, route }: Props) {
       sections={sections}
       keyExtractor={(item) => item.session.id}
       style={styles.list}
-      contentContainerStyle={sections.length === 0 ? styles.emptyContainer : wideCap ? [styles.content, styles.contentWide] : styles.content}
+      contentContainerStyle={[sections.length === 0 ? styles.emptyContainer : wideCap ? [styles.content, styles.contentWide] : styles.content, dockInset ? { paddingBottom: dockInset + spacing.xxl } : null]}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
