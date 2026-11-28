@@ -35,6 +35,9 @@ interface YouTubePlayerProps {
   autoplay?: boolean;
   /** Start muted (Shorts' first-play pattern). */
   muted?: boolean;
+  /** Accepted for prop parity with the web player; the native
+   *  WebView facade has no stuck deadline to tune. */
+  facadeDeadlineMs?: number;
 }
 
 /**
@@ -120,7 +123,11 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
     // change would reload the WebView); later changes use the
     // setMuted command. Same rule as the web player.
     const [initialMuted] = useState(() => muted);
-    const embedUrl = `https://www.youtube.com/embed/${encodeURIComponent(youtubeVideoId)}?rel=0&playsinline=1&enablejsapi=1&origin=${APP_ORIGIN}&widget_referrer=${APP_ORIGIN}` + (loop ? `&loop=1&playlist=${encodeURIComponent(youtubeVideoId)}` : '') + (autoplay ? '&autoplay=1' : '') + (initialMuted ? '&mute=1' : '');
+    // Autoplay is mount-captured too (fix round 5, N-7): a live
+    // preference change must never rebuild the WebView source and
+    // restart a playing/paused video on its own.
+    const [initialAutoplay] = useState(() => autoplay);
+    const embedUrl = `https://www.youtube.com/embed/${encodeURIComponent(youtubeVideoId)}?rel=0&playsinline=1&enablejsapi=1&origin=${APP_ORIGIN}&widget_referrer=${APP_ORIGIN}` + (loop ? `&loop=1&playlist=${encodeURIComponent(youtubeVideoId)}` : '') + (initialAutoplay ? '&autoplay=1' : '') + (initialMuted ? '&mute=1' : '');
     const embedHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"><style>html,body{margin:0;padding:0;background:#000;height:100%;overflow:hidden}iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:0}</style></head><body><iframe src="${embedUrl}" allow="accelerometer; autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></body></html>`;
     return (
       <View style={fill ? styles.wrapFill : styles.wrap}>

@@ -268,7 +268,15 @@ export function ShortsScreen({ navigation }: Props) {
       playerRefs.current.get(activeIndexRef.current)?.pause();
       return;
     }
-    if (!userPaused && autoplayEnabled) playActive();
+    // Autoplay OFF also STOPS a short that is already playing when
+    // the preference flips (fix round 5, B1): the gate used to only
+    // refuse NEW starts, so a short set playing under ON kept going
+    // after the user switched it OFF in Settings.
+    if (!autoplayEnabled) {
+      playerRefs.current.get(activeIndexRef.current)?.pause();
+      return;
+    }
+    if (!userPaused) playActive();
   }, [isFocused, activeIndex, userPaused, playActive, autoplayEnabled]);
 
   const onViewableItemsChanged = useCallback(({ viewableItems }: ViewableInfo) => {
@@ -341,6 +349,7 @@ export function ShortsScreen({ navigation }: Props) {
                 fill
                 loop
                 autoplay={isActive && autoplayEnabled}
+                facadeDeadlineMs={10000}
                 muted={!soundOn}
                 onReady={() => {
                   if (index === activeIndexRef.current && focusedRef.current && !userPausedRef.current && autoplayEnabled) {

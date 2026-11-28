@@ -36,9 +36,39 @@ function persist(state: { autoplay: boolean; hostedSpeed: number }): void {
   void AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch(() => undefined);
 }
 
+/**
+ * Synchronous first read on web (fix round 5, B1): AsyncStorage on
+ * web is localStorage under the same key, so the store can be
+ * created with the SAVED values instead of the defaults. Before
+ * this, a player mounted in the first moments after launch read
+ * the default (autoplay ON) into its embed URL even when the user
+ * had saved OFF — the toggle looked ignored. Native keeps the
+ * async hydrate below; players there mount-capture the flag.
+ */
+function initialFromWebStorage(): { autoplay: boolean; hostedSpeed: number } {
+  const fallback = { autoplay: true, hostedSpeed: 1 };
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return fallback;
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw) as { autoplay?: unknown; hostedSpeed?: unknown };
+    return {
+      autoplay: typeof parsed.autoplay === 'boolean' ? parsed.autoplay : fallback.autoplay,
+      hostedSpeed:
+        typeof parsed.hostedSpeed === 'number' && parsed.hostedSpeed >= 0.25 && parsed.hostedSpeed <= 3
+          ? parsed.hostedSpeed
+          : fallback.hostedSpeed,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+const initial = initialFromWebStorage();
+
 export const usePreferencesStore = create<PreferencesState>((set, get) => ({
-  autoplay: true,
-  hostedSpeed: 1,
+  autoplay: initial.autoplay,
+  hostedSpeed: initial.hostedSpeed,
   hydrated: false,
   setAutoplay: (value) => {
     set({ autoplay: value });

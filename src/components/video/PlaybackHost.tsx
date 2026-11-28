@@ -353,6 +353,7 @@ export function PlaybackHost({
               ref={ytRef}
               youtubeVideoId={item.youtubeVideoId}
               autoplay={autoplayEnabled}
+              fill={miniCardVisible}
               onPlayingChange={setPlaying}
               onReady={() => {
                 // Rescue hand-back: if the Watch screen's rescue

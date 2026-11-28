@@ -351,6 +351,24 @@ export function WatchScreen({ route, navigation }: Props) {
     };
   }, [rescueKey]);
 
+  // The rescue must also die the moment this screen loses focus
+  // (fix round 5, N-1 GHOST AUDIO): a fresh-boot deep link PUSHES
+  // the tabs over this screen instead of popping it, so unmount
+  // never comes — the rescue kept playing invisibly under the
+  // tabs, its audio followed the user, and the dock's Close (which
+  // only stops the HOST's player) could not silence it. On blur:
+  // hand the position back, release the suppression, unmount the
+  // rescue — from then on the host's player is the ONLY player.
+  useEffect(() => {
+    if (isFocused || !rescueKey) return;
+    const seconds = rescueRef.current?.getCurrentTime() ?? null;
+    if (seconds !== null && seconds > 1) {
+      usePlaybackStore.getState().setRescuePosition({ key: rescueKey, seconds });
+    }
+    usePlaybackStore.getState().setSuppressedKey(null);
+    setRescueKey(null);
+  }, [isFocused, rescueKey]);
+
   // Leaving a plain watch (back, tab switch, deep link) minimizes
   // the persistent player instead of killing it. The bar's X is the
   // only full stop.

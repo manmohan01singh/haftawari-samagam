@@ -39,6 +39,13 @@ interface YouTubePlayerProps {
   /** Start muted (the only autoplay browsers allow without a user
    *  gesture — Shorts' first-play pattern). */
   muted?: boolean;
+  /** How long the loading facade waits for the embed's first
+   *  ready/playing signal before offering the recovery Play
+   *  button. Shorts pass a longer deadline: their off-screen
+   *  players mount early and a throttled background iframe must
+   *  not be declared "stuck" before it was ever visible (fault
+   *  53's big red Play over a healthy paused Short). */
+  facadeDeadlineMs?: number;
   /** The embed's own API reported 'ready'. */
   onReady?: () => void;
   /**
@@ -72,7 +79,7 @@ const Iframe = 'iframe' as unknown as React.ElementType;
  * or its ads once playback is possible.
  */
 export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(
-  function YouTubePlayer({ youtubeVideoId, onReady, onPlayingChange, fill, loop, autoplay, muted }, ref) {
+  function YouTubePlayer({ youtubeVideoId, onReady, onPlayingChange, fill, loop, autoplay, muted, facadeDeadlineMs }, ref) {
     const { colors } = useTheme();
     const styles = useMemo(() => createStyles(colors), [colors]);
     // Load signals are tagged with the load key (video + mount
@@ -140,14 +147,14 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
       queueRef.current = [];
     }, [loadKey]);
 
-    // The deadline: 4 s after (re)mount, if the embed has neither
+    // The deadline: after (re)mount, if the embed has neither
     // reported ready nor started playing, surface the Play button.
     useEffect(() => {
       const t = setTimeout(() => {
         if (!readyRef.current && !playingRef.current) setStuckKey(loadKey);
-      }, 4000);
+      }, facadeDeadlineMs ?? 4000);
       return () => clearTimeout(t);
-    }, [loadKey]);
+    }, [loadKey, facadeDeadlineMs]);
 
     useEffect(() => {
       const onMessage = (event: MessageEvent) => {
@@ -203,11 +210,19 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
     // travel through the setMuted command instead. (Callers key
     // the player per video, so each video gets its own mount.)
     const [initialMuted] = useState(() => muted);
+    // The autoplay flag is captured ONCE at mount for the same
+    // reason (fix round 5, N-7): when the Settings Autoplay switch
+    // flipped, the live prop changed the embed URL of the DOCKED
+    // player, the iframe reloaded — and a paused video restarted
+    // BY ITSELF, sound and all, with no tap. A preference change
+    // must never reload a live player; it applies to the NEXT
+    // player that mounts.
+    const [initialAutoplay] = useState(() => autoplay);
     const embedUrl =
       `https://www.youtube.com/embed/${encodeURIComponent(youtubeVideoId)}` +
       `?rel=0&playsinline=1&enablejsapi=1` +
       (loop ? `&loop=1&playlist=${encodeURIComponent(youtubeVideoId)}` : '') +
-      (autoplay ? '&autoplay=1' : '') +
+      (initialAutoplay ? '&autoplay=1' : '') +
       (initialMuted ? '&mute=1' : '');
 
     const showFacade = !loaded || stuck;
