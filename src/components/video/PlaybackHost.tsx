@@ -23,21 +23,19 @@ import type { RootStackParamList } from '../../navigation/types';
  *   page's measured slot (store.slotRect), so it looks and behaves
  *   exactly as the in-screen player always did — but it is not
  *   inside the screen.
- * - mode 'mini', YouTube: Google's embed rules require a ≥200×200
- *   viewport, so the embed itself stays 200×200 — but measured on
- *   the live app (28 Nov 2026) the 16:9 picture is TOP-anchored in
- *   that viewport and the bottom ~43% is pure black void, which
- *   the user rightly called broken ('mini player thalle black
- *   black kyun hai'). The visible card is therefore a 200×113
- *   window (overflow hidden) over the embed's top: exactly the
- *   picture, no void, with the REAL embed still playing inside.
- *   Since fix round 4 the window sits in a solid DOCK strip above
- *   the bottom nav: title + channel beside the picture, play/pause
- *   and close as real buttons in the strip, tap the picture or the
- *   title to expand back to Watch. On routes where the mini must
- *   not show (a session watch, admin, auth) the embed parks at
- *   356×200 off-screen instead — and the park-pause effect pauses
- *   it there; a parked player never plays invisibly.
+ * - mode 'mini', YouTube: the embed keeps a 200×113 stage (its
+ *   player UI needs the viewport, and the stage is the exact 16:9
+ *   picture box), scaled into a slim 104×59 window in a 64-tall
+ *   DOCK strip above the bottom nav — YouTube-miniplayer
+ *   proportions, picture edge-to-edge, title + channel beside the
+ *   picture, play/pause and close as real buttons in the strip,
+ *   tap the picture or the title to expand back to Watch. (The
+ *   earlier 200-wide window in a 129 strip, with a black shade
+ *   over the picture, was the user's "boht broad, black shadow
+ *   and lines" complaint, 28 Nov 2026.) On routes where the mini
+ *   must not show (a session watch, admin, auth) the embed parks
+ *   at 356×200 off-screen instead — and the park-pause effect
+ *   pauses it there; a parked player never plays invisibly.
  * - mode 'mini', hosted: expo-video has no minimum size, so the
  *   real video shrinks into a small floating view (bottom-right)
  *   with expand/close — a true picture mini.
@@ -330,25 +328,24 @@ export function PlaybackHost({
       overflow: 'hidden',
     };
   } else if (miniCardVisible) {
-    // The YouTube mini sits in the left of the mini DOCK (fix
-    // round 4, Chat 2 #20): a 200×113 window over the 200×200 embed
-    // (see the header note) — the picture fills the window, the
-    // black void below the picture is cropped away. The dock beside
-    // it carries the title and the play/pause + close controls, so
-    // nothing sits on the picture and the strip is docked above the
-    // bottom nav instead of floating over the feed.
+    // The YouTube mini sits in the left of the mini DOCK, rebuilt
+    // slim like YouTube's own miniplayer (user's phone finding,
+    // 28 Nov 2026: the 200-wide window in a 129-tall strip read as
+    // a big chunky box with black bars and a heavy shadow). The
+    // window is now a compact 104×59; the embed stage inside keeps
+    // its 200×113 layout and is scaled to fill the window exactly
+    // (see miniStage), so the picture is edge-to-edge 16:9 with
+    // nothing laid over it. The dock beside it carries the title
+    // and the play/pause + close controls.
     playerStyle = {
       position: 'absolute',
       left: 8,
-      bottom: bottomOffset,
-      width: 200,
-      // 116, not 113 (fix round 5.2): the verification sweep saw
-      // the embed's bottom caption line clipped by the window's
-      // edge — the 16:9 picture is 112.5 tall, so 3.5 px of slack
-      // keeps captions whole; the dock strip (129) still contains
-      // the window.
-      height: 116,
-      borderRadius: 8,
+      // The strip spans [bottomOffset - 8, +64]; centre the
+      // 59-tall window inside it.
+      bottom: bottomOffset - 5,
+      width: 104,
+      height: 59,
+      borderRadius: 6,
       overflow: 'hidden',
       backgroundColor: '#000000',
     };
@@ -377,7 +374,7 @@ export function PlaybackHost({
             accessibilityRole="button"
             accessibilityLabel="Expand player"
           >
-            <Text style={styles.miniDockTitle} numberOfLines={2}>
+            <Text style={styles.miniDockTitle} numberOfLines={1}>
               {item.title}
             </Text>
             <Text style={styles.miniDockChannel} numberOfLines={1}>
@@ -460,20 +457,6 @@ export function PlaybackHost({
           />
         ) : null}
         {miniCardVisible ? (
-          // Title shade (fix round 6, N-2): the raw embed prints
-          // its own truncated title ("Tau Mai Aaya S…") across the
-          // top of the picture whenever it is paused or buffering —
-          // the dock already carries the real title beside the
-          // window, so a stepped black shade (YouTube's own
-          // miniplayer wears a top gradient too) hides the embed's
-          // text without touching the rest of the picture. It is
-          // pointer-transparent and sits under the expand target.
-          <View pointerEvents="none" style={styles.miniTitleShade}>
-            <View style={styles.miniTitleShadeTop} />
-            <View style={styles.miniTitleShadeBottom} />
-          </View>
-        ) : null}
-        {miniCardVisible ? (
           // The card body expands (the dock beside it carries the
           // title and the transport/close controls — nothing rides
           // on the picture any more, fix round 4 #20).
@@ -516,41 +499,41 @@ export function PlaybackHost({
 
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    // Mini-card stage: the embed keeps its full 200×200 viewport
-    // inside the 200×113 card window (top-anchored; the card clips
-    // the black void). Every other mode: fill the placement box.
-    // The stage IS the 16:9 picture box (fix round 6, "mini
-    // player square ban janda"): it used to be a 200×200 stage
-    // the window cropped — on the user's phone the uncropped
-    // square showed through during loads. The player wrap is
-    // 200×112.5; a 200×113 stage leaves nothing square to show.
-    miniStage: { width: 200, height: 113 },
-    miniTitleShade: { position: 'absolute', top: 0, left: 0, right: 0, height: 32 },
-    miniTitleShadeTop: { height: 16, backgroundColor: 'rgba(0,0,0,0.92)' },
-    miniTitleShadeBottom: { height: 16, backgroundColor: 'rgba(0,0,0,0.55)' },
+    // Mini stage (dock rebuild, 28 Nov 2026): the embed keeps its
+    // 200×113 layout — its player UI needs that viewport — and the
+    // stage is scaled by 104/200 about its centre so the rendered
+    // picture fills the slim 104×59 dock window edge-to-edge. The
+    // negative margins centre the unscaled stage on the window, so
+    // the centre-scale lands exactly on the window's box. (Fix
+    // round 6's square-stage lesson stands: the stage itself is
+    // still the 16:9 box, never a square.)
+    miniStage: {
+      width: 200,
+      height: 113,
+      marginLeft: -48,
+      marginTop: -27,
+      transform: [{ scale: 0.52 }],
+    },
     stageFill: { flex: 1 },
-    // The mini dock (fix round 4 #20): a solid strip docked above
-    // the bottom nav — spacer where the player window sits, then
-    // the title/channel, then real buttons beside the picture.
+    // The mini dock: a slim 64-tall strip docked above the bottom
+    // nav, YouTube-miniplayer style — spacer where the player
+    // window sits, then the title/channel, then real buttons
+    // beside the picture. No shadow/elevation (the user's "black
+    // shadow" complaint); a hairline top border is the only edge.
     miniDock: {
       position: 'absolute',
       left: 0,
       right: 0,
-      height: 129,
+      height: 64,
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: 8,
-      gap: 10,
+      gap: 8,
       backgroundColor: colors.surface,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: colors.border,
-      shadowColor: '#000000',
-      shadowOpacity: 0.18,
-      shadowRadius: 8,
-      shadowOffset: { width: 0, height: -2 },
-      elevation: 10,
     },
-    miniDockSpacer: { width: 200, height: 113 },
+    miniDockSpacer: { width: 104, height: 59 },
     miniDockText: { flex: 1, justifyContent: 'center' },
     miniDockTitle: { ...typography.cardTitle, color: colors.text },
     miniDockChannel: { ...typography.metadata, color: colors.textSecondary, marginTop: 2 },

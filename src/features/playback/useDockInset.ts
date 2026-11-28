@@ -1,7 +1,7 @@
 import { usePlaybackStore } from './playbackStore';
 
 /** Height of the mini dock strip (PlaybackHost's miniDock). */
-export const MINI_DOCK_HEIGHT = 129;
+export const MINI_DOCK_HEIGHT = 64;
 
 /**
  * Bottom inset a tab screen must add to its scroll content while
