@@ -110,7 +110,7 @@ function VideosContent({ ctx }: { ctx: AdminContext }) {
           embedded player.
         </Text>
         {!isYouTubeConfigured ? (
-          <ErrorBanner message="YouTube Data API is not configured (EXPO_PUBLIC_YOUTUBE_API_KEY missing), so metadata cannot be fetched." />
+          <ErrorBanner message="YouTube Data API is not configured (no API key set), so metadata cannot be fetched." />
         ) : null}
         <TextInput
           style={adminStyles.input}

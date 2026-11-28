@@ -33,6 +33,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { isYouTubeConfigured } from '../../lib/youtube';
+import {
+  noteYouTubeKeyQuotaDead,
+  noteYouTubeKeyWorked,
+  orderedYouTubeApiKeys,
+} from '../../lib/youtubeKeys';
 import { OFFICIAL_CHANNEL, uploadsPlaylistId } from './config';
 import { DEFAULT_THRESHOLD, rankByTitle, scoreTitle } from './fuzzy';
 import type { ChannelResult, VideoResult } from './types';
@@ -55,16 +60,16 @@ const TITLES_CACHE_KEY = '@haftawari/yt-titles:v1';
 const UPLOADS_CACHE_KEY = '@haftawari/yt-uploads:v1';
 const REQUEST_TIMEOUT_MS = 10 * 1000;
 
-function apiKey(): string {
-  const key = process.env.EXPO_PUBLIC_YOUTUBE_API_KEY;
-  if (!key) {
+function requireKeys(): string[] {
+  const keys = orderedYouTubeApiKeys();
+  if (keys.length === 0) {
     throw new YouTubeApiError({
       errorClass: 'config',
       retryable: false,
       message: 'YouTube Data API is not configured.',
     });
   }
-  return key;
+  return keys;
 }
 
 function abortError(): Error {
@@ -80,9 +85,9 @@ function abortError(): Error {
  * retryable 'timeout' class. Error bodies are parsed for the API's
  * machine-readable reason — the status alone is never the whole story.
  */
-async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> {
+async function apiGetWithKey<T>(path: string, key: string, signal?: AbortSignal): Promise<T> {
   const separator = path.includes('?') ? '&' : '?';
-  const url = `${API_BASE}/${path}${separator}key=${encodeURIComponent(apiKey())}`;
+  const url = `${API_BASE}/${path}${separator}key=${encodeURIComponent(key)}`;
   const controller = new AbortController();
   let timedOut = false;
   const timer = setTimeout(() => {
@@ -113,6 +118,33 @@ async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> {
     clearTimeout(timer);
     signal?.removeEventListener?.('abort', onCallerAbort);
   }
+}
+
+/**
+ * Key-pool wrapper: try each configured key in order. A quota failure
+ * marks that key dead and moves to the next one (the search bucket is
+ * per-project too, so a second project restores search as well). Any
+ * other failure surfaces immediately — the retry policy for transient
+ * classes lives in withRetry, one layer up.
+ */
+async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const keys = requireKeys();
+  let lastError: unknown = null;
+  for (const key of keys) {
+    try {
+      const result = await apiGetWithKey<T>(path, key, signal);
+      noteYouTubeKeyWorked(key);
+      return result;
+    } catch (error) {
+      if (error instanceof YouTubeApiError && error.errorClass === 'quota') {
+        noteYouTubeKeyQuotaDead(key);
+        lastError = error;
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw lastError;
 }
 
 function delay(ms: number, signal?: AbortSignal): Promise<void> {

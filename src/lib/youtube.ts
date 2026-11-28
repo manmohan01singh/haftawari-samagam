@@ -17,6 +17,12 @@
  */
 
 import { parseIso8601Duration } from './format';
+import {
+  getYouTubeApiKeys,
+  noteYouTubeKeyQuotaDead,
+  noteYouTubeKeyWorked,
+  orderedYouTubeApiKeys,
+} from './youtubeKeys';
 
 const API_BASE = 'https://www.googleapis.com/youtube/v3';
 
@@ -34,19 +40,21 @@ export class YouTubeNotConfiguredError extends Error {
   }
 }
 
-function requireApiKey(): string {
-  const key = process.env.EXPO_PUBLIC_YOUTUBE_API_KEY;
-  if (!key) throw new YouTubeNotConfiguredError();
-  return key;
-}
-
-export const isYouTubeConfigured: boolean = Boolean(process.env.EXPO_PUBLIC_YOUTUBE_API_KEY);
+export const isYouTubeConfigured: boolean = getYouTubeApiKeys().length > 0;
 
 async function apiGet<T>(path: string, fetchImpl: typeof fetch = fetch): Promise<T> {
-  const key = requireApiKey();
+  const keys = orderedYouTubeApiKeys();
+  if (keys.length === 0) throw new YouTubeNotConfiguredError();
   const separator = path.includes('?') ? '&' : '?';
-  const response = await fetchImpl(`${API_BASE}/${path}${separator}key=${encodeURIComponent(key)}`);
-  if (!response.ok) {
+  // Key pool: try each key in order; a quota-exhausted key is marked
+  // dead and the next key takes over, so one project's daily cap no
+  // longer takes the whole app down.
+  for (const key of keys) {
+    const response = await fetchImpl(`${API_BASE}/${path}${separator}key=${encodeURIComponent(key)}`);
+    if (response.ok) {
+      noteYouTubeKeyWorked(key);
+      return (await response.json()) as T;
+    }
     // Human wording, never the raw HTTP string: screens surface
     // this message directly (mobile sweep, 27 Nov 2026: the Channel
     // page showed "YouTube Data API request failed with HTTP 403"
@@ -55,13 +63,14 @@ async function apiGet<T>(path: string, fetchImpl: typeof fetch = fetch): Promise
     // generic rather than guessing a cause.
     const body = await response.text().catch(() => '');
     if (body.includes('quotaExceeded') || body.includes('dailyLimitExceeded')) {
-      throw new Error(
-        "YouTube's daily limit for this app has been reached. Please try again tomorrow.",
-      );
+      noteYouTubeKeyQuotaDead(key);
+      continue;
     }
     throw new Error('YouTube could not be reached just now. Please try again in a little while.');
   }
-  return (await response.json()) as T;
+  throw new Error(
+    "YouTube's daily limit for this app has been reached. Please try again tomorrow.",
+  );
 }
 
 type ThumbnailSet = Record<string, { url: string; width: number } | undefined>;
