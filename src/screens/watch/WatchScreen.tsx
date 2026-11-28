@@ -242,7 +242,14 @@ export function WatchScreen({ route, navigation }: Props) {
   const [upNextSavedIds, setUpNextSavedIds] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState(false);
   const [readyFor, setReadyFor] = useState<string | null>(null);
-  const playerKey = resolved ? (resolved.youtubeVideoId ?? resolved.row?.id ?? null) : null;
+  // Player identity is FROZEN from the route params for the whole
+  // mount (blueprint round 2, A1): it must never be derived from
+  // `resolved`, whose YouTube ID arrives a step after the catalogue
+  // row — a key that flips mid-open resets the PlaybackHost hand-off
+  // (slotRect discarded, player re-parked) and was one of the two
+  // roots of the recorded-videos freeze. The playable YouTube ID
+  // travels separately on the item; this key is identity only.
+  const playerKey = youtubeVideoId ?? (videoRowId ? `row:${videoRowId}` : null);
   const playerReady = resolved != null && playerKey != null && readyFor === playerKey;
 
   // Phase E — persistent player. A PLAIN watch (no sessionId) hands
@@ -656,14 +663,32 @@ export function WatchScreen({ route, navigation }: Props) {
   // autoplay chain passing through — put videos in the user's
   // History that they never actually watched.
   const storePlaying = usePlaybackStore((st) => st.playing);
+  // ACCUMULATOR, not a single timer (blueprint round 2, N3): the
+  // first version of this gate ran one 5 s timeout that the effect
+  // cleanup cleared on EVERY playing-state flicker — and live
+  // streams buffer constantly, so the timeout never survived and
+  // History recorded nothing at all. Now playing time accumulates
+  // in a ref while the player reports playing; buffering pauses
+  // the accumulation, it does not reset it. At 5 s of real playing,
+  // both stores are written once.
+  const playAccumRef = useRef<{ key: string; ms: number }>({ key: '', ms: 0 });
   useEffect(() => {
     if (!resolved || !storePlaying) return;
     const ytId = resolved.youtubeVideoId;
     const rowId = resolved.row?.id ?? null;
+    const accKey = ytId ?? rowId ?? '';
+    if (!accKey) return;
+    if (playAccumRef.current.key !== accKey) playAccumRef.current = { key: accKey, ms: 0 };
     const localDone = ytId != null && localHistoryRecordedFor.current === ytId;
     const serverDone = rowId != null && serverHistoryRecordedFor.current === rowId;
     if (localDone && (serverDone || !user || !rowId)) return;
-    const t = setTimeout(() => {
+    let last = Date.now();
+    const iv = setInterval(() => {
+      const now = Date.now();
+      playAccumRef.current.ms += now - last;
+      last = now;
+      if (playAccumRef.current.ms < 5000) return;
+      clearInterval(iv);
       if (ytId && localHistoryRecordedFor.current !== ytId) {
         localHistoryRecordedFor.current = ytId;
         void recordLocalWatch({
@@ -679,19 +704,19 @@ export function WatchScreen({ route, navigation }: Props) {
         serverHistoryRecordedFor.current = rowId;
         void recordWatchHistory(user.id, rowId, resolved.channelTitle || null).catch(() => undefined);
       }
-    }, 5000);
-    return () => clearTimeout(t);
+    }, 500);
+    return () => clearInterval(iv);
   }, [resolved, user, storePlaying]);
 
   // Lazy player mount: mark this video ready only after the navigation
   // transition settles (timer callback), so the screen opens smoothly
-  // and the embed never loads on any other screen.
+  // and the embed never loads on any other screen. Keyed by the
+  // FROZEN playerKey so it agrees with the slot/host identity.
   useEffect(() => {
-    if (!resolved) return;
-    const ytId = resolved.youtubeVideoId ?? resolved.row?.id ?? null;
-    const t = setTimeout(() => setReadyFor(ytId), 60);
+    if (!resolved || !playerKey) return;
+    const t = setTimeout(() => setReadyFor(playerKey), 60);
     return () => clearTimeout(t);
-  }, [resolved]);
+  }, [resolved, playerKey]);
 
   // Share (Phase 13): the link opens THIS app, not youtube.com — a
   // session watch shares the session's own deep link (the tapped

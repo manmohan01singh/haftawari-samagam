@@ -94,6 +94,22 @@ export function PlaybackHost({
   const hostedMiniVisible = mode === 'mini' && item?.kind === 'hosted' && !barHidden;
   const playerVisible = fullVisible || miniCardVisible || hostedMiniVisible;
 
+  // VISIBLE-FIRST MOUNT (blueprint round 2, A2): a brand-new item's
+  // player is not mounted at all until it can appear in its slot (or
+  // mini). An embed that first loads parked at left:-2000 tries to
+  // autoplay off-screen, where browsers and YouTube's own visibility
+  // rules can block it permanently; an embed that first loads inside
+  // its visible slot, inside the user's tap chain, plays. Once an
+  // item HAS been visible, its player stays mounted (parking then
+  // only hides an already-loaded player, which is safe).
+  const [shownKey, setShownKey] = useState<string | null>(null);
+  // React's adjust-state-during-render pattern: remember that this
+  // item has been visible at least once (see A2 above).
+  if (playerVisible && item && shownKey !== item.key) {
+    setShownKey(item.key);
+  }
+  const mountPlayer = item != null && (playerVisible || shownKey === item.key);
+
   // NEVER hidden-but-playing (Chat 2 fault 19, 28 Nov 2026 — the
   // worst-five): when the player is parked off-screen (a route
   // where no mini may show, or a Back that left the store in 'full'
@@ -228,15 +244,17 @@ export function PlaybackHost({
     <>
       <View style={playerStyle} pointerEvents={playerVisible ? 'auto' : 'none'}>
         <View style={miniCardVisible ? styles.miniStage : styles.stageFill}>
-          {item.kind === 'youtube' && item.youtubeVideoId ? (
+          {mountPlayer && item.kind === 'youtube' && item.youtubeVideoId ? (
             <YouTubePlayer
+              key={item.key}
               ref={ytRef}
               youtubeVideoId={item.youtubeVideoId}
               autoplay
               onPlayingChange={setPlaying}
             />
-          ) : item.kind === 'hosted' && item.videoRowId ? (
+          ) : mountPlayer && item.kind === 'hosted' && item.videoRowId ? (
             <HostedWatchPlayer
+              key={item.key}
               ref={hostedRef}
               videoId={item.videoRowId}
               thumbnailUrl={item.thumbnailUrl}

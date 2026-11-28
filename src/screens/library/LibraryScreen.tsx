@@ -428,11 +428,9 @@ export function LibraryScreen({ navigation }: Props) {
           </>
         ) : (
           <Text style={styles.emptyLine}>
-            {user
-              ? history.error
-                ? 'History could not be loaded — use Retry above.'
-                : 'Recordings you watch will appear here.'
-              : 'Sign in to build your history.'}
+            {user && history.error
+              ? 'History could not be loaded — use Retry above.'
+              : 'Recordings you watch on this device will appear here.'}
           </Text>
         )}
 

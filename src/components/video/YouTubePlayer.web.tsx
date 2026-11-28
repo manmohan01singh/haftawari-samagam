@@ -6,8 +6,9 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { layout, useTheme, type ThemeColors } from '../../theme';
 
 export interface YouTubePlayerHandle {
@@ -63,18 +64,45 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
   function YouTubePlayer({ youtubeVideoId, onReady, onPlayingChange, fill, loop, autoplay }, ref) {
     const { colors } = useTheme();
     const styles = useMemo(() => createStyles(colors), [colors]);
-    const [loaded, setLoaded] = useState(false);
+    // Load signals are tagged with the load key (video + mount
+    // nonce): a new video or a recovery remount changes the key and
+    // every signal resets by construction — no reset effect needed.
+    const [mountNonce, setMountNonce] = useState(0);
+    const loadKey = `${youtubeVideoId}:${mountNonce}`;
+    const [loadedKey, setLoadedKey] = useState<string | null>(null);
+    const loaded = loadedKey === loadKey;
+    // Facade deadline (blueprint round 2, A4): if the embed has not
+    // reported ready/playing within a few seconds, the facade stops
+    // being an infinite spinner and becomes a real Play button; one
+    // tap remounts the iframe inside the user's own gesture, which
+    // is the most reliable recovery there is. A user is never more
+    // than one tap from a working player.
+    const [stuckKey, setStuckKey] = useState<string | null>(null);
+    const stuck = stuckKey === loadKey;
     const frameRef = useRef<{ contentWindow: Window | null } | null>(null);
     const callbacks = useRef({ onReady, onPlayingChange });
     callbacks.current = { onReady, onPlayingChange };
     const videoIdRef = useRef(youtubeVideoId);
     videoIdRef.current = youtubeVideoId;
+    // Command queue + ready gate (blueprint round 2, A3):
+    // postMessage commands sent before the player registers its
+    // listener / reports onReady are dropped by YouTube. Commands
+    // now queue until onReady, then flush in order.
+    const readyRef = useRef(false);
+    const playingRef = useRef(false);
+    const queueRef = useRef<string[]>([]);
+
+    const post = (payload: string) => {
+      frameRef.current?.contentWindow?.postMessage(payload, '*');
+    };
 
     const command = (func: string, args: unknown[] = []) => {
-      frameRef.current?.contentWindow?.postMessage(
-        JSON.stringify({ event: 'command', func, args }),
-        '*',
-      );
+      const payload = JSON.stringify({ event: 'command', func, args });
+      if (!readyRef.current) {
+        queueRef.current.push(payload);
+        return;
+      }
+      post(payload);
     };
 
     useImperativeHandle(ref, () => ({
@@ -82,6 +110,23 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
       pause: () => command('pauseVideo'),
       seekTo: (seconds: number) => command('seekTo', [Math.max(0, Math.floor(seconds)), true]),
     }));
+
+    // A new video (or a recovery remount) resets the command queue
+    // and the ready/playing refs (state signals reset via loadKey).
+    useEffect(() => {
+      readyRef.current = false;
+      playingRef.current = false;
+      queueRef.current = [];
+    }, [loadKey]);
+
+    // The deadline: 4 s after (re)mount, if the embed has neither
+    // reported ready nor started playing, surface the Play button.
+    useEffect(() => {
+      const t = setTimeout(() => {
+        if (!readyRef.current && !playingRef.current) setStuckKey(loadKey);
+      }, 4000);
+      return () => clearTimeout(t);
+    }, [loadKey]);
 
     useEffect(() => {
       const onMessage = (event: MessageEvent) => {
@@ -99,9 +144,18 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
           return;
         }
         if (parsed.event === 'onReady') {
+          readyRef.current = true;
+          setStuckKey(null);
+          const queued = queueRef.current;
+          queueRef.current = [];
+          for (const payload of queued) post(payload);
           callbacks.current.onReady?.();
         }
         if (parsed.event === 'infoDelivery' && parsed.info && typeof parsed.info.playerState === 'number') {
+          if (parsed.info.playerState === 1) {
+            playingRef.current = true;
+            setStuckKey(null);
+          }
           callbacks.current.onPlayingChange?.(parsed.info.playerState === 1);
         }
       };
@@ -109,15 +163,25 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
       return () => window.removeEventListener('message', onMessage);
     }, []);
 
+    const recover = () => {
+      // Remount the iframe fresh under this tap: the new embed
+      // loads with autoplay=1 inside a real user-gesture chain,
+      // which is what the blocked first attempt never had.
+      // key change resets the stuck signal by construction
+      setMountNonce((n) => n + 1);
+    };
+
     const embedUrl =
       `https://www.youtube.com/embed/${encodeURIComponent(youtubeVideoId)}` +
       `?rel=0&playsinline=1&enablejsapi=1` +
       (loop ? `&loop=1&playlist=${encodeURIComponent(youtubeVideoId)}` : '') +
       (autoplay ? '&autoplay=1' : '');
 
+    const showFacade = !loaded || stuck;
     return (
       <View style={fill ? styles.wrapFill : styles.wrap}>
         <Iframe
+          key={mountNonce}
           ref={frameRef}
           src={embedUrl}
           style={{ width: '100%', height: '100%', border: 0 }}
@@ -125,14 +189,14 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
           allowFullScreen
           title="YouTube video player"
           onLoad={() => {
-            setLoaded(true);
+            setLoadedKey(loadKey);
             frameRef.current?.contentWindow?.postMessage(
               JSON.stringify({ event: 'listening', id: 'watch-player' }),
               '*',
             );
           }}
         />
-        {!loaded ? (
+        {showFacade ? (
           <View style={styles.facade} pointerEvents="none">
             <Image
               source={{ uri: `https://i.ytimg.com/vi/${encodeURIComponent(youtubeVideoId)}/hqdefault.jpg` }}
@@ -140,10 +204,22 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
               contentFit="cover"
               cachePolicy="memory-disk"
             />
-            <View style={styles.spinnerWrap}>
-              <ActivityIndicator color="#FFFFFF" />
-            </View>
+            {!stuck ? (
+              <View style={styles.spinnerWrap}>
+                <ActivityIndicator color="#FFFFFF" />
+              </View>
+            ) : null}
           </View>
+        ) : null}
+        {stuck ? (
+          <Pressable
+            style={styles.playButton}
+            onPress={recover}
+            accessibilityRole="button"
+            accessibilityLabel="Play video"
+          >
+            <MaterialIcons name="play-arrow" size={34} color="#FFFFFF" />
+          </Pressable>
         ) : null}
       </View>
     );
@@ -165,6 +241,19 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  playButton: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    width: 64,
+    height: 64,
+    marginTop: -32,
+    marginLeft: -32,
+    borderRadius: 32,
+    backgroundColor: 'rgba(0,0,0,0.72)',
     alignItems: 'center',
     justifyContent: 'center',
   },
