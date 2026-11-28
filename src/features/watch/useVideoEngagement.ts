@@ -34,6 +34,16 @@ interface LikeData {
 /** Rejection used when the backend is not configured at all. */
 const UNAVAILABLE_SENTINEL = new Error('engagement backend unavailable');
 
+/**
+ * Last-known like state per load key, MODULE-level (fix round 5,
+ * fault 53): Shorts mount the engagement hook only while a short
+ * is active, so every swipe back remounted it into 'loading' and
+ * the count flickered "1" → blank → "1". A remount now starts
+ * from the cached value and revalidates in the background; the
+ * cache only ever holds values the backend actually returned.
+ */
+const likeStateCache = new Map<string, LikeData>();
+
 function statusForFailure(reason: unknown): EngagementStatus {
   return reason === UNAVAILABLE_SENTINEL || isEngagementUnavailable(reason)
     ? 'unavailable'
@@ -96,7 +106,7 @@ export function useVideoEngagement(
     () =>
       likeEntry?.key === loadKey
         ? likeEntry.data
-        : { status: 'loading', count: 0, likedByMe: false },
+        : (likeStateCache.get(loadKey) ?? { status: 'loading', count: 0, likedByMe: false }),
     [likeEntry, loadKey],
   );
 
@@ -142,6 +152,7 @@ export function useVideoEngagement(
       });
     }
     if (likesResult.status === 'fulfilled') {
+      likeStateCache.set(loadKey, likesResult.value);
       setLikeEntry({ key: loadKey, data: likesResult.value });
     } else {
       setLikeEntry({
@@ -288,7 +299,17 @@ export function useVideoEngagement(
     if (likeData.status !== 'ready') return 'failed';
     likeBusyRef.current = true;
     const next = !likeData.likedByMe;
-    const apply = (liked: boolean, countDelta: number, status?: EngagementStatus) =>
+    const apply = (liked: boolean, countDelta: number, status?: EngagementStatus) => {
+      // Keep the module cache in step (fault 53): a remount must
+      // show the toggled value, not the pre-toggle fetch.
+      const cached = likeStateCache.get(loadKey);
+      if (cached) {
+        likeStateCache.set(loadKey, {
+          status: status ?? cached.status,
+          likedByMe: liked,
+          count: Math.max(0, cached.count + countDelta),
+        });
+      }
       setLikeEntry((prev) =>
         prev?.key === loadKey
           ? {
@@ -301,6 +322,7 @@ export function useVideoEngagement(
             }
           : prev,
       );
+    };
     apply(next, next ? 1 : -1);
     try {
       await setVideoLiked(userId, engagementKey, videoRowId, next);

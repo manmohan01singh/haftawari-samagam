@@ -56,13 +56,14 @@ export function normaliseTitleHard(title: string): string {
 }
 
 /**
- * Fuzzy content dedupe for finite pools (fix round 4, Chat 2 #23):
- * same channel + same hard-normalised title + durations within
- * ±3 s = the same clip re-uploaded (exact-second keys missed
- * copies trimmed by a second or two, so the same Short appeared
- * three times in five slots). Items missing channel or duration
- * are always kept; genuinely different lengths (a 0:30 clip vs
- * the full programme) are far outside the tolerance and stay.
+ * Fuzzy content dedupe for finite pools (fix round 4, Chat 2 #23;
+ * tolerance widened in round 5 — the same Takhat Sahib Short still
+ * appeared twice at 1K/2.4K views because the re-upload was
+ * trimmed by more than 3 s): same channel + same hard-normalised
+ * title + durations within ±10 s = the same clip re-uploaded.
+ * Items missing channel or duration are always kept; genuinely
+ * different lengths (a 0:30 clip vs the full programme) are far
+ * outside the tolerance and stay.
  */
 export function dedupeByContentFuzzy<T>(
   items: readonly T[],
@@ -85,7 +86,7 @@ export function dedupeByContentFuzzy<T>(
       (k) =>
         k.channelId === parts.channelId &&
         k.title === title &&
-        Math.abs(k.durationSeconds - (parts.durationSeconds as number)) <= 3,
+        Math.abs(k.durationSeconds - (parts.durationSeconds as number)) <= 10,
     );
     if (dupe) continue;
     kept.push({ channelId: parts.channelId, title, durationSeconds: parts.durationSeconds });

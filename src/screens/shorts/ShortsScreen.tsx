@@ -623,7 +623,11 @@ const createStyles = (colors: ThemeColors) =>
       flexDirection: 'row',
       alignItems: 'flex-end',
       paddingHorizontal: spacing.md,
-      paddingBottom: layout.bottomNavHeight + spacing.xl,
+      // The stage already excludes the bottom nav (and the mini
+      // dock when present) — the old nav-height padding dated from
+      // the full-bleed stage and floated the title block far above
+      // the player's own progress bar (fix round 5, N-6).
+      paddingBottom: spacing.xl,
       gap: spacing.md,
     },
     metaBlock: { flex: 1, minWidth: 0 },
