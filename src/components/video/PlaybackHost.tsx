@@ -297,7 +297,12 @@ export function PlaybackHost({
       left: 8,
       bottom: bottomOffset,
       width: 200,
-      height: 113,
+      // 116, not 113 (fix round 5.2): the verification sweep saw
+      // the embed's bottom caption line clipped by the window's
+      // edge — the 16:9 picture is 112.5 tall, so 3.5 px of slack
+      // keeps captions whole; the dock strip (129) still contains
+      // the window.
+      height: 116,
       borderRadius: 8,
       overflow: 'hidden',
       backgroundColor: '#000000',
