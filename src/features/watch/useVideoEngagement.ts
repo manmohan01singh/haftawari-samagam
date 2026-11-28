@@ -54,6 +54,13 @@ function statusForFailure(reason: unknown): EngagementStatus {
  * not configured — the UI then shows its clear "not available yet"
  * state and never invents a count. Any other failure is 'error'
  * (comments) / a rolled-back toggle (likes).
+ *
+ * Hosted-only videos (user, 28 Nov 2026 — "everything should work"):
+ * a hosted recording has no YouTube id, so it keys its engagement by
+ * `hosted:<videos row id>` instead. The 0005 tables' key column is
+ * an opaque text key — counts, RLS and the authors RPC behave
+ * identically — so hosted Watch pages get real comments and likes
+ * with no schema change.
  */
 export function useVideoEngagement(
   youtubeVideoId: string | null,
@@ -62,7 +69,11 @@ export function useVideoEngagement(
 ) {
   const userId = user?.id ?? null;
   const userName = user?.displayName ?? null;
-  const loadKey = `${youtubeVideoId ?? ''}|${userId ?? ''}`;
+  /** The engagement key: the YouTube id, or `hosted:<row id>` for a
+   *  hosted-only recording; null when the watch resolved to neither. */
+  const engagementKey =
+    youtubeVideoId ?? (videoRowId ? `hosted:${videoRowId}` : null);
+  const loadKey = `${engagementKey ?? ''}|${userId ?? ''}`;
 
   const [commentsEntry, setCommentsEntry] = useState<{ key: string; data: CommentsData } | null>(
     null,
@@ -96,8 +107,8 @@ export function useVideoEngagement(
   // below never calls setState synchronously.
   const load = useCallback(async () => {
     const fetchComments = async (): Promise<CommentsData> => {
-      if (!youtubeVideoId || !isSupabaseConfigured) throw UNAVAILABLE_SENTINEL;
-      const page = await fetchVideoComments(youtubeVideoId, {
+      if (!engagementKey || !isSupabaseConfigured) throw UNAVAILABLE_SENTINEL;
+      const page = await fetchVideoComments(engagementKey, {
         ownUserId: userId,
         ownName: userName,
       });
@@ -109,8 +120,8 @@ export function useVideoEngagement(
       };
     };
     const fetchLikes = async (): Promise<LikeData> => {
-      if (!youtubeVideoId || !isSupabaseConfigured) throw UNAVAILABLE_SENTINEL;
-      const state = await fetchVideoLikeState(youtubeVideoId, userId);
+      if (!engagementKey || !isSupabaseConfigured) throw UNAVAILABLE_SENTINEL;
+      const state = await fetchVideoLikeState(engagementKey, userId);
       return { status: 'ready', count: state.count, likedByMe: state.likedByMe };
     };
     const [commentsResult, likesResult] = await Promise.allSettled([
@@ -138,7 +149,7 @@ export function useVideoEngagement(
         data: { status: statusForFailure(likesResult.reason), count: 0, likedByMe: false },
       });
     }
-  }, [youtubeVideoId, userId, userName, loadKey]);
+  }, [engagementKey, userId, userName, loadKey]);
 
   useEffect(() => {
     // No cleanup needed: load() writes KEYED entries, so a stale
@@ -157,12 +168,12 @@ export function useVideoEngagement(
 
   // ── Comments: page older, post, delete ─────────────────────────────
   const loadMoreComments = useCallback(async () => {
-    if (!youtubeVideoId || loadingMore || !commentsData.hasMore || commentsData.comments.length === 0) {
+    if (!engagementKey || loadingMore || !commentsData.hasMore || commentsData.comments.length === 0) {
       return;
     }
     setLoadingMore(true);
     try {
-      const page = await fetchVideoComments(youtubeVideoId, {
+      const page = await fetchVideoComments(engagementKey, {
         beforeCreatedAt: commentsData.comments[commentsData.comments.length - 1].created_at,
         ownUserId: userId,
         ownName: userName,
@@ -187,15 +198,15 @@ export function useVideoEngagement(
     } finally {
       setLoadingMore(false);
     }
-  }, [youtubeVideoId, loadingMore, commentsData, userId, userName, loadKey]);
+  }, [engagementKey, loadingMore, commentsData, userId, userName, loadKey]);
 
   const postComment = useCallback(
     async (body: string): Promise<boolean> => {
-      if (!youtubeVideoId || !userId || posting) return false;
+      if (!engagementKey || !userId || posting) return false;
       setPosting(true);
       setPostError(null);
       try {
-        const row = await postVideoComment(userId, youtubeVideoId, videoRowId, body);
+        const row = await postVideoComment(userId, engagementKey, videoRowId, body);
         setCommentsEntry((prev) =>
           prev?.key === loadKey
             ? {
@@ -222,7 +233,7 @@ export function useVideoEngagement(
         setPosting(false);
       }
     },
-    [youtubeVideoId, userId, videoRowId, posting, userName, loadKey],
+    [engagementKey, userId, videoRowId, posting, userName, loadKey],
   );
 
   const deleteComment = useCallback(
@@ -266,7 +277,7 @@ export function useVideoEngagement(
 
   // ── Like toggle: optimistic, persisted, rolled back on failure ────
   const toggleLike = useCallback(async (): Promise<ToggleLikeOutcome> => {
-    if (!youtubeVideoId || !userId || likeBusyRef.current) return 'failed';
+    if (!engagementKey || !userId || likeBusyRef.current) return 'failed';
     if (likeData.status === 'unavailable') return 'unavailable';
     likeBusyRef.current = true;
     const next = !likeData.likedByMe;
@@ -285,7 +296,7 @@ export function useVideoEngagement(
       );
     apply(next, next ? 1 : -1);
     try {
-      await setVideoLiked(userId, youtubeVideoId, videoRowId, next);
+      await setVideoLiked(userId, engagementKey, videoRowId, next);
       return 'ok';
     } catch (e) {
       apply(!next, next ? -1 : 1, isEngagementUnavailable(e) ? 'unavailable' : undefined);
@@ -293,7 +304,7 @@ export function useVideoEngagement(
     } finally {
       likeBusyRef.current = false;
     }
-  }, [youtubeVideoId, userId, videoRowId, likeData, loadKey]);
+  }, [engagementKey, userId, videoRowId, likeData, loadKey]);
 
   return {
     commentsStatus: commentsData.status,

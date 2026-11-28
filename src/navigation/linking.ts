@@ -193,3 +193,8 @@ export function watchShareUrl(params: {
   const qs = query.toString();
   return appUrlForPath(qs ? `/watch?${qs}` : '/watch');
 }
+
+/** Deep link that opens THIS app on a channel page. */
+export function channelShareUrl(channelId: string): string {
+  return appUrlForPath(`/channel?channelId=${encodeURIComponent(channelId)}`);
+}

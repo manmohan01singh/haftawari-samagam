@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   FlatList,
   Pressable,
-  Share,
   StyleSheet,
   Text,
   View,
@@ -17,6 +16,8 @@ import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 
 import { YouTubePlayer, type YouTubePlayerHandle } from '../../components/video/YouTubePlayer';
 import { fetchShorts, type ShortItem } from '../../features/shorts/shortsFeed';
+import { shareContent } from '../../lib/share';
+import { watchShareUrl } from '../../navigation/linking';
 import { layout, spacing, useTheme, type ThemeColors } from '../../theme';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
 
@@ -207,9 +208,10 @@ export function ShortsScreen({ navigation }: Props) {
               <Pressable
                 style={styles.railButton}
                 onPress={() =>
-                  void Share.share({
-                    message: `https://youtu.be/${item.meta.youtubeVideoId}`,
-                  }).catch(() => undefined)
+                  void shareContent(
+                    item.meta.title,
+                    watchShareUrl({ youtubeVideoId: item.meta.youtubeVideoId }),
+                  )
                 }
                 accessibilityRole="button"
                 accessibilityLabel="Share this Short"

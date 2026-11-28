@@ -35,6 +35,7 @@ import { nativeApp, radii, spacing, typography, useTheme, type ThemeColors } fro
 import { goBackOrTab } from '../../navigation/safeBack';
 import type { RootStackParamList } from '../../navigation/types';
 import { FEED_LIST_PERF, H_LIST_PERF } from '../../lib/listPerf';
+import { watchShareUrl } from '../../navigation/linking';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SearchResults'>;
 
@@ -123,7 +124,7 @@ export function SearchResultsScreen({ route, navigation }: Props) {
   const { toast, showToast } = useToast();
   const shareVideo = useCallback(
     (title: string, youtubeVideoId: string) => {
-      void shareContent(title, `https://www.youtube.com/watch?v=${youtubeVideoId}`).then((outcome) => {
+      void shareContent(title, watchShareUrl({ youtubeVideoId })).then((outcome) => {
         const feedback = shareFeedback(outcome);
         if (feedback) showToast(feedback);
       });

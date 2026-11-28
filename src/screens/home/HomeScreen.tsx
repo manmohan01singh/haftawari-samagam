@@ -41,6 +41,7 @@ import { deriveStatus } from '../../features/sessions/stateMachine';
 import { serverClock } from '../../features/sessions/serverClock';
 import { layout, spacing, typography, useTheme, type ThemeColors } from '../../theme';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
+import { watchShareUrl } from '../../navigation/linking';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'Home'>,
@@ -510,7 +511,7 @@ export function HomeScreen({ navigation }: Props) {
   const handleShareItem = useCallback(
     (item: HomeFeedItem) => {
       const title = item.kind === 'catalogue' ? item.video.title : item.meta.title;
-      void shareContent(title, `https://www.youtube.com/watch?v=${feedItemYoutubeId(item)}`).then(
+      void shareContent(title, watchShareUrl({ videoRowId: item.kind === 'catalogue' ? item.video.id : null, youtubeVideoId: feedItemYoutubeId(item) })).then(
         (outcome) => {
           const feedback = shareFeedback(outcome);
           if (feedback) showToast(feedback);

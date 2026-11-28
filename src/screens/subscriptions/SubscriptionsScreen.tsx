@@ -30,6 +30,7 @@ import { isShortVideo, type YouTubeVideoMetadata } from '../../lib/youtube';
 import { FEED_LIST_PERF } from '../../lib/listPerf';
 import { layout, nativeApp, radii, spacing, typography, useTheme, type ThemeColors } from '../../theme';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
+import { watchShareUrl } from '../../navigation/linking';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'Subscriptions'>,
@@ -103,7 +104,7 @@ export function SubscriptionsScreen({ navigation }: Props) {
 
   const shareVideo = useCallback(
     (title: string, youtubeVideoId: string) => {
-      void shareContent(title, `https://www.youtube.com/watch?v=${youtubeVideoId}`).then((outcome) => {
+      void shareContent(title, watchShareUrl({ youtubeVideoId })).then((outcome) => {
         const feedback = shareFeedback(outcome);
         if (feedback) showToast(feedback);
       });

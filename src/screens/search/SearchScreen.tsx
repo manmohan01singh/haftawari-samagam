@@ -198,7 +198,7 @@ export function SearchScreen({ navigation }: Props) {
           renderItem={({ item }) => (
             <View style={styles.row}>
               <Pressable
-                style={styles.rowMain}
+                style={({ pressed }) => [styles.rowMain, pressed && styles.rowPressed]}
                 onPress={() => submit(item.text)}
                 accessibilityRole="button"
               >
@@ -269,7 +269,7 @@ export function SearchScreen({ navigation }: Props) {
           renderItem={({ item }) => (
             <View style={styles.row}>
               <Pressable
-                style={styles.rowMain}
+                style={({ pressed }) => [styles.rowMain, pressed && styles.rowPressed]}
                 onPress={() => submit(item.text)}
                 accessibilityRole="button"
               >
@@ -383,6 +383,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingVertical: spacing.md,
   },
   rowMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  rowPressed: { backgroundColor: colors.surfaceVariant, borderRadius: 8 },
   rowText: { ...typography.body, fontSize: 16, color: colors.text, flex: 1 },
   clearRow: { paddingHorizontal: spacing.lg, paddingVertical: spacing.lg },
   clearText: { ...typography.body, fontWeight: '600', color: colors.text },

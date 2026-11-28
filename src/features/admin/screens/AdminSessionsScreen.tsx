@@ -1,6 +1,7 @@
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useMemo, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { EmptyState } from '../../../components/common/EmptyState';
 import { useServerClock } from '../../sessions/hooks/useServerClock';
 import { deriveStatus } from '../../sessions/stateMachine';
@@ -335,14 +336,32 @@ function SessionsContent({ ctx }: { ctx: AdminContext }) {
           </Text>
         ) : (
           <View style={styles.videoOptions}>
-            {publishedVideos.map((v) => (
-              <AdminButton
-                key={v.id}
-                title={videoId === v.id ? `✓ ${v.title}` : v.title}
-                variant={videoId === v.id ? 'primary' : 'secondary'}
-                onPress={() => setVideoId(v.id)}
-              />
-            ))}
+            {publishedVideos.map((v) => {
+              const selected = videoId === v.id;
+              return (
+                <Pressable
+                  key={v.id}
+                  style={({ pressed }) => [
+                    styles.videoRow,
+                    selected && styles.videoRowSelected,
+                    pressed && styles.videoRowPressed,
+                  ]}
+                  onPress={() => setVideoId(v.id)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected }}
+                  accessibilityLabel={v.title}
+                >
+                  <MaterialIcons
+                    name={selected ? 'radio-button-checked' : 'radio-button-unchecked'}
+                    size={22}
+                    color={selected ? colors.text : colors.textSecondary}
+                  />
+                  <Text style={styles.videoRowTitle} numberOfLines={2}>
+                    {v.title}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
         )}
 
@@ -569,7 +588,22 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   form: { gap: spacing.md },
   help: { ...typography.body, color: colors.textSecondary },
   notice: { ...typography.body, color: colors.success },
-  videoOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  videoOptions: { gap: spacing.sm },
+  videoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  videoRowSelected: { borderColor: colors.text, backgroundColor: colors.surfaceVariant },
+  videoRowPressed: { opacity: 0.75 },
+  videoRowTitle: { ...typography.body, color: colors.text, flex: 1 },
   dateRow: { flexDirection: 'row', gap: spacing.md },
   dateField: { flex: 1 },
   previewBox: {

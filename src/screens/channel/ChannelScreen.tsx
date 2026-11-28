@@ -38,6 +38,7 @@ import { apiCardData as baseApiCardData, formatDateLine } from '../../components
 import { layout, nativeApp, radii, spacing, typography, useTheme, type ThemeColors } from '../../theme';
 import type { RootStackParamList } from '../../navigation/types';
 import { FEED_LIST_PERF } from '../../lib/listPerf';
+import { channelShareUrl, watchShareUrl } from '../../navigation/linking';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Channel'>;
 
@@ -115,7 +116,7 @@ export function ChannelScreen({ route, navigation }: Props) {
   const { toast, showToast } = useToast();
   const shareVideo = useCallback(
     (title: string, youtubeVideoId: string) => {
-      void shareContent(title, `https://www.youtube.com/watch?v=${youtubeVideoId}`).then((outcome) => {
+      void shareContent(title, watchShareUrl({ youtubeVideoId })).then((outcome) => {
         const feedback = shareFeedback(outcome);
         if (feedback) showToast(feedback);
       });
@@ -597,7 +598,7 @@ export function ChannelScreen({ route, navigation }: Props) {
         <Pressable style={styles.menuBackdrop} onPress={() => setMenuOpen(false)}>
           <Pressable style={styles.menuCard} onPress={() => undefined}>
             <Pressable
-              style={styles.menuRow}
+              style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
               accessibilityRole="button"
               onPress={() => {
                 setMenuOpen(false);
@@ -608,13 +609,13 @@ export function ChannelScreen({ route, navigation }: Props) {
               <Text style={styles.menuText}>Open in YouTube</Text>
             </Pressable>
             <Pressable
-              style={styles.menuRow}
+              style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
               accessibilityRole="button"
               onPress={() => {
                 setMenuOpen(false);
                 void shareContent(
                   channel.title,
-                  `https://www.youtube.com/channel/${channelId}`,
+                  channelShareUrl(channelId),
                 ).then((outcome) => {
                   const feedback = shareFeedback(outcome);
                   if (feedback) showToast(feedback);
@@ -625,7 +626,7 @@ export function ChannelScreen({ route, navigation }: Props) {
               <Text style={styles.menuText}>Share channel</Text>
             </Pressable>
             <Pressable
-              style={styles.menuRow}
+              style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
               accessibilityRole="button"
               onPress={() => {
                 setMenuOpen(false);
@@ -636,7 +637,7 @@ export function ChannelScreen({ route, navigation }: Props) {
               <Text style={styles.menuText}>Samagam Sessions</Text>
             </Pressable>
             <Pressable
-              style={styles.menuRow}
+              style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
               accessibilityRole="button"
               onPress={() => setMenuOpen(false)}
             >
@@ -823,5 +824,6 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
+  menuRowPressed: { backgroundColor: colors.surfaceVariant },
   menuText: { fontSize: 15, color: colors.text },
 });
